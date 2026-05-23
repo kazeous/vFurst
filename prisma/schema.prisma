@@ -13,8 +13,14 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  passwordHash  String?
   accounts      Account[]
   sessions      Session[]
+  organizationMemberships OrganizationMember[]
+  eventMemberships        EventMember[]
+  createdOrganizationInvites OrganizationInvite[] @relation("OrganizationInviteCreator")
+  createdEventInvites        EventInvite[]        @relation("EventInviteCreator")
+  auditLogs     AuditLog[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -53,4 +59,160 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum EventRole {
+  EVENT_ADMIN
+  STAFF
+  VIEWER
+}
+
+enum EventStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  LIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   OrganizationMember[]
+  events    Event[]
+  invites   OrganizationInvite[]
+  auditLogs AuditLog[]
+}
+
+model OrganizationMember {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model OrganizationInvite {
+  id             String           @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrganizationRole
+  token          String           @unique
+  status         InviteStatus     @default(PENDING)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("OrganizationInviteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+model Event {
+  id             String      @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  status         EventStatus @default(DRAFT)
+  timezone       String
+  startsAt       DateTime?
+  endsAt         DateTime?
+  venueName      String?
+  contactEmail   String?
+  description    String?     @db.Text
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      EventMember[]
+  invites      EventInvite[]
+  auditLogs    AuditLog[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model EventMember {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  role      EventRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
+
+model EventInvite {
+  id          String       @id @default(cuid())
+  eventId     String
+  email       String
+  role        EventRole
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("EventInviteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([email])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  eventId        String?
+  actorUserId    String?
+  action         String
+  entityType     String
+  entityId       String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  actor        User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([eventId, createdAt])
+  @@index([actorUserId])
 }
