@@ -13,4 +13,8 @@ Client components must never import from `src/server`. Server-side route handler
 
 ## Phase 1 Limits
 
-Phase 1 establishes infrastructure only. It intentionally does not include organization, event, RBAC, payment, email, vendor, volunteer, check-in, notes, checklist, or dashboard business logic.
+Phase 1 established infrastructure only.
+
+Phase 2 adds account registration/sign-in, organizations, events, org/event memberships, invites, and audit logs. All protected actions are enforced in backend route handlers through `src/server/rbac.ts`; frontend role displays are only cosmetic.
+
+The app still intentionally does not include product, cart, order, payment, email delivery, vendor, volunteer, check-in, notes, checklist, or public registration business logic.
