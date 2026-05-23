@@ -43,6 +43,25 @@ type AuditItem = {
   } | null;
 };
 
+type Product = {
+  id: string;
+  category: string;
+  displayName: string;
+  basePriceCents: number;
+  stockLimit: number | null;
+  publicVisible: boolean;
+  archivedAt: string | null;
+  registrationCount: number;
+};
+
+type RegistrationQuestion = {
+  id: string;
+  label: string;
+  type: string;
+  required: boolean;
+  sortOrder: number;
+};
+
 type EventDetailClientProps = {
   eventId: string;
 };
@@ -52,16 +71,20 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [auditItems, setAuditItems] = useState<AuditItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [questions, setQuestions] = useState<RegistrationQuestion[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setError(null);
-    const [eventResponse, membersResponse, invitesResponse, auditResponse] = await Promise.all([
+    const [eventResponse, membersResponse, invitesResponse, auditResponse, productsResponse, questionsResponse] = await Promise.all([
       fetch(`/api/events/${eventId}`),
       fetch(`/api/events/${eventId}/members`),
       fetch(`/api/events/${eventId}/invites`),
-      fetch(`/api/events/${eventId}/audit?pageSize=10`)
+      fetch(`/api/events/${eventId}/audit?pageSize=10`),
+      fetch(`/api/events/${eventId}/products`),
+      fetch(`/api/events/${eventId}/registration-questions`)
     ]);
 
     const eventBody = (await eventResponse.json().catch(() => null)) as { event?: EventDetail; error?: string } | null;
@@ -73,11 +96,15 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
     const membersBody = (await membersResponse.json().catch(() => null)) as { members?: Member[] } | null;
     const invitesBody = (await invitesResponse.json().catch(() => null)) as { invites?: Invite[] } | null;
     const auditBody = (await auditResponse.json().catch(() => null)) as { items?: AuditItem[] } | null;
+    const productsBody = (await productsResponse.json().catch(() => null)) as { products?: Product[] } | null;
+    const questionsBody = (await questionsResponse.json().catch(() => null)) as { questions?: RegistrationQuestion[] } | null;
 
     setEvent(eventBody.event);
     setMembers(membersBody?.members ?? []);
     setInvites(invitesBody?.invites ?? []);
     setAuditItems(auditBody?.items ?? []);
+    setProducts(productsBody?.products ?? []);
+    setQuestions(questionsBody?.questions ?? []);
   }, [eventId]);
 
   useEffect(() => {
@@ -120,6 +147,7 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
 
   async function onCreateInvite(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
+    const form = formEvent.currentTarget;
     const formData = new FormData(formEvent.currentTarget);
     const created = await submitJson(`/api/events/${eventId}/invites`, "POST", {
       email: String(formData.get("email") ?? ""),
@@ -127,7 +155,47 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
     });
 
     if (created) {
-      formEvent.currentTarget.reset();
+      form.reset();
+    }
+  }
+
+  async function onCreateProduct(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    const form = formEvent.currentTarget;
+    const formData = new FormData(formEvent.currentTarget);
+    const imageUrl = String(formData.get("imageUrl") ?? "");
+    const created = await submitJson(`/api/events/${eventId}/products`, "POST", {
+      category: String(formData.get("category") ?? "REGISTRATION"),
+      name: String(formData.get("name") ?? ""),
+      displayName: String(formData.get("displayName") ?? ""),
+      description: String(formData.get("description") ?? "") || undefined,
+      basePriceCents: Number(formData.get("basePriceCents") ?? 0),
+      stockLimit: String(formData.get("stockLimit") ?? "") || undefined,
+      publicVisible: formData.get("publicVisible") === "on",
+      minPurchaseAge: String(formData.get("minPurchaseAge") ?? "") || undefined,
+      maxPurchaseAge: String(formData.get("maxPurchaseAge") ?? "") || undefined,
+      images: imageUrl ? [{ url: imageUrl, altText: String(formData.get("displayName") ?? "") }] : []
+    });
+
+    if (created) {
+      form.reset();
+    }
+  }
+
+  async function onCreateQuestion(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    const form = formEvent.currentTarget;
+    const formData = new FormData(formEvent.currentTarget);
+    const created = await submitJson(`/api/events/${eventId}/registration-questions`, "POST", {
+      label: String(formData.get("label") ?? ""),
+      helpText: String(formData.get("helpText") ?? "") || undefined,
+      type: String(formData.get("type") ?? "SHORT_TEXT"),
+      required: formData.get("required") === "on",
+      sortOrder: Number(formData.get("sortOrder") ?? 0)
+    });
+
+    if (created) {
+      form.reset();
     }
   }
 
@@ -145,6 +213,11 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
         ) : null}
         <h1 className="mt-2 text-3xl font-semibold tracking-normal">{event?.name ?? "Event"}</h1>
         <p className="text-sm text-muted-foreground">/{event?.slug}</p>
+        {event ? (
+          <Link className="mt-2 inline-block text-sm font-medium text-primary" href={`/events/${event.slug}`}>
+            View public page
+          </Link>
+        ) : null}
       </div>
       {message ? <p className="rounded-md border bg-secondary p-3 text-sm">{message}</p> : null}
       {error ? <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">{error}</p> : null}
@@ -204,6 +277,103 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
           </form>
         </section>
       ) : null}
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-md border bg-card p-5">
+          <h2 className="text-lg font-semibold tracking-normal">Registration tiers and products</h2>
+          <form className="mt-4 grid gap-3" onSubmit={onCreateProduct}>
+            <select className="rounded-md border px-3 py-2" defaultValue="REGISTRATION" name="category">
+              <option value="REGISTRATION">Registration</option>
+              <option value="MERCH">Merch</option>
+              <option value="ADD_ON">Add-on</option>
+              <option value="DONATION">Donation</option>
+              <option value="SERVICE">Service</option>
+              <option value="VENDOR_TABLE">Vendor table</option>
+            </select>
+            <input className="rounded-md border px-3 py-2" name="name" placeholder="Internal name" required />
+            <input className="rounded-md border px-3 py-2" name="displayName" placeholder="Display name" required />
+            <textarea className="min-h-20 rounded-md border px-3 py-2" name="description" placeholder="Description" />
+            <input
+              className="rounded-md border px-3 py-2"
+              min={0}
+              name="basePriceCents"
+              placeholder="Base price in cents"
+              required
+              type="number"
+            />
+            <div className="grid gap-3 md:grid-cols-3">
+              <input className="rounded-md border px-3 py-2" min={1} name="stockLimit" placeholder="Stock" type="number" />
+              <input className="rounded-md border px-3 py-2" min={0} name="minPurchaseAge" placeholder="Min age" type="number" />
+              <input className="rounded-md border px-3 py-2" min={0} name="maxPurchaseAge" placeholder="Max age" type="number" />
+            </div>
+            <input className="rounded-md border px-3 py-2" name="imageUrl" placeholder="Image URL" type="url" />
+            <label className="flex items-center gap-2 text-sm">
+              <input defaultChecked name="publicVisible" type="checkbox" />
+              Public
+            </label>
+            <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground">Create product</button>
+          </form>
+          <div className="mt-5 space-y-3">
+            {products.map((product) => (
+              <div className="rounded-md border p-3 text-sm" key={product.id}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{product.displayName}</p>
+                    <p className="text-muted-foreground">
+                      {product.category} - ${(product.basePriceCents / 100).toFixed(2)} - {product.registrationCount}
+                      registered
+                    </p>
+                  </div>
+                  <button
+                    className="rounded-md border px-2 py-1 text-sm"
+                    disabled={Boolean(product.archivedAt)}
+                    onClick={() => void submitJson(`/api/events/${eventId}/products/${product.id}`, "DELETE")}
+                    type="button"
+                  >
+                    {product.archivedAt ? "Archived" : "Archive"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border bg-card p-5">
+          <h2 className="text-lg font-semibold tracking-normal">Registration questions</h2>
+          <form className="mt-4 grid gap-3" onSubmit={onCreateQuestion}>
+            <input className="rounded-md border px-3 py-2" name="label" placeholder="Question label" required />
+            <input className="rounded-md border px-3 py-2" name="helpText" placeholder="Help text" />
+            <select className="rounded-md border px-3 py-2" defaultValue="SHORT_TEXT" name="type">
+              <option value="SHORT_TEXT">Short text</option>
+              <option value="LONG_TEXT">Long text</option>
+              <option value="CHECKBOX">Checkbox</option>
+            </select>
+            <input className="rounded-md border px-3 py-2" defaultValue={0} min={0} name="sortOrder" type="number" />
+            <label className="flex items-center gap-2 text-sm">
+              <input name="required" type="checkbox" />
+              Required
+            </label>
+            <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground">Add question</button>
+          </form>
+          <div className="mt-5 space-y-3">
+            {questions.map((question) => (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm" key={question.id}>
+                <div>
+                  <p className="font-medium">{question.label}</p>
+                  <p className="text-muted-foreground">
+                    {question.type} - {question.required ? "required" : "optional"} - sort {question.sortOrder}
+                  </p>
+                </div>
+                <button
+                  className="rounded-md border px-2 py-1 text-sm"
+                  onClick={() => void submitJson(`/api/events/${eventId}/registration-questions/${question.id}`, "DELETE")}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-md border bg-card p-5">
           <h2 className="text-lg font-semibold tracking-normal">Event team</h2>

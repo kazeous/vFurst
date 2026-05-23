@@ -123,6 +123,7 @@ export function OrganizationDetailClient({ organizationId }: OrganizationDetailC
 
   async function onCreateEvent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     const formData = new FormData(event.currentTarget);
     const created = await submitJson(`/api/orgs/${organizationId}/events`, "POST", {
       name: String(formData.get("name") ?? ""),
@@ -131,12 +132,13 @@ export function OrganizationDetailClient({ organizationId }: OrganizationDetailC
     });
 
     if (created) {
-      event.currentTarget.reset();
+      form.reset();
     }
   }
 
   async function onCreateInvite(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     const formData = new FormData(event.currentTarget);
     const created = await submitJson(`/api/orgs/${organizationId}/invites`, "POST", {
       email: String(formData.get("email") ?? ""),
@@ -144,7 +146,7 @@ export function OrganizationDetailClient({ organizationId }: OrganizationDetailC
     });
 
     if (created) {
-      event.currentTarget.reset();
+      form.reset();
     }
   }
 

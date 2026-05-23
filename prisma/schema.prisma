@@ -18,6 +18,8 @@ model User {
   sessions      Session[]
   organizationMemberships OrganizationMember[]
   eventMemberships        EventMember[]
+  attendeeProfiles        AttendeeProfile[]
+  registrations           Registration[]
   createdOrganizationInvites OrganizationInvite[] @relation("OrganizationInviteCreator")
   createdEventInvites        EventInvite[]        @relation("EventInviteCreator")
   auditLogs     AuditLog[]
@@ -88,6 +90,26 @@ enum InviteStatus {
   EXPIRED
 }
 
+enum ProductCategory {
+  REGISTRATION
+  MERCH
+  VENDOR_TABLE
+  ADD_ON
+  DONATION
+  SERVICE
+}
+
+enum RegistrationStatus {
+  SUBMITTED
+  CANCELLED
+}
+
+enum RegistrationQuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  CHECKBOX
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -156,8 +178,12 @@ model Event {
   members      EventMember[]
   invites      EventInvite[]
   auditLogs    AuditLog[]
+  products     Product[]
+  registrationQuestions RegistrationQuestion[]
+  registrations Registration[]
+  attendeeProfiles AttendeeProfile[]
 
-  @@unique([organizationId, slug])
+  @@unique([slug])
   @@index([organizationId])
 }
 
@@ -215,4 +241,144 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([eventId, createdAt])
   @@index([actorUserId])
+}
+
+model Product {
+  id             String          @id @default(cuid())
+  eventId        String
+  category       ProductCategory
+  name           String
+  displayName    String
+  description    String?         @db.Text
+  basePriceCents Int
+  stockLimit     Int?
+  publicVisible  Boolean         @default(true)
+  archivedAt     DateTime?
+  availableFrom  DateTime?
+  availableUntil DateTime?
+  minPurchaseAge Int?
+  maxPurchaseAge Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  images         ProductImage[]
+  options        ProductOption[]
+  registrations  Registration[]
+
+  @@index([eventId, category])
+  @@index([eventId, publicVisible])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductOption {
+  id        String   @id @default(cuid())
+  productId String
+  label     String
+  required  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values  ProductOptionValue[]
+
+  @@index([productId])
+}
+
+model ProductOptionValue {
+  id        String   @id @default(cuid())
+  optionId  String
+  label     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  option ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([optionId])
+}
+
+model AttendeeProfile {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String?
+  email     String
+  firstName String
+  lastName  String
+  birthDate DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  registrations Registration[]
+
+  @@index([eventId])
+  @@index([userId])
+  @@index([email])
+}
+
+model Registration {
+  id                String             @id @default(cuid())
+  eventId           String
+  attendeeProfileId String
+  userId            String?
+  productId         String
+  status            RegistrationStatus @default(SUBMITTED)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  attendeeProfile AttendeeProfile      @relation(fields: [attendeeProfileId], references: [id], onDelete: Cascade)
+  user            User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  product         Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  answers         RegistrationAnswer[]
+
+  @@index([eventId])
+  @@index([attendeeProfileId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model RegistrationQuestion {
+  id        String                   @id @default(cuid())
+  eventId   String
+  label     String
+  helpText   String?
+  type      RegistrationQuestionType @default(SHORT_TEXT)
+  required  Boolean                  @default(false)
+  sortOrder Int                      @default(0)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  event   Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  answers RegistrationAnswer[]
+
+  @@index([eventId])
+}
+
+model RegistrationAnswer {
+  id             String   @id @default(cuid())
+  registrationId String
+  questionId     String
+  value          String   @db.Text
+  createdAt      DateTime @default(now())
+
+  registration Registration         @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  question     RegistrationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, questionId])
+  @@index([questionId])
 }

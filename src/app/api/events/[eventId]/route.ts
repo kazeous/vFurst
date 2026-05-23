@@ -37,22 +37,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { eventId } = await context.params;
     const session = await requireSession();
     const userId = getSessionUserId(session);
-    const access = await requireEventManager(userId, eventId);
+    await requireEventManager(userId, eventId);
     const input = await parseJsonBody(request, updateEventInputSchema);
     const nextSlug = input.slug ?? (input.name ? slugify(input.name) : undefined);
 
     if (nextSlug) {
-      const existing = await db.event.findUnique({
-        where: {
-          organizationId_slug: {
-            organizationId: access.event.organizationId,
-            slug: nextSlug
-          }
-        }
-      });
+      const existing = await db.event.findUnique({ where: { slug: nextSlug } });
 
       if (existing && existing.id !== eventId) {
-        throw new HttpError(409, "Event slug is already in use for this organization");
+        throw new HttpError(409, "Event slug is already in use");
       }
     }
 

@@ -54,17 +54,10 @@ export async function POST(request: Request, context: RouteContext) {
       throw new HttpError(400, "Event slug is required");
     }
 
-    const existing = await db.event.findUnique({
-      where: {
-        organizationId_slug: {
-          organizationId: orgId,
-          slug
-        }
-      }
-    });
+    const existing = await db.event.findUnique({ where: { slug } });
 
     if (existing) {
-      throw new HttpError(409, "Event slug is already in use for this organization");
+      throw new HttpError(409, "Event slug is already in use");
     }
 
     const event = await db.$transaction(async (tx: Prisma.TransactionClient) => {

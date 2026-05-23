@@ -17,4 +17,6 @@ Phase 1 established infrastructure only.
 
 Phase 2 adds account registration/sign-in, organizations, events, org/event memberships, invites, and audit logs. All protected actions are enforced in backend route handlers through `src/server/rbac.ts`; frontend role displays are only cosmetic.
 
-The app still intentionally does not include product, cart, order, payment, email delivery, vendor, volunteer, check-in, notes, checklist, or public registration business logic.
+Phase 3 adds public event pages, registration-tier products, product images by URL, registration questions, attendee profiles, and public registration submission. Public submission is validated by backend route handlers; frontend validation is only cosmetic.
+
+The app still intentionally does not include cart, order, payment, email delivery, vendor, volunteer, check-in, notes, checklist, or fulfillment business logic.

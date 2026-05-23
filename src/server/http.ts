@@ -40,6 +40,15 @@ export function handleRouteError(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
 
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "PrismaClientInitializationError"
+  ) {
+    return NextResponse.json({ error: "Database is unavailable. Start Postgres and run migrations." }, { status: 503 });
+  }
+
   if (error instanceof ZodError) {
     return NextResponse.json({ error: "Validation failed", issues: error.flatten() }, { status: 400 });
   }
