@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { EmailTemplatePanel } from "@/features/email/email-template-panel";
 
 type EventDetail = {
   id: string;
@@ -62,6 +63,113 @@ type RegistrationQuestion = {
   sortOrder: number;
 };
 
+type AdminOrder = {
+  id: string;
+  status: string;
+  totalCents: number;
+  user: {
+    name: string | null;
+    email: string | null;
+  };
+  items: Array<{
+    id: string;
+    productName: string;
+    quantity: number;
+  }>;
+  payments: Array<{
+    id: string;
+    status: string;
+    provider: string;
+  }>;
+  refunds: Array<{
+    id: string;
+    status: string;
+    amountCents: number;
+  }>;
+};
+
+type VendorApplication = {
+  id: string;
+  status: string;
+  businessName: string;
+  contactName: string;
+  contactEmail: string;
+  description: string;
+  productsServices: string;
+  seatingNotes: string | null;
+  adminNote: string | null;
+  requestedTableProduct: {
+    id: string;
+    displayName: string;
+    basePriceCents: number;
+  } | null;
+  approvedOrder: {
+    id: string;
+    status: string;
+    totalCents: number;
+  } | null;
+  user: {
+    name: string | null;
+    email: string | null;
+  };
+  amenities: Array<{
+    id: string;
+    name: string;
+    details: string | null;
+  }>;
+  assistants: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+  }>;
+  seatingPreferences: Array<{
+    id: string;
+    note: string;
+  }>;
+};
+
+type VolunteerDepartment = {
+  id: string;
+  name: string;
+  description: string | null;
+  leadUserId: string | null;
+  leadUser: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
+  _count: {
+    assignments: number;
+  };
+};
+
+type VolunteerApplication = {
+  id: string;
+  status: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  preferredContactMethod: string;
+  availability: string;
+  departmentInterests: string;
+  priorExperience: string | null;
+  adminNote: string | null;
+  assignments: Array<{
+    id: string;
+    state: string;
+    note: string | null;
+    department: {
+      id: string;
+      name: string;
+      leadUser: {
+        name: string | null;
+        email: string | null;
+      } | null;
+    };
+  }>;
+};
+
 type EventDetailClientProps = {
   eventId: string;
 };
@@ -73,18 +181,37 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
   const [auditItems, setAuditItems] = useState<AuditItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [questions, setQuestions] = useState<RegistrationQuestion[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [vendorApplications, setVendorApplications] = useState<VendorApplication[]>([]);
+  const [volunteerDepartments, setVolunteerDepartments] = useState<VolunteerDepartment[]>([]);
+  const [volunteerApplications, setVolunteerApplications] = useState<VolunteerApplication[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setError(null);
-    const [eventResponse, membersResponse, invitesResponse, auditResponse, productsResponse, questionsResponse] = await Promise.all([
+    const [
+      eventResponse,
+      membersResponse,
+      invitesResponse,
+      auditResponse,
+      productsResponse,
+      questionsResponse,
+      ordersResponse,
+      vendorApplicationsResponse,
+      volunteerDepartmentsResponse,
+      volunteerApplicationsResponse
+    ] = await Promise.all([
       fetch(`/api/events/${eventId}`),
       fetch(`/api/events/${eventId}/members`),
       fetch(`/api/events/${eventId}/invites`),
       fetch(`/api/events/${eventId}/audit?pageSize=10`),
       fetch(`/api/events/${eventId}/products`),
-      fetch(`/api/events/${eventId}/registration-questions`)
+      fetch(`/api/events/${eventId}/registration-questions`),
+      fetch(`/api/events/${eventId}/orders`),
+      fetch(`/api/events/${eventId}/vendor-applications`),
+      fetch(`/api/events/${eventId}/volunteer-departments`),
+      fetch(`/api/events/${eventId}/volunteer-applications`)
     ]);
 
     const eventBody = (await eventResponse.json().catch(() => null)) as { event?: EventDetail; error?: string } | null;
@@ -98,6 +225,16 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
     const auditBody = (await auditResponse.json().catch(() => null)) as { items?: AuditItem[] } | null;
     const productsBody = (await productsResponse.json().catch(() => null)) as { products?: Product[] } | null;
     const questionsBody = (await questionsResponse.json().catch(() => null)) as { questions?: RegistrationQuestion[] } | null;
+    const ordersBody = (await ordersResponse.json().catch(() => null)) as { orders?: AdminOrder[] } | null;
+    const vendorApplicationsBody = (await vendorApplicationsResponse.json().catch(() => null)) as {
+      applications?: VendorApplication[];
+    } | null;
+    const volunteerDepartmentsBody = (await volunteerDepartmentsResponse.json().catch(() => null)) as {
+      departments?: VolunteerDepartment[];
+    } | null;
+    const volunteerApplicationsBody = (await volunteerApplicationsResponse.json().catch(() => null)) as {
+      applications?: VolunteerApplication[];
+    } | null;
 
     setEvent(eventBody.event);
     setMembers(membersBody?.members ?? []);
@@ -105,6 +242,10 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
     setAuditItems(auditBody?.items ?? []);
     setProducts(productsBody?.products ?? []);
     setQuestions(questionsBody?.questions ?? []);
+    setOrders(ordersBody?.orders ?? []);
+    setVendorApplications(vendorApplicationsBody?.applications ?? []);
+    setVolunteerDepartments(volunteerDepartmentsBody?.departments ?? []);
+    setVolunteerApplications(volunteerApplicationsBody?.applications ?? []);
   }, [eventId]);
 
   useEffect(() => {
@@ -199,6 +340,52 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
     }
   }
 
+  async function markOrderPaid(orderId: string) {
+    await submitJson(`/api/orders/${orderId}/manual-payment`, "POST", {
+      note: "Marked paid from event admin dashboard"
+    });
+  }
+
+  async function recordRefund(order: AdminOrder) {
+    await submitJson(`/api/orders/${order.id}/refunds`, "POST", {
+      amountCents: order.totalCents,
+      reason: "Manual refund record"
+    });
+  }
+
+  async function reviewVendorApplication(applicationId: string, status: string) {
+    await submitJson(`/api/events/${eventId}/vendor-applications/${applicationId}`, "PATCH", {
+      status
+    });
+  }
+
+  async function onCreateVolunteerDepartment(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    const form = formEvent.currentTarget;
+    const formData = new FormData(form);
+    const created = await submitJson(`/api/events/${eventId}/volunteer-departments`, "POST", {
+      name: String(formData.get("name") ?? ""),
+      description: String(formData.get("description") ?? "") || undefined,
+      leadUserId: String(formData.get("leadUserId") ?? "") || undefined
+    });
+
+    if (created) {
+      form.reset();
+    }
+  }
+
+  async function onUpdateVolunteerApplication(applicationId: string, formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    const formData = new FormData(formEvent.currentTarget);
+    await submitJson(`/api/events/${eventId}/volunteer-applications/${applicationId}`, "PATCH", {
+      status: String(formData.get("status") ?? "UNDER_REVIEW"),
+      departmentId: String(formData.get("departmentId") ?? "") || undefined,
+      assignmentState: String(formData.get("assignmentState") ?? "") || undefined,
+      assignmentNote: String(formData.get("assignmentNote") ?? "") || undefined,
+      adminNote: String(formData.get("adminNote") ?? "") || undefined
+    });
+  }
+
   if (!event && !error) {
     return <p className="text-sm text-muted-foreground">Loading event...</p>;
   }
@@ -216,6 +403,11 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
         {event ? (
           <Link className="mt-2 inline-block text-sm font-medium text-primary" href={`/events/${event.slug}`}>
             View public page
+          </Link>
+        ) : null}
+        {event ? (
+          <Link className="ml-4 mt-2 inline-block text-sm font-medium text-primary" href={`/dashboard/events/${event.id}/check-in`}>
+            Open check-in
           </Link>
         ) : null}
       </div>
@@ -374,6 +566,238 @@ export function EventDetailClient({ eventId }: EventDetailClientProps) {
           </div>
         </div>
       </section>
+      <section className="rounded-md border bg-card p-5">
+        <h2 className="text-lg font-semibold tracking-normal">Orders</h2>
+        {orders.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No orders yet.</p> : null}
+        <div className="mt-4 space-y-3">
+          {orders.map((order) => (
+            <div className="rounded-md border p-3 text-sm" key={order.id}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{order.user.name ?? order.user.email ?? "Attendee"}</p>
+                  <p className="text-muted-foreground">
+                    {order.status} - ${(order.totalCents / 100).toFixed(2)} - {order.items.length} items
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link className="rounded-md border px-2 py-1" href={`/orders/${order.id}`}>
+                    View
+                  </Link>
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={order.status !== "UNPAID"}
+                    onClick={() => void markOrderPaid(order.id)}
+                    type="button"
+                  >
+                    Mark paid
+                  </button>
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={order.status === "UNPAID"}
+                    onClick={() => void recordRefund(order)}
+                    type="button"
+                  >
+                    Record refund
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="rounded-md border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-normal">Vendor applications</h2>
+          {event ? (
+            <Link className="rounded-md border px-3 py-2 text-sm font-medium" href={`/events/${event.slug}/vendors/apply`}>
+              Public application
+            </Link>
+          ) : null}
+        </div>
+        {vendorApplications.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No vendor applications yet.</p> : null}
+        <div className="mt-4 space-y-4">
+          {vendorApplications.map((application) => (
+            <div className="rounded-md border p-4 text-sm" key={application.id}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-2xl">
+                  <p className="font-medium">{application.businessName}</p>
+                  <p className="text-muted-foreground">
+                    {application.status} - {application.contactName} - {application.contactEmail}
+                  </p>
+                  <p className="mt-2 text-muted-foreground">{application.productsServices}</p>
+                  {application.requestedTableProduct ? (
+                    <p className="mt-2 text-muted-foreground">
+                      Requested: {application.requestedTableProduct.displayName} - $
+                      {(application.requestedTableProduct.basePriceCents / 100).toFixed(2)}
+                    </p>
+                  ) : null}
+                  {application.amenities.length > 0 ? (
+                    <p className="mt-2 text-muted-foreground">
+                      Amenities: {application.amenities.map((amenity) => amenity.name).join(", ")}
+                    </p>
+                  ) : null}
+                  {application.assistants.length > 0 ? (
+                    <p className="mt-2 text-muted-foreground">
+                      Assistants: {application.assistants.map((assistant) => assistant.name).join(", ")}
+                    </p>
+                  ) : null}
+                  {application.seatingNotes ? <p className="mt-2 text-muted-foreground">Notes: {application.seatingNotes}</p> : null}
+                  {application.approvedOrder ? (
+                    <p className="mt-2 text-muted-foreground">
+                      Order:{" "}
+                      <Link className="text-primary" href={`/orders/${application.approvedOrder.id}`}>
+                        {application.approvedOrder.status} - ${(application.approvedOrder.totalCents / 100).toFixed(2)}
+                      </Link>
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={application.status === "UNDER_REVIEW"}
+                    onClick={() => void reviewVendorApplication(application.id, "UNDER_REVIEW")}
+                    type="button"
+                  >
+                    Review
+                  </button>
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={application.status === "APPROVED_UNPAID" || application.status === "APPROVED_PAID"}
+                    onClick={() => void reviewVendorApplication(application.id, "APPROVED_UNPAID")}
+                    type="button"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={application.status === "WAITLISTED"}
+                    onClick={() => void reviewVendorApplication(application.id, "WAITLISTED")}
+                    type="button"
+                  >
+                    Waitlist
+                  </button>
+                  <button
+                    className="rounded-md border px-2 py-1"
+                    disabled={application.status === "REJECTED"}
+                    onClick={() => void reviewVendorApplication(application.id, "REJECTED")}
+                    type="button"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="rounded-md border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-normal">Volunteer management</h2>
+          {event ? (
+            <Link className="rounded-md border px-3 py-2 text-sm font-medium" href={`/events/${event.slug}/volunteers/apply`}>
+              Public application
+            </Link>
+          ) : null}
+        </div>
+        <div className="mt-4 grid gap-5 lg:grid-cols-[320px_1fr]">
+          <div>
+            <h3 className="font-medium">Departments</h3>
+            <form className="mt-3 grid gap-3" onSubmit={onCreateVolunteerDepartment}>
+              <input className="rounded-md border px-3 py-2" name="name" placeholder="Department name" required />
+              <textarea className="min-h-20 rounded-md border px-3 py-2" name="description" placeholder="Description" />
+              <select className="rounded-md border px-3 py-2" name="leadUserId" defaultValue="">
+                <option value="">No lead</option>
+                {members.map((member) => (
+                  <option key={member.user.id} value={member.user.id}>
+                    {member.user.name ?? member.user.email ?? "Team member"}
+                  </option>
+                ))}
+              </select>
+              <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground">Create department</button>
+            </form>
+            <div className="mt-4 space-y-2">
+              {volunteerDepartments.length === 0 ? <p className="text-sm text-muted-foreground">No departments yet.</p> : null}
+              {volunteerDepartments.map((department) => (
+                <div className="rounded-md border p-3 text-sm" key={department.id}>
+                  <p className="font-medium">{department.name}</p>
+                  {department.description ? <p className="text-muted-foreground">{department.description}</p> : null}
+                  <p className="text-muted-foreground">
+                    Lead: {department.leadUser?.name ?? department.leadUser?.email ?? "none"} - {department._count.assignments} assignments
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-medium">Applications</h3>
+            {volunteerApplications.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No volunteer applications yet.</p> : null}
+            <div className="mt-3 space-y-4">
+              {volunteerApplications.map((application) => {
+                const primaryAssignment = application.assignments[0] ?? null;
+                return (
+                  <div className="rounded-md border p-4 text-sm" key={application.id}>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="max-w-2xl">
+                        <p className="font-medium">
+                          {application.firstName} {application.lastName}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {application.status} - {application.email}
+                          {application.phone ? ` - ${application.phone}` : ""}
+                        </p>
+                        <p className="mt-2 text-muted-foreground">Contact: {application.preferredContactMethod}</p>
+                        <p className="mt-2 text-muted-foreground">Availability: {application.availability}</p>
+                        <p className="mt-2 text-muted-foreground">Interests: {application.departmentInterests}</p>
+                        {application.priorExperience ? (
+                          <p className="mt-2 text-muted-foreground">Experience: {application.priorExperience}</p>
+                        ) : null}
+                        {application.assignments.length > 0 ? (
+                          <p className="mt-2 text-muted-foreground">
+                            Assignments:{" "}
+                            {application.assignments
+                              .map((assignment) => `${assignment.department.name} (${assignment.state})`)
+                              .join(", ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(submitEvent) => void onUpdateVolunteerApplication(application.id, submitEvent)}>
+                      <select className="rounded-md border px-3 py-2" name="status" defaultValue={application.status}>
+                        <option value="SUBMITTED">Submitted</option>
+                        <option value="UNDER_REVIEW">Under review</option>
+                        <option value="ACCEPTED">Accepted</option>
+                        <option value="DECLINED">Declined</option>
+                        <option value="WAITLISTED">Waitlisted</option>
+                      </select>
+                      <select className="rounded-md border px-3 py-2" name="departmentId" defaultValue={primaryAssignment?.department.id ?? ""}>
+                        <option value="">No department</option>
+                        {volunteerDepartments.map((department) => (
+                          <option key={department.id} value={department.id}>
+                            {department.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select className="rounded-md border px-3 py-2" name="assignmentState" defaultValue={primaryAssignment?.state ?? "INTERESTED"}>
+                        <option value="INTERESTED">Interested</option>
+                        <option value="PREVIOUS_EXPERIENCE">Previous experience</option>
+                        <option value="AVOID">Avoid</option>
+                        <option value="REQUESTED_BY_LEAD">Requested by lead</option>
+                        <option value="ASSIGNED">Assigned</option>
+                      </select>
+                      <input className="rounded-md border px-3 py-2" name="assignmentNote" placeholder="Assignment note" />
+                      <input className="rounded-md border px-3 py-2 md:col-span-2" name="adminNote" placeholder="Admin note" />
+                      <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground md:w-fit">
+                        Save volunteer
+                      </button>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+      <EmailTemplatePanel endpointBase={`/api/events/${eventId}`} initialKey="EVENT_INVITE" title="Event email templates" />
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-md border bg-card p-5">
           <h2 className="text-lg font-semibold tracking-normal">Event team</h2>

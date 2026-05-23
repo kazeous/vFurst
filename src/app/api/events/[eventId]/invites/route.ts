@@ -6,6 +6,8 @@ import { handleRouteError, parseJsonBody } from "@/server/http";
 import { createInviteExpiration, createInviteToken } from "@/server/invites";
 import { writeAuditLog } from "@/server/audit";
 import { createEventInviteInputSchema } from "@/shared/schemas/event";
+import { sendTemplatedEmail } from "@/server/email";
+import { env } from "@/server/env";
 
 export const runtime = "nodejs";
 
@@ -69,6 +71,26 @@ export async function POST(request: Request, context: RouteContext) {
       entityType: "EventInvite",
       entityId: invite.id,
       metadata: { email: input.email, role: input.role }
+    });
+
+    await sendTemplatedEmail({
+      key: "EVENT_INVITE",
+      organizationId: access.event.organizationId,
+      eventId,
+      toEmail: input.email,
+      data: {
+        organization: { name: access.event.organization.name },
+        event: { name: access.event.name, slug: access.event.slug },
+        inviter: {
+          name: session.user?.name ?? session.user?.email ?? "A team admin",
+          email: session.user?.email
+        },
+        invite: {
+          role: input.role,
+          url: `${env.AUTH_URL}/invites/${invite.token}`,
+          expiresAt: invite.expiresAt.toDateString()
+        }
+      }
     });
 
     return NextResponse.json({ invite }, { status: 201 });

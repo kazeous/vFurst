@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { EmailTemplatePanel } from "@/features/email/email-template-panel";
 
 type Organization = {
   id: string;
@@ -221,6 +222,7 @@ export function OrganizationDetailClient({ organizationId }: OrganizationDetailC
           ))}
         </div>
       </section>
+      <EmailTemplatePanel endpointBase={`/api/orgs/${organizationId}`} title="Organization email templates" />
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-md border bg-card p-5">
           <h2 className="text-lg font-semibold tracking-normal">Members</h2>

@@ -20,6 +20,17 @@ model User {
   eventMemberships        EventMember[]
   attendeeProfiles        AttendeeProfile[]
   registrations           Registration[]
+  checkedInRegistrations  Registration[] @relation("RegistrationCheckedInBy")
+  carts                   Cart[]
+  orders                  Order[]
+  vendorApplications      VendorApplication[] @relation("VendorApplicant")
+  reviewedVendorApplications VendorApplication[] @relation("VendorReviewer")
+  volunteerApplications   VolunteerApplication[] @relation("VolunteerApplicant")
+  reviewedVolunteerApplications VolunteerApplication[] @relation("VolunteerReviewer")
+  ledVolunteerDepartments VolunteerDepartment[] @relation("VolunteerDepartmentLead")
+  createdVolunteerAssignments VolunteerAssignment[] @relation("VolunteerAssignmentCreator")
+  markedPayments          Payment[] @relation("PaymentMarkedBy")
+  createdRefunds          Refund[]  @relation("RefundCreatedBy")
   createdOrganizationInvites OrganizationInvite[] @relation("OrganizationInviteCreator")
   createdEventInvites        EventInvite[]        @relation("EventInviteCreator")
   auditLogs     AuditLog[]
@@ -110,6 +121,101 @@ enum RegistrationQuestionType {
   CHECKBOX
 }
 
+enum BadgeStatus {
+  NOT_PRINTED
+  PRINT_READY
+  PRINTED
+  VOID
+}
+
+enum OrderStatus {
+  UNPAID
+  PAID
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FULFILLED
+}
+
+enum PaymentProvider {
+  STRIPE
+  OFFLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum VendorApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED_UNPAID
+  APPROVED_PAID
+  REJECTED
+  WAITLISTED
+}
+
+enum VolunteerApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  DECLINED
+  WAITLISTED
+}
+
+enum VolunteerPreferredContactMethod {
+  EMAIL
+  PHONE
+  SMS
+  DISCORD
+  OTHER
+}
+
+enum VolunteerAssignmentState {
+  INTERESTED
+  PREVIOUS_EXPERIENCE
+  AVOID
+  REQUESTED_BY_LEAD
+  ASSIGNED
+}
+
+enum EmailTemplateScope {
+  SYSTEM
+  ORGANIZATION
+  EVENT
+}
+
+enum EmailTemplateKey {
+  ORGANIZATION_INVITE
+  EVENT_INVITE
+  REGISTRATION_CONFIRMATION
+  VENDOR_APPLICATION_RECEIVED
+  VOLUNTEER_APPLICATION_RECEIVED
+  ORDER_RECEIPT
+}
+
+enum EmailLogStatus {
+  SKIPPED
+  SENT
+  FAILED
+}
+
+enum EmailProvider {
+  RESEND
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -121,6 +227,8 @@ model Organization {
   events    Event[]
   invites   OrganizationInvite[]
   auditLogs AuditLog[]
+  emailTemplates EmailTemplate[]
+  emailLogs EmailLog[]
 }
 
 model OrganizationMember {
@@ -182,6 +290,16 @@ model Event {
   registrationQuestions RegistrationQuestion[]
   registrations Registration[]
   attendeeProfiles AttendeeProfile[]
+  carts       Cart[]
+  orders      Order[]
+  payments    Payment[]
+  refunds     Refund[]
+  stripeWebhookEvents StripeWebhookEvent[]
+  vendorApplications VendorApplication[]
+  volunteerApplications VolunteerApplication[]
+  volunteerDepartments VolunteerDepartment[]
+  emailTemplates EmailTemplate[]
+  emailLogs EmailLog[]
 
   @@unique([slug])
   @@index([organizationId])
@@ -265,6 +383,9 @@ model Product {
   images         ProductImage[]
   options        ProductOption[]
   registrations  Registration[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  vendorApplications VendorApplication[]
 
   @@index([eventId, category])
   @@index([eventId, publicVisible])
@@ -337,6 +458,10 @@ model Registration {
   userId            String?
   productId         String
   status            RegistrationStatus @default(SUBMITTED)
+  checkedInAt       DateTime?
+  checkedInByUserId String?
+  badgeStatus       BadgeStatus        @default(NOT_PRINTED)
+  cashierNote       String?            @db.Text
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -344,12 +469,16 @@ model Registration {
   attendeeProfile AttendeeProfile      @relation(fields: [attendeeProfileId], references: [id], onDelete: Cascade)
   user            User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
   product         Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  checkedInBy     User?                @relation("RegistrationCheckedInBy", fields: [checkedInByUserId], references: [id], onDelete: SetNull)
   answers         RegistrationAnswer[]
 
   @@index([eventId])
   @@index([attendeeProfileId])
   @@index([userId])
   @@index([productId])
+  @@index([checkedInByUserId])
+  @@index([eventId, checkedInAt])
+  @@index([badgeStatus])
 }
 
 model RegistrationQuestion {
@@ -381,4 +510,323 @@ model RegistrationAnswer {
 
   @@unique([registrationId, questionId])
   @@index([questionId])
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
+
+model Order {
+  id                      String      @id @default(cuid())
+  eventId                 String
+  userId                  String
+  status                  OrderStatus @default(UNPAID)
+  subtotalCents           Int
+  totalCents              Int
+  currency                String      @default("usd")
+  stripeCheckoutSessionId String?     @unique
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  event    Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  payments Payment[]
+  refunds  Refund[]
+  approvedVendorApplications VendorApplication[] @relation("VendorApprovedOrder")
+
+  @@index([eventId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model OrderItem {
+  id              String          @id @default(cuid())
+  orderId         String
+  productId       String
+  productName     String
+  productCategory ProductCategory
+  unitPriceCents  Int
+  quantity        Int
+  totalCents      Int
+  createdAt       DateTime        @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Payment {
+  id                      String          @id @default(cuid())
+  orderId                 String
+  eventId                 String
+  provider                PaymentProvider
+  status                  PaymentStatus
+  amountCents             Int
+  currency                String          @default("usd")
+  stripePaymentIntentId   String?
+  stripeCheckoutSessionId String?
+  offlineNote             String?
+  markedByUserId          String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  order        Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  event        Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  markedByUser User? @relation("PaymentMarkedBy", fields: [markedByUserId], references: [id], onDelete: SetNull)
+  refunds      Refund[]
+
+  @@index([orderId])
+  @@index([eventId])
+  @@index([stripeCheckoutSessionId])
+  @@index([stripePaymentIntentId])
+}
+
+model Refund {
+  id              String       @id @default(cuid())
+  orderId         String
+  paymentId       String?
+  eventId         String
+  status          RefundStatus @default(PENDING)
+  amountCents     Int
+  reason          String?
+  createdByUserId String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payment       Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdByUser User?    @relation("RefundCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([eventId])
+}
+
+model StripeWebhookEvent {
+  id            String   @id @default(cuid())
+  stripeEventId String   @unique
+  eventId       String?
+  type          String
+  payload       Json
+  processedAt   DateTime @default(now())
+
+  event Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([type])
+}
+
+model VendorApplication {
+  id                      String                  @id @default(cuid())
+  eventId                 String
+  userId                  String
+  businessName            String
+  contactName             String
+  contactEmail            String
+  description             String                  @db.Text
+  productsServices        String                  @db.Text
+  requestedTableProductId String?
+  status                  VendorApplicationStatus @default(SUBMITTED)
+  seatingNotes            String?                 @db.Text
+  adminNote               String?                 @db.Text
+  approvedOrderId         String?                 @unique
+  reviewedByUserId        String?
+  submittedAt             DateTime                @default(now())
+  reviewedAt              DateTime?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  event                 Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                  User                @relation("VendorApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  requestedTableProduct Product?            @relation(fields: [requestedTableProductId], references: [id], onDelete: SetNull)
+  approvedOrder         Order?              @relation("VendorApprovedOrder", fields: [approvedOrderId], references: [id], onDelete: SetNull)
+  reviewedBy            User?               @relation("VendorReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  amenities             VendorAmenity[]
+  assistants            VendorAssistant[]
+  seatingPreferences    VendorSeatingPreference[]
+
+  @@index([eventId, status])
+  @@index([userId, createdAt])
+  @@index([requestedTableProductId])
+}
+
+model VendorAmenity {
+  id            String   @id @default(cuid())
+  applicationId String
+  name          String
+  details       String?
+  createdAt     DateTime @default(now())
+
+  application VendorApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model VendorAssistant {
+  id            String   @id @default(cuid())
+  applicationId String
+  name          String
+  email         String?
+  createdAt     DateTime @default(now())
+
+  application VendorApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model VendorSeatingPreference {
+  id            String   @id @default(cuid())
+  applicationId String
+  note          String
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  application VendorApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model VolunteerApplication {
+  id                     String                          @id @default(cuid())
+  eventId                String
+  userId                 String?
+  firstName              String
+  lastName               String
+  email                  String
+  phone                  String?
+  preferredContactMethod VolunteerPreferredContactMethod @default(EMAIL)
+  availability           String                          @db.Text
+  departmentInterests    String                          @db.Text
+  priorExperience        String?                         @db.Text
+  status                 VolunteerApplicationStatus      @default(SUBMITTED)
+  adminNote              String?                         @db.Text
+  reviewedByUserId       String?
+  submittedAt            DateTime                        @default(now())
+  reviewedAt             DateTime?
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+
+  event      Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User?                 @relation("VolunteerApplicant", fields: [userId], references: [id], onDelete: SetNull)
+  reviewedBy User?                @relation("VolunteerReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  assignments VolunteerAssignment[]
+
+  @@index([eventId, status])
+  @@index([userId, createdAt])
+  @@index([email])
+}
+
+model VolunteerDepartment {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?  @db.Text
+  leadUserId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event       Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leadUser    User?                 @relation("VolunteerDepartmentLead", fields: [leadUserId], references: [id], onDelete: SetNull)
+  assignments VolunteerAssignment[]
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@index([leadUserId])
+}
+
+model VolunteerAssignment {
+  id            String                   @id @default(cuid())
+  applicationId String
+  departmentId  String
+  state         VolunteerAssignmentState @default(INTERESTED)
+  note          String?                  @db.Text
+  createdByUserId String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  application   VolunteerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  department    VolunteerDepartment  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdByUser User?                @relation("VolunteerAssignmentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([applicationId, departmentId])
+  @@index([departmentId, state])
+  @@index([createdByUserId])
+}
+
+model EmailTemplate {
+  id             String             @id @default(cuid())
+  scope          EmailTemplateScope
+  key            EmailTemplateKey
+  organizationId String?
+  eventId        String?
+  name           String
+  subject        String
+  bodyText       String             @db.Text
+  bodyHtml       String?            @db.Text
+  enabled        Boolean            @default(true)
+  nonCritical    Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  emailLogs    EmailLog[]
+
+  @@index([scope, key])
+  @@index([organizationId, key])
+  @@index([eventId, key])
+}
+
+model EmailLog {
+  id                String         @id @default(cuid())
+  organizationId    String?
+  eventId           String?
+  templateId        String?
+  toEmail           String
+  subject           String
+  status            EmailLogStatus
+  provider          EmailProvider?
+  providerMessageId String?
+  error             String?        @db.Text
+  payload           Json?
+  createdAt         DateTime       @default(now())
+
+  organization Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template     EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([eventId, createdAt])
+  @@index([templateId])
+  @@index([status, createdAt])
 }

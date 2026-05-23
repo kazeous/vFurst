@@ -6,6 +6,7 @@ import type { Session } from "next-auth";
 
 const ORG_MANAGERS: OrganizationRole[] = ["OWNER", "ADMIN"];
 const EVENT_MANAGERS: EventRole[] = ["EVENT_ADMIN"];
+const EVENT_OPERATORS: EventRole[] = ["EVENT_ADMIN", "STAFF"];
 
 export function getSessionUserId(session: Session) {
   const userId = session.user?.id;
@@ -96,6 +97,20 @@ export async function requireEventManager(userId: string, eventId: string) {
 
   if (!access.eventMembership || !EVENT_MANAGERS.includes(access.eventMembership.role)) {
     forbidden("Event admin access is required");
+  }
+
+  return access;
+}
+
+export async function requireEventOperator(userId: string, eventId: string) {
+  const access = await requireEventMember(userId, eventId);
+
+  if (access.organizationMembership && ORG_MANAGERS.includes(access.organizationMembership.role)) {
+    return access;
+  }
+
+  if (!access.eventMembership || !EVENT_OPERATORS.includes(access.eventMembership.role)) {
+    forbidden("Event staff access is required");
   }
 
   return access;

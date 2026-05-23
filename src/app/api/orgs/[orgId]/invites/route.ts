@@ -6,6 +6,8 @@ import { handleRouteError, parseJsonBody } from "@/server/http";
 import { createInviteExpiration, createInviteToken } from "@/server/invites";
 import { writeAuditLog } from "@/server/audit";
 import { createOrganizationInviteInputSchema } from "@/shared/schemas/organization";
+import { sendTemplatedEmail } from "@/server/email";
+import { env } from "@/server/env";
 
 export const runtime = "nodejs";
 
@@ -49,6 +51,10 @@ export async function POST(request: Request, context: RouteContext) {
     const userId = getSessionUserId(session);
     await requireOrganizationManager(userId, orgId);
     const input = await parseJsonBody(request, createOrganizationInviteInputSchema);
+    const organization = await db.organization.findUniqueOrThrow({
+      where: { id: orgId },
+      select: { name: true }
+    });
 
     const invite = await db.organizationInvite.create({
       data: {
@@ -68,6 +74,24 @@ export async function POST(request: Request, context: RouteContext) {
       entityType: "OrganizationInvite",
       entityId: invite.id,
       metadata: { email: input.email, role: input.role }
+    });
+
+    await sendTemplatedEmail({
+      key: "ORGANIZATION_INVITE",
+      organizationId: orgId,
+      toEmail: input.email,
+      data: {
+        organization,
+        inviter: {
+          name: session.user?.name ?? session.user?.email ?? "A team admin",
+          email: session.user?.email
+        },
+        invite: {
+          role: input.role,
+          url: `${env.AUTH_URL}/invites/${invite.token}`,
+          expiresAt: invite.expiresAt.toDateString()
+        }
+      }
     });
 
     return NextResponse.json({ invite }, { status: 201 });

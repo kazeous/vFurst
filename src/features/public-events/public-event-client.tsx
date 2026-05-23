@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type PublicEvent = {
   id: string;
@@ -51,6 +52,7 @@ export function PublicEventClient({ slug }: PublicEventClientProps) {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cartMessage, setCartMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadPublicEvent = useCallback(async () => {
@@ -86,6 +88,37 @@ export function PublicEventClient({ slug }: PublicEventClientProps) {
     () => products.filter((product) => product.category === "REGISTRATION"),
     [products]
   );
+  const storeProducts = useMemo(
+    () => products.filter((product) => product.category !== "REGISTRATION" && product.category !== "VENDOR_TABLE"),
+    [products]
+  );
+  const hasVendorProducts = useMemo(() => products.some((product) => product.category === "VENDOR_TABLE"), [products]);
+
+  async function addToCart(productId: string) {
+    if (!event) {
+      return;
+    }
+
+    setCartMessage(null);
+    const response = await fetch(`/api/events/${event.id}/cart`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, quantity: 1 })
+    });
+
+    if (response.status === 401) {
+      setCartMessage("Sign in before adding products to your cart.");
+      return;
+    }
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      setCartMessage(body?.error ?? "Could not add this product to cart.");
+      return;
+    }
+
+    setCartMessage("Added to cart.");
+  }
 
   async function onSubmit(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
@@ -157,35 +190,73 @@ export function PublicEventClient({ slug }: PublicEventClientProps) {
           <p>Timezone: {event.timezone}</p>
           {event.venueName ? <p>Venue: {event.venueName}</p> : null}
           {event.contactEmail ? <p>Contact: {event.contactEmail}</p> : null}
+          {hasVendorProducts ? (
+            <Link className="mt-4 inline-block rounded-md border px-3 py-2 font-medium text-foreground" href={`/events/${slug}/vendors/apply`}>
+              Apply as vendor
+            </Link>
+          ) : null}
+          {event.status === "REGISTRATION_OPEN" || event.status === "LIVE" ? (
+            <Link className="mt-3 inline-block rounded-md border px-3 py-2 font-medium text-foreground" href={`/events/${slug}/volunteers/apply`}>
+              Apply as volunteer
+            </Link>
+          ) : null}
         </aside>
       </section>
       <section className="grid gap-8 py-8 lg:grid-cols-[1fr_420px]">
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold tracking-normal">Registration tiers</h2>
-          {registrationProducts.length === 0 ? (
-            <p className="rounded-md border bg-card p-5 text-sm text-muted-foreground">No registration tiers are currently available.</p>
-          ) : null}
-          {registrationProducts.map((product) => (
-            <button
-              className={`w-full rounded-md border bg-card p-5 text-left transition ${
-                selectedProductId === product.id ? "border-primary" : "hover:border-primary"
-              }`}
-              key={product.id}
-              onClick={() => setSelectedProductId(product.id)}
-              type="button"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold tracking-normal">{product.displayName}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{product.description}</p>
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold tracking-normal">Registration tiers</h2>
+            {registrationProducts.length === 0 ? (
+              <p className="rounded-md border bg-card p-5 text-sm text-muted-foreground">No registration tiers are currently available.</p>
+            ) : null}
+            {registrationProducts.map((product) => (
+              <button
+                className={`w-full rounded-md border bg-card p-5 text-left transition ${
+                  selectedProductId === product.id ? "border-primary" : "hover:border-primary"
+                }`}
+                key={product.id}
+                onClick={() => setSelectedProductId(product.id)}
+                type="button"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-normal">{product.displayName}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{product.description}</p>
+                  </div>
+                  <p className="font-semibold">${(product.basePriceCents / 100).toFixed(2)}</p>
                 </div>
-                <p className="font-semibold">${(product.basePriceCents / 100).toFixed(2)}</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {product.stockLimit ? `${product.stockLimit - product.registrationCount} remaining` : "Open capacity"}
+                </p>
+              </button>
+            ))}
+          </section>
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-semibold tracking-normal">Event store</h2>
+              <Link className="rounded-md border px-3 py-2 text-sm font-medium" href={`/events/${slug}/cart`}>
+                View cart
+              </Link>
+            </div>
+            {cartMessage ? <p className="rounded-md border bg-secondary p-3 text-sm">{cartMessage}</p> : null}
+            {storeProducts.length === 0 ? (
+              <p className="rounded-md border bg-card p-5 text-sm text-muted-foreground">No store products are currently available.</p>
+            ) : null}
+            {storeProducts.map((product) => (
+              <div className="rounded-md border bg-card p-5" key={product.id}>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-normal">{product.displayName}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{product.description}</p>
+                  </div>
+                  <p className="font-semibold">${(product.basePriceCents / 100).toFixed(2)}</p>
+                </div>
+                <button className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" onClick={() => void addToCart(product.id)} type="button">
+                  Add to cart
+                </button>
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                {product.stockLimit ? `${product.stockLimit - product.registrationCount} remaining` : "Open capacity"}
-              </p>
-            </button>
-          ))}
+            ))}
+          </section>
         </div>
         <form className="rounded-md border bg-card p-5" onSubmit={onSubmit}>
           <h2 className="text-xl font-semibold tracking-normal">Register</h2>
