@@ -100,7 +100,7 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
-| **File Storage** | Cloudflare R2 | Badge templates, product images, event assets |
+| **File Storage** | AWS S3 | Badge templates, product images, event assets |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
 | **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
 | **Validation** | Zod | Schema validation for forms and API |
@@ -278,7 +278,7 @@ d:\GitHub\vFurst\
 | | [NEW] `.github/workflows/deploy.yml` — Vercel preview + production deploys |
 | Dev / staging / prod envs | [NEW] `.env.example`, `.env.local`, `.env.staging` — env var templates |
 | Stripe Connect setup | Create Stripe Connect platform account, configure OAuth redirect URIs |
-| Choose and configure hosting | Vercel project creation, Railway Redis instance, Cloudflare R2 bucket |
+| Choose and configure hosting | Vercel project creation, Railway Redis instance, AWS S3 bucket |
 | Initialize Next.js + Astryx | [NEW] `apps/web/` — Next.js 15 app with Astryx imports in `globals.css` |
 | | [NEW] `apps/web/src/app/layout.tsx` — Root layout with `Theme` provider |
 | | [NEW] `apps/web/src/components/providers.tsx` — Client providers wrapper |
@@ -543,7 +543,7 @@ Server Actions: `createHotelBlock`, `updateHotelBlock`, `bookRoom`, `cancelBooki
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/store/page.tsx`
 Product management:
-- Product CRUD: name, price, description, images (R2 upload), stock, category
+- Product CRUD: name, price, description, images (S3 upload), stock, category
 - **Surcharges**: configurable per-product surcharges (shipping, handling)
 - Product add-ons (e.g., size selection, color)
 - Inventory tracking with low-stock alerts
