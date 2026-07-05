@@ -29,10 +29,19 @@ Adopted from [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_sa
 | Per hotel room booked | **$1.00** |
 | Store / vendor transactions | **1%** |
 
-Payments processed via **Stripe Connect** — conventions onboard their own Stripe account; vFurst collects fees via `application_fee_amount` on each PaymentIntent.
+Payments processed via **Stripe Connect destination charges** — vFurst creates checkout PaymentIntents on the platform account, sends convention proceeds with `transfer_data.destination`, and collects fees via `application_fee_amount` on each PaymentIntent. Direct charges are not used for the core checkout flow.
 
 > [!IMPORTANT]
 > **Fee collection is single-path**: all platform fees are collected at checkout time via Stripe Connect's `application_fee_amount`. There is **no secondary billing job** that invoices conventions separately. The Phase 6 `reconcile-fees.ts` job is **read-only** — it audits that fees were collected correctly, generates usage reports for the billing dashboard, and flags discrepancies, but never charges conventions again.
+
+### Stripe Connect Charge Type
+
+vFurst uses **destination charges** for checkout:
+
+- PaymentIntent / Checkout Session is created by the vFurst platform account.
+- Convention proceeds are transferred with `transfer_data.destination = org.stripeAccountId`.
+- vFurst fees are collected in the same payment with `application_fee_amount`.
+- Direct charges are reserved only for a future exceptional flow that explicitly needs connected-account-owned charges; they are not part of the MVP registration, hotel, store, vendor, or cashier flows.
 
 ---
 
@@ -75,7 +84,7 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 
 - 🆕 **Astryx component mapping** — specific UI components for each feature
 - 🆕 **File-by-file project structure** — exact file paths and responsibilities
-- 🆕 **Data model (ER diagram)** — 16 entities with all relations
+- 🆕 **Data model (ER diagram)** — 29 entities with all relations
 - 🆕 **Verification plan** — automated + manual test strategy per phase
 - 🆕 **React Native companion app** — mobile scanning/monitoring
 
@@ -91,7 +100,7 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 | **Theme** | `@astryxdesign/theme-neutral` | Clean, professional SaaS aesthetic with dark mode |
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
-| **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
+| **Payments** | Stripe Connect destination charges | Convention Stripe onboarding, `transfer_data.destination`, `application_fee_amount` |
 | **File Storage** | Cloudflare R2 | Badge templates, product images, event assets |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
 | **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
@@ -116,6 +125,7 @@ erDiagram
     Organization ||--o{ StripeConnect : "connected"
     User ||--o{ OrgMember : "belongs to"
     Event ||--o{ RegistrationType : "defines"
+    Event ||--o{ AddOnDefinition : "offers"
     Event ||--o{ Registration : "receives"
     Event ||--o{ Department : "has"
     Event ||--o{ VendorApplication : "receives"
@@ -129,6 +139,7 @@ erDiagram
     User ||--o{ AttendeeNote : "writes"
     User ||--o{ VolunteerApplication : "submits"
     RegistrationType ||--o{ Registration : "categorizes"
+    AddOnDefinition ||--o{ RegistrationAddOn : "selected as"
     Registration ||--o{ Badge : "generates"
     Registration ||--o{ OrderItem : "linked to"
     Registration ||--o{ RegistrationAddOn : "includes"
@@ -151,7 +162,7 @@ erDiagram
     User ||--o{ RaffleEntry : "enters"
 ```
 
-### Core Entities (25)
+### Core Entities (29)
 
 | Entity | Key Fields | Purpose |
 |--------|-----------|---------|
@@ -162,10 +173,11 @@ erDiagram
 | **Event** | id, orgId, name, slug, startDate, endDate, venue, status, settings | A specific convention instance |
 | **RegistrationType** | id, eventId, name, price, maxCapacity, scheduledPricing (JSON) | Attendance tiers (General, VIP, Sponsor) |
 | **Registration** | id, eventId, userId, typeId, status, checkedInAt, badgeNumber, transferredFromId | An attendee's event registration |
+| **AddOnDefinition** | id, eventId, name, description, price, stock, category, active, metadata | Event-scoped optional add-on catalog item (shirt, meal, workshop, amenity). Target for `RegistrationAddOn.addOnDefId`. |
 | **RegistrationAddOn** | id, registrationId, addOnDefId, price, quantity | Optional items on a registration |
 | **Badge** | id, registrationId, templateId, barcodeData, nfcTag, printedAt | Physical/digital badge |
 | **BadgeTemplate** | id, eventId, name, layout (JSON), dimensions | Badge design template |
-| **Department** | id, eventId, name, leadUserId | Organizational department |
+| **Department** | id, eventId, name, leadUserId, formSchema (JSON) | Organizational department and its custom volunteer application schema |
 | **VolunteerApplication** | id, userId, departmentId, eventId, formResponses (JSON), availability (JSON), status (PENDING/APPROVED/REJECTED), reviewedBy, reviewedAt | Volunteer application with custom form data and approval workflow. Precedes StaffAssignment — approved applications become assignments. |
 | **StaffRole** | id, departmentId, roleName, shifts (JSON), maxVolunteers | Staff position definitions |
 | **StaffAssignment** | id, userId, roleId, volunteerApplicationId, shiftSlot, status | Volunteer shift assignment (links back to approved application) |
@@ -183,6 +195,27 @@ erDiagram
 | **AttendeeNote** | id, registrationId, authorId (→ User), content, createdAt | Internal staff notes. `authorId` is a foreign key to User (the staff member writing the note). |
 | **ApiKey** | id, orgId, name, keyHash, scopes, lastUsedAt | Public API authentication |
 | **WebhookEndpoint** | id, orgId, url, events, secret, active | Outbound webhook config |
+
+---
+
+### JSON Field Contracts
+
+All Prisma `Json` fields must be validated through shared Zod schemas before writes and exported into the OpenAPI contract. These schemas live in `packages/validators/src/json-schemas/` and are imported by API routes, Server Actions, workers, and tests.
+
+| JSON field | Schema file | Purpose |
+|------------|-------------|---------|
+| `Event.settings` | `event-settings.ts` | Public event behavior, feature flags, check-in settings, and display preferences |
+| `RegistrationType.scheduledPricing` | `scheduled-pricing.ts` | Time-windowed price changes with start/end timestamps and fixed prices |
+| `BadgeTemplate.layout` | `badge-layout.ts` | Canvas dimensions, layers, fonts, barcode/QR placeholders, and print settings |
+| `Department.formSchema` | `department-form.ts` | Custom volunteer application questions per department |
+| `VolunteerApplication.formResponses` | `department-form.ts` | Answers keyed by the department form schema's field ids |
+| `VolunteerApplication.availability` | `volunteer-availability.ts` | Day/time availability windows and blackout periods |
+| `StaffRole.shifts` | `staff-shifts.ts` | Shift slots, required headcount, and schedule metadata |
+| `VendorApplication.assistants` | `vendor-assistants.ts` | Assistant names, emails, badge needs, and optional notes |
+| `StoreProduct.surcharges` | `store.ts` | Optional product-level surcharge rules for platform-fee calculation |
+| `HotelBlock.roomTypes` | `hotel-room-types.ts` | Room names, capacities, nightly prices, and inventory |
+| `Raffle.prizes` | `raffle-prizes.ts` | Prize metadata, draw order, and winner assignment shape |
+| `WebhookEndpoint.events` | `webhook-events.ts` | Allowed outbound webhook event names and payload versions |
 
 ---
 
@@ -214,7 +247,18 @@ d:\GitHub\vFurst\
 │   │   │   ├── event.ts
 │   │   │   ├── registration.ts
 │   │   │   ├── vendor.ts
-│   │   │   └── store.ts
+│   │   │   ├── store.ts
+│   │   │   └── json-schemas/
+│   │   │       ├── scheduled-pricing.ts
+│   │   │       ├── event-settings.ts
+│   │   │       ├── badge-layout.ts
+│   │   │       ├── department-form.ts
+│   │   │       ├── volunteer-availability.ts
+│   │   │       ├── staff-shifts.ts
+│   │   │       ├── vendor-assistants.ts
+│   │   │       ├── hotel-room-types.ts
+│   │   │       ├── raffle-prizes.ts
+│   │   │       └── webhook-events.ts
 │   │   └── package.json
 │   └── types/                         # Shared TypeScript types + enums
 │       ├── src/index.ts
@@ -347,9 +391,11 @@ d:\GitHub\vFurst\
 │   │       │   ├── voucher-actions.ts
 │   │       │   ├── transfer-actions.ts
 │   │       │   └── raffle-actions.ts
-│   │       └── workers/                 # Service Workers
+│   │       └── sw/                      # Service Worker source compiled by @serwist/next
 │   │           └── offline-checkin.ts
 │   └── worker/                          # Background job processor
+│       ├── package.json
+│       ├── tsconfig.json
 │       ├── src/
 │       │   ├── index.ts               # BullMQ worker entry
 │       │   ├── jobs/
@@ -358,7 +404,6 @@ d:\GitHub\vFurst\
 │       │   │   ├── reconcile-fees.ts    # Read-only audit, NOT billing
 │       │   │   └── sync-stripe.ts
 │       │   └── queues.ts
-│       └── package.json
 ```
 
 ---
@@ -372,9 +417,11 @@ d:\GitHub\vFurst\
 | Task | Files / Actions |
 |------|----------------|
 | Define MVP feature scope | This document ✅ |
-| Database schema design | [NEW] `packages/db/prisma/schema.prisma` — all 20+ entities, enums, indexes, row-level tenant isolation via `orgId` |
-| API contract design | [NEW] `docs/api-contracts/` — OpenAPI spec for REST endpoints + webhook event schemas |
+| Database schema design | [NEW] `packages/db/prisma/schema.prisma` — all 29 entities, enums, indexes, row-level tenant isolation via `orgId` |
+| JSON field contract design | [NEW] `packages/validators/src/json-schemas/` — Zod schemas for every Prisma `Json` field (`scheduledPricing`, `formSchema`, badge layout, staff shifts, webhook events, etc.) |
+| API contract design | [NEW] `docs/api-contracts/` — OpenAPI spec for REST endpoints + webhook event schemas generated from shared validators |
 | Set up monorepo | [NEW] `turbo.json`, root `package.json` with workspaces: `apps/*`, `packages/*` |
+| Scaffold worker app | [NEW] `apps/worker/package.json`, `apps/worker/tsconfig.json`, `apps/worker/src/index.ts`, `apps/worker/src/queues.ts` — BullMQ process shell used by later email, badge, Stripe sync, and fee reconciliation jobs |
 | CI/CD pipeline | [NEW] `.github/workflows/ci.yml` — lint, type-check, test, build on PR |
 | | [NEW] `.github/workflows/deploy.yml` — Vercel preview + production deploys |
 | Dev / staging / prod envs | [NEW] `.env.example`, `.env.local`, `.env.staging` — env var templates |
@@ -560,7 +607,7 @@ Public registration flow (on convention subdomain):
 2. Personal info form
 3. Add-ons selection
 4. Apply voucher/discount code
-5. Stripe Checkout (via Stripe Connect, with `application_fee_amount: 100` = $1.00)
+5. Stripe Checkout (Stripe Connect destination charge, with `transfer_data.destination` and `application_fee_amount: 100` = $1.00)
 6. Confirmation page + email
 
 ##### [NEW] `apps/web/src/app/api/webhooks/stripe/route.ts`
@@ -604,7 +651,7 @@ Hotel management (admin):
 Public hotel booking page (convention subdomain):
 - Browse available hotel blocks and room types
 - Select dates, room type
-- Stripe Checkout with `application_fee_amount: 100` ($1.00 per booking)
+- Stripe Checkout as a Stripe Connect destination charge with `application_fee_amount: 100` ($1.00 per booking)
 - Confirmation email with booking details
 
 ##### [NEW] `apps/web/src/actions/hotel-actions.ts`
@@ -629,7 +676,7 @@ Product management:
 Public storefront (convention subdomain):
 - Product grid with Astryx `Card`, image gallery
 - **Unified cart**: combine registration + store items in one checkout
-- Stripe Checkout with 1% `application_fee_amount`
+- Stripe Checkout as a Stripe Connect destination charge with 1% `application_fee_amount`
 
 ##### [NEW] `apps/web/src/components/store/cart.tsx`
 Shopping cart component:
@@ -774,6 +821,14 @@ WebUSB thermal printer driver (inspired by ConCat's [WebZLP](https://github.com/
 - Send ZPL (Zebra Programming Language) commands
 - Print queue with status tracking
 
+##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/check-in/page.tsx`
+**Staff check-in station**:
+- Search registrations by name, email, badge number, order id, or QR payload
+- Scan QR/barcode using camera or USB scanner input
+- Show paid/unpaid, badge status, notes, and duplicate check-in warnings
+- Trigger badge reprint and cashier handoff when payment is missing
+- Registers the offline service worker via `useServiceWorker()`
+
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/check-in/cashier/page.tsx`
 **Cashier UI** — dedicated in-person registration desk:
 - Walk-in registration flow (create + pay + print badge in one flow)
@@ -868,8 +923,15 @@ The check-in and express mode pages call `useServiceWorker()` to register the co
 - Per-attendee fee breakdown ($1.00 × N attendees)
 - Per-booking fee breakdown ($1.00 × N hotel bookings)
 - Transaction fee breakdown (1% × store/vendor revenue)
-- Monthly invoice history
-- Payment method management
+- Monthly usage report history
+- Connected-account fee collection status
+
+##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/analytics/page.tsx`
+**Event analytics dashboard**:
+- Registration funnel, ticket mix, revenue, and check-in throughput
+- Store/vendor/hotel revenue summaries using already-collected Stripe Connect fees
+- Volunteer and vendor application status charts
+- Exportable CSV reports for organizers
 
 ##### [NEW] `apps/worker/src/jobs/reconcile-fees.ts`
 **Fee reconciliation** (read-only audit job, NOT a billing job):
@@ -1015,7 +1077,7 @@ turbo run build
 | **3** | Add store products → purchase as attendee → unified cart works → voucher applies → refund processes |
 | **4** | Submit volunteer application → admin reviews form responses → approve → assign shift (VolunteerApplication → StaffAssignment); Apply as vendor → approve → assign booth → booth payment |
 | **5** | Design badge → print test badge → express check-in with QR → offline check-in works → raffle draw |
-| **6** | API key works → API returns data → webhook fires → custom domain resolves → billing invoice generates |
+| **6** | API key works → API returns data → webhook fires → custom domain resolves → usage report generates → fee discrepancies are flagged |
 | **7** | Load test passes → security audit clean → E2E suite green → marketing site live → beta conventions onboarded |
 
 ---
