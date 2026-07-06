@@ -19,8 +19,14 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
+      "@/*": [
+        "apps/web/src/*"
+      ],
       "@vfurst/db": [
         "packages/db/src/index.ts"
+      ],
+      "@vfurst/email": [
+        "packages/email/src/index.ts"
       ]
     }
   }

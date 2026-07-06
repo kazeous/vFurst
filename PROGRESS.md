@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 0 - Foundation & Planning** (verified complete)
+**Phase 1 - Core Infrastructure** (implemented; pending live Stripe Connect onboarding verification)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -19,7 +19,7 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Not started | |
+| 1 - Core Infrastructure | In progress | Implemented core code and verified local auth/dashboard/org CRUD/subdomain smoke. Needs real Stripe test credentials to complete the Stripe Connect onboarding manual checkpoint before marking verified complete. |
 | 2 - Registration & Hotel | Not started | |
 | 3 - Store & Add-ons | Not started | |
 | 4 - Volunteers & Vendors | Not started | |
@@ -30,6 +30,37 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 1, session 1
+- Built:
+  - Added Phase 1 dependencies for Auth.js, Prisma adapter, bcrypt, AWS S3/SES, Stripe, BullMQ, ioredis, nodemailer, and Zod.
+  - Added Auth.js v5 configuration, credentials registration/login, Google provider wiring, auth API route, and session org-membership enrichment.
+  - Added Prisma support required by Phase 1 auth and org settings: Auth.js adapter models, `User.passwordHash`, `User.image`, `Organization.emailProvider`, and `Organization.emailSettings`.
+  - Added dashboard shell, dashboard home, organization list/create/overview/settings/members/Stripe Connect pages, and event server actions.
+  - Added S3 helper with optional `S3_ENDPOINT` for MinIO/local development and real AWS S3 parity.
+  - Added subdomain resolution helper, middleware routing, and a `src/middleware.ts` runtime re-export because the Next app uses `src/app`.
+  - Added `@vfurst/email` package with SES/SMTP providers and welcome, registration confirmation, and password reset templates.
+  - Added `@vfurst/worker` package with BullMQ queues, email job processor, Redis connection config, graceful shutdown, and health endpoint.
+  - Applied the updated Prisma schema to the local Docker Postgres database with `prisma db push` for manual smoke testing.
+- Verified:
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run test:e2e` passed cleanly after stopping the temporary manual dev server.
+  - `turbo run type-check` passed.
+  - `turbo run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `turbo run build` passed cleanly and includes the middleware bundle.
+  - Docker Desktop was started; `docker-compose ps` showed Postgres, Redis, MinIO, and Mailpit running.
+  - Local browser smoke against `http://127.0.0.1:3000` passed for register, credentials login, dashboard render, organization create, event create, organization settings update, organization list, and Stripe Connect page render.
+  - Subdomain routing smoke passed with `Host: phase1-1783333054435.vfurst.app`, resolving to the convention tenant page for the created org.
+- Deviated from plan:
+  - Added `apps/web/src/middleware.ts` as a runtime re-export of the planned `apps/web/middleware.ts`; with this repo's `src/app` layout, Next did not pick up the root middleware during dev until the `src` entry existed.
+  - Added the minimal Auth.js adapter tables and auth/org-settings fields to Prisma because Phase 1 requires credentials auth, persistent auth integration, and per-org email provider configuration, but the Phase 0 product entity list did not include those infrastructure fields.
+  - Added a development-only Auth.js fallback secret because the web workspace does not load the repo-root `.env.local` when running `npm run dev --workspace @vfurst/web`.
+- Remaining issues:
+  - Stripe Connect onboarding was not completed live because `.env.local` still contains placeholder Stripe test credentials (`sk_test_replace_me`). The page renders and the server action is wired, but the manual checklist item "Stripe Connect onboarding completes" needs a real Stripe test secret.
+  - `npm install` reports 6 audit findings (5 moderate, 1 high). These need a dependency review before deciding whether any breaking upgrades are acceptable.
+  - No Phase 1-specific unit tests were added; current automated coverage remains smoke/build-oriented.
+- Next session should: provide real Stripe test-mode credentials, run the Stripe Connect onboarding flow locally, then mark Phase 1 verified complete if the onboarding checkpoint passes. Do not start Phase 2 until this is done.
 
 ### 2026-07-06 - Phase 0, session 12
 - Built: No source changes. Used a temporary GitHub token only as a process environment value to verify GitHub Actions; the token was not written to repository files.
