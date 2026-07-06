@@ -30,6 +30,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 2
+- Built: Added `docs/operations/phase-0-external-setup.md` with the required Stripe Connect, Vercel, Railway Redis, AWS S3, secret-store, and completion-evidence checklist for the remaining manual Phase 0 scope.
+- Verified:
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed.
+  - `npm run test:e2e` passed.
+  - `npm audit --audit-level=moderate` still reports the known Next 15/PostCSS advisory.
+- Deviated from plan: None. The new operations checklist documents the existing manual setup requirements from Phase 0 and does not add implementation scope.
+- Remaining issues:
+  - Manual external setup evidence is still missing for Stripe Connect, Vercel, Railway Redis, and AWS S3.
+  - The known moderate PostCSS advisory remains through `next@15.5.20`; preserving Next.js 15 means there is no verified non-breaking npm fix at this time.
+- Next session should: complete the manual setup in `docs/operations/phase-0-external-setup.md`, add the real secrets to the provider dashboards, confirm CI/deploy green, rerun the checklist, and then mark Phase 0 verified complete.
+
 ### 2026-07-06 - Phase 0, session 1
 - Built: npm/Turbo monorepo scaffold; Next.js 15 web app; Astryx neutral theme wiring; Prisma database package with all 29 planned entities, enums, tenant `orgId` fields, indexes, and JSON columns; API contract docs; CI and Vercel deploy workflows; env templates; Playwright E2E smoke test and runner.
 - Verified:
