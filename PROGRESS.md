@@ -30,6 +30,20 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 6
+- Built: No code changes. Added fresh evidence for the Phase 0 manual checkpoint that the dev environment runs.
+- Verified:
+  - Root Turbo dev task started successfully via `node node_modules/turbo/bin/turbo run dev`.
+  - The web app served `http://127.0.0.1:3000` with HTTP 200 and expected `vFurst` page content.
+  - The dev job was stopped afterward; no local dev server remained listening on port 3000.
+  - Prior same-session checklist results remained green: `npm run test`, `npm run type-check`, `npm run lint`, `cd packages/db && npx prisma validate`, `npm run build`, and `npm run test:e2e`.
+- Deviated from plan: Used Turbo's Node entrypoint directly for the dev-env proof because Windows command wrappers (`Start-Process`, direct `.cmd` spawn) failed before launching npm; this still exercises the root `turbo run dev` task graph.
+- Remaining issues:
+  - Manual external setup evidence is still missing for Stripe Connect, Vercel, Railway Redis, and AWS S3.
+  - GitHub Actions status still requires authenticated repository access to verify.
+  - The known moderate PostCSS advisory remains through `next@15.5.20`; preserving Next.js 15 means there is no verified non-breaking npm fix at this time.
+- Next session should: provide authenticated GitHub/provider access or complete the external checklist in `docs/operations/phase-0-external-setup.md`, then rerun verification and mark Phase 0 complete only once external evidence exists.
+
 ### 2026-07-06 - Phase 0, session 5
 - Built: No code changes. Re-ran the Phase 0 verification checklist and external access audit.
 - Verified:
