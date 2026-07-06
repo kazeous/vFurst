@@ -31,6 +31,18 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 1, session 5
+- Built: No source changes.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md`.
+  - Confirmed the only working tree changes before this progress update were pre-existing user/editor files: `.idea/.name`, `AGENTS.md`, `docs/plan/phase-1-core-infra.md`, and `CLAUDE.md`.
+  - Generated a fresh Stripe Account Link for the latest test connected account and opened it in the visible in-app browser.
+  - Stripe again presented hCaptcha on `connect.stripe.com`, before the hosted onboarding form could be completed.
+- Remaining issues:
+  - The manual Phase 1 checkpoint "Stripe Connect onboarding completes" is still incomplete until the visible hCaptcha is solved and the Stripe-hosted flow finishes.
+  - Starting a local background Next dev server for the return URL was blocked by the sandbox/process launcher. The hosted Stripe flow is still open in the visible browser; if it redirects to `localhost:3000` after completion while the server is unavailable, verify completion with Stripe's API and then run the app status refresh when a dev server can be started.
+- Next session should: solve the hCaptcha in the visible browser if it is still open; otherwise generate another fresh Account Link, complete hosted onboarding, verify the connected account reports submitted/enabled status, refresh app status, and only then mark Phase 1 complete. Do not start Phase 2.
+
 ### 2026-07-06 - Phase 1, session 4
 - Built: No source changes.
 - Verified:
