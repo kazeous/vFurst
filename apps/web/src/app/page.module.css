@@ -1,0 +1,55 @@
+.main {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.intro {
+  width: min(100%, 760px);
+  display: grid;
+  gap: 24px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(3rem, 6vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.tagline {
+  max-width: 620px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 1.25rem;
+  line-height: 1.6;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0;
+  margin: 16px 0 0;
+  list-style: none;
+}
+
+.statusItem {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-element);
+  padding: 10px 14px;
+  background: var(--color-background-surface);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+}

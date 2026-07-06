@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build outputs
+.next/
+.turbo/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Environment files
+.env*
+!.env.example
+!.env.local
+!.env.staging
+!packages/db/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Prisma
+packages/db/prisma/migrations/

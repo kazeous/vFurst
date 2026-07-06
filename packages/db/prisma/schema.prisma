@@ -1,0 +1,696 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  TRANSFERRED
+  CHECKED_IN
+}
+
+enum VolunteerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StaffAssignmentStatus {
+  ASSIGNED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum VendorApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLISTED
+}
+
+enum CartItemType {
+  REGISTRATION
+  ADDON
+  PRODUCT
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+  FAILED
+}
+
+enum OrderItemType {
+  REGISTRATION
+  ADDON
+  PRODUCT
+  HOTEL
+}
+
+enum DiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum RaffleEntryMethod {
+  AUTO
+  MANUAL
+  PURCHASED
+}
+
+model User {
+  id                         String                 @id @default(uuid()) @db.Uuid
+  email                      String                 @unique
+  name                       String?
+  avatar                     String?
+  emailVerified             DateTime?
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+  attendeeNotes              AttendeeNote[]         @relation("AttendeeNoteAuthor")
+  carts                      Cart[]
+  hotelBookings              HotelBooking[]
+  ledDepartments             Department[]           @relation("DepartmentLead")
+  orders                     Order[]
+  orgMemberships             OrgMember[]
+  raffleEntries              RaffleEntry[]
+  registrations              Registration[]
+  reviewedApplications       VolunteerApplication[] @relation("VolunteerApplicationReviewer")
+  staffAssignments           StaffAssignment[]
+  vendorApplications         VendorApplication[]
+  volunteerApplications      VolunteerApplication[]
+
+  @@map("users")
+}
+
+model Organization {
+  id               String            @id @default(uuid()) @db.Uuid
+  name             String
+  slug             String            @unique
+  subdomain        String            @unique
+  logo             String?
+  contactEmail     String
+  customDomain     String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  addOnDefinitions AddOnDefinition[]
+  apiKeys          ApiKey[]
+  attendeeNotes    AttendeeNote[]
+  badgeTemplates   BadgeTemplate[]
+  badges           Badge[]
+  cartItems        CartItem[]
+  carts            Cart[]
+  departments      Department[]
+  events           Event[]
+  hotelBlocks      HotelBlock[]
+  hotelBookings    HotelBooking[]
+  members          OrgMember[]
+  orderItems       OrderItem[]
+  orders           Order[]
+  raffleEntries    RaffleEntry[]
+  raffles          Raffle[]
+  registrationTypes RegistrationType[]
+  registrationAddOns RegistrationAddOn[]
+  registrations    Registration[]
+  staffAssignments StaffAssignment[]
+  staffRoles       StaffRole[]
+  storeProducts    StoreProduct[]
+  stripeConnect    StripeConnect?
+  vendorApplications VendorApplication[]
+  volunteerApplications VolunteerApplication[]
+  vouchers         Voucher[]
+  webhookEndpoints WebhookEndpoint[]
+
+  @@map("organizations")
+}
+
+model OrgMember {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @db.Uuid
+  orgId     String       @db.Uuid
+  role      OrgRole      @default(MEMBER)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("org_members")
+}
+
+model StripeConnect {
+  id                 String       @id @default(uuid()) @db.Uuid
+  orgId              String       @unique @db.Uuid
+  stripeAccountId    String       @unique
+  onboardingComplete Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("stripe_connect")
+}
+
+model Event {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  orgId              String                 @db.Uuid
+  name               String
+  slug               String
+  startDate          DateTime
+  endDate            DateTime
+  venue              String?
+  status             EventStatus            @default(DRAFT)
+  settings           Json                   @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":1}")
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  badgeTemplates     BadgeTemplate[]
+  carts              Cart[]
+  departments        Department[]
+  hotelBlocks        HotelBlock[]
+  orders             Order[]
+  org                Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  raffles            Raffle[]
+  registrationTypes  RegistrationType[]
+  registrations      Registration[]
+  storeProducts      StoreProduct[]
+  vendorApplications VendorApplication[]
+  volunteerApplications VolunteerApplication[]
+  vouchers           Voucher[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@index([status])
+  @@map("events")
+}
+
+model RegistrationType {
+  id               String            @id @default(uuid()) @db.Uuid
+  orgId            String            @db.Uuid
+  eventId          String            @db.Uuid
+  name             String
+  price            Int
+  maxCapacity      Int?
+  scheduledPricing Json              @default("[]")
+  sortOrder        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  addOns           AddOnDefinition[]
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registrations    Registration[]
+
+  @@index([orgId])
+  @@index([eventId])
+  @@map("registration_types")
+}
+
+model AddOnDefinition {
+  id                 String              @id @default(uuid()) @db.Uuid
+  orgId              String              @db.Uuid
+  registrationTypeId String              @db.Uuid
+  name               String
+  price              Int
+  isComplimentary    Boolean             @default(false)
+  maxQuantity        Int                 @default(1)
+  sortOrder          Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  org                Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registrationAddOns RegistrationAddOn[]
+  registrationType   RegistrationType    @relation(fields: [registrationTypeId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([registrationTypeId])
+  @@map("add_on_definitions")
+}
+
+model Registration {
+  id                String              @id @default(uuid()) @db.Uuid
+  orgId             String              @db.Uuid
+  eventId           String              @db.Uuid
+  userId            String              @db.Uuid
+  typeId            String              @db.Uuid
+  status            RegistrationStatus  @default(PENDING)
+  checkedInAt       DateTime?
+  badgeNumber       String?
+  transferredFromId String?             @db.Uuid
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  addOns            RegistrationAddOn[]
+  attendeeNotes     AttendeeNote[]
+  badges            Badge[]
+  event             Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderItems        OrderItem[]
+  org               Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transferredFrom   Registration?       @relation("RegistrationTransfer", fields: [transferredFromId], references: [id])
+  transferredTo     Registration[]      @relation("RegistrationTransfer")
+  type              RegistrationType    @relation(fields: [typeId], references: [id])
+  user              User                @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, badgeNumber])
+  @@index([orgId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([typeId])
+  @@map("registrations")
+}
+
+model RegistrationAddOn {
+  id                String          @id @default(uuid()) @db.Uuid
+  orgId             String          @db.Uuid
+  registrationId    String          @db.Uuid
+  addOnDefinitionId String          @db.Uuid
+  price             Int
+  quantity          Int             @default(1)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  addOnDefinition   AddOnDefinition @relation(fields: [addOnDefinitionId], references: [id])
+  org               Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registration      Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([registrationId])
+  @@index([addOnDefinitionId])
+  @@map("registration_add_ons")
+}
+
+model Badge {
+  id             String        @id @default(uuid()) @db.Uuid
+  orgId          String        @db.Uuid
+  registrationId String        @db.Uuid
+  templateId     String        @db.Uuid
+  barcodeData    String        @unique
+  nfcTag         String?       @unique
+  printedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  org            Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  template       BadgeTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([orgId])
+  @@index([registrationId])
+  @@index([templateId])
+  @@map("badges")
+}
+
+model BadgeTemplate {
+  id         String       @id @default(uuid()) @db.Uuid
+  orgId      String       @db.Uuid
+  eventId    String       @db.Uuid
+  name       String
+  layout     Json
+  dimensions Json
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  badges     Badge[]
+  event      Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([eventId])
+  @@map("badge_templates")
+}
+
+model Department {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  orgId                 String                 @db.Uuid
+  eventId               String                 @db.Uuid
+  name                  String
+  leadUserId            String?                @db.Uuid
+  formSchema            Json                   @default("[]")
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  event                 Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leadUser              User?                  @relation("DepartmentLead", fields: [leadUserId], references: [id])
+  org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  roles                 StaffRole[]
+  volunteerApplications VolunteerApplication[]
+
+  @@index([orgId])
+  @@index([eventId])
+  @@index([leadUserId])
+  @@map("departments")
+}
+
+model VolunteerApplication {
+  id            String                     @id @default(uuid()) @db.Uuid
+  orgId         String                     @db.Uuid
+  userId        String                     @db.Uuid
+  departmentId  String                     @db.Uuid
+  eventId       String                     @db.Uuid
+  formResponses Json                       @default("{}")
+  availability  Json                       @default("[]")
+  status        VolunteerApplicationStatus @default(PENDING)
+  reviewedById  String?                    @db.Uuid
+  reviewedAt    DateTime?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  department    Department                 @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  event         Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org           Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  reviewedBy    User?                      @relation("VolunteerApplicationReviewer", fields: [reviewedById], references: [id])
+  staffAssignments StaffAssignment[]
+  user          User                       @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([eventId])
+  @@index([departmentId])
+  @@index([userId])
+  @@map("volunteer_applications")
+}
+
+model StaffRole {
+  id               String            @id @default(uuid()) @db.Uuid
+  orgId            String            @db.Uuid
+  departmentId     String            @db.Uuid
+  roleName         String
+  shifts           Json              @default("[]")
+  maxVolunteers    Int?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  assignments      StaffAssignment[]
+  department       Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([departmentId])
+  @@map("staff_roles")
+}
+
+model StaffAssignment {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  orgId                  String                  @db.Uuid
+  userId                 String                  @db.Uuid
+  roleId                 String                  @db.Uuid
+  volunteerApplicationId String?                 @db.Uuid
+  shiftSlot              Json
+  status                 StaffAssignmentStatus   @default(ASSIGNED)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  org                    Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role                   StaffRole               @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user                   User                    @relation(fields: [userId], references: [id])
+  volunteerApplication   VolunteerApplication?   @relation(fields: [volunteerApplicationId], references: [id])
+
+  @@index([orgId])
+  @@index([roleId])
+  @@index([userId])
+  @@index([volunteerApplicationId])
+  @@map("staff_assignments")
+}
+
+model VendorApplication {
+  id              String                  @id @default(uuid()) @db.Uuid
+  orgId           String                  @db.Uuid
+  eventId         String                  @db.Uuid
+  userId          String                  @db.Uuid
+  businessName    String
+  status          VendorApplicationStatus @default(PENDING)
+  boothAssignment String?
+  assistants      Json                    @default("[]")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  event           Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org             Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User                    @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("vendor_applications")
+}
+
+model StoreProduct {
+  id          String      @id @default(uuid()) @db.Uuid
+  orgId       String      @db.Uuid
+  eventId     String      @db.Uuid
+  name        String
+  price       Int
+  stock       Int
+  images      Json        @default("[]")
+  category    String?
+  surcharges  Json        @default("[]")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([eventId])
+  @@map("store_products")
+}
+
+model Cart {
+  id        String       @id @default(uuid()) @db.Uuid
+  orgId     String       @db.Uuid
+  userId    String       @db.Uuid
+  eventId   String       @db.Uuid
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([orgId])
+  @@index([eventId])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String       @id @default(uuid()) @db.Uuid
+  orgId     String       @db.Uuid
+  cartId    String       @db.Uuid
+  itemType  CartItemType
+  refId     String       @db.Uuid
+  unitPrice Int
+  quantity  Int          @default(1)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  cart      Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([cartId])
+  @@index([itemType, refId])
+  @@map("cart_items")
+}
+
+model Order {
+  id                    String        @id @default(uuid()) @db.Uuid
+  orgId                 String        @db.Uuid
+  userId                String        @db.Uuid
+  eventId               String        @db.Uuid
+  total                 Int
+  platformFee           Int
+  status                OrderStatus   @default(PENDING)
+  stripePaymentIntentId String?       @unique
+  voucherId             String?       @db.Uuid
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  event                 Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items                 OrderItem[]
+  org                   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user                  User          @relation(fields: [userId], references: [id])
+  voucher               Voucher?      @relation(fields: [voucherId], references: [id])
+
+  @@index([orgId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([voucherId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String        @id @default(uuid()) @db.Uuid
+  orgId          String        @db.Uuid
+  orderId        String        @db.Uuid
+  itemType       OrderItemType
+  refId          String        @db.Uuid
+  unitPrice      Int
+  quantity       Int           @default(1)
+  registrationId String?       @db.Uuid
+  storeProductId String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  org            Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registration   Registration? @relation(fields: [registrationId], references: [id])
+  storeProduct   StoreProduct? @relation(fields: [storeProductId], references: [id])
+
+  @@index([orgId])
+  @@index([orderId])
+  @@index([itemType, refId])
+  @@index([registrationId])
+  @@index([storeProductId])
+  @@map("order_items")
+}
+
+model Voucher {
+  id            String       @id @default(uuid()) @db.Uuid
+  orgId         String       @db.Uuid
+  eventId       String       @db.Uuid
+  code          String
+  discountType  DiscountType
+  discountValue Int
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  event         Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orders        Order[]
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, code])
+  @@index([orgId])
+  @@index([eventId])
+  @@map("vouchers")
+}
+
+model HotelBlock {
+  id            String         @id @default(uuid()) @db.Uuid
+  orgId         String         @db.Uuid
+  eventId       String         @db.Uuid
+  hotelName     String
+  roomTypes     Json
+  cutoffDate    DateTime
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bookings      HotelBooking[]
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([eventId])
+  @@map("hotel_blocks")
+}
+
+model HotelBooking {
+  id               String       @id @default(uuid()) @db.Uuid
+  orgId            String       @db.Uuid
+  userId           String       @db.Uuid
+  blockId          String       @db.Uuid
+  roomType         String
+  checkIn          DateTime
+  checkOut         DateTime
+  confirmationCode String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  block            HotelBlock   @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([blockId])
+  @@index([userId])
+  @@map("hotel_bookings")
+}
+
+model Raffle {
+  id        String        @id @default(uuid()) @db.Uuid
+  orgId     String        @db.Uuid
+  eventId   String        @db.Uuid
+  name      String
+  prizes    Json          @default("[]")
+  drawDate  DateTime
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  entries   RaffleEntry[]
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org       Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([eventId])
+  @@map("raffles")
+}
+
+model RaffleEntry {
+  id          String            @id @default(uuid()) @db.Uuid
+  orgId       String            @db.Uuid
+  raffleId    String            @db.Uuid
+  userId      String            @db.Uuid
+  entryMethod RaffleEntryMethod
+  createdAt   DateTime          @default(now())
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  raffle      Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id])
+
+  @@unique([raffleId, userId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("raffle_entries")
+}
+
+model AttendeeNote {
+  id             String       @id @default(uuid()) @db.Uuid
+  orgId          String       @db.Uuid
+  registrationId String       @db.Uuid
+  authorId       String       @db.Uuid
+  content        String
+  createdAt      DateTime     @default(now())
+  author         User         @relation("AttendeeNoteAuthor", fields: [authorId], references: [id])
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([registrationId])
+  @@index([authorId])
+  @@map("attendee_notes")
+}
+
+model ApiKey {
+  id         String       @id @default(uuid()) @db.Uuid
+  orgId      String       @db.Uuid
+  name       String
+  keyHash    String       @unique
+  scopes     String[]
+  lastUsedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("api_keys")
+}
+
+model WebhookEndpoint {
+  id        String       @id @default(uuid()) @db.Uuid
+  orgId     String       @db.Uuid
+  url       String
+  events    String[]
+  secret    String
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([active])
+  @@map("webhook_endpoints")
+}
