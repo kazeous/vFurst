@@ -30,6 +30,23 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 3
+- Built: No code changes. Pushed the two committed Phase 0 commits to `origin/main` so remote CI can run.
+- Verified:
+  - `git push` succeeded for `main -> main` at commit `6321a64`.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed.
+  - `npm run test:e2e` passed.
+- Deviated from plan: None.
+- Remaining issues:
+  - GitHub Actions status is not observable from this environment: unauthenticated access to `https://github.com/kazeous/vFurst/actions` returns 404, and no GitHub CLI/token is available.
+  - Manual external setup evidence is still missing for Stripe Connect, Vercel, Railway Redis, and AWS S3.
+  - The known moderate PostCSS advisory remains through `next@15.5.20`; preserving Next.js 15 means there is no verified non-breaking npm fix at this time.
+- Next session should: verify GitHub Actions with repository access, complete the manual external setup in `docs/operations/phase-0-external-setup.md`, add the real provider secrets, rerun the checklist, and then mark Phase 0 verified complete only if those external checkpoints are proven.
+
 ### 2026-07-06 - Phase 0, session 2
 - Built: Added `docs/operations/phase-0-external-setup.md` with the required Stripe Connect, Vercel, Railway Redis, AWS S3, secret-store, and completion-evidence checklist for the remaining manual Phase 0 scope.
 - Verified:
