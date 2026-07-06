@@ -49,7 +49,7 @@ export default async function DashboardPage() {
               <a key={event.id} className="vf-list-row" href={`/dashboard/organizations/${event.orgId}`}>
                 <span>{event.name}</span>
                 <small>
-                  {event.org.name} · {event.status}
+                  {event.org.name} - {event.status}
                 </small>
               </a>
             ))

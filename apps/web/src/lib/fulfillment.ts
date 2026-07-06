@@ -1,0 +1,156 @@
+import { sendOrgEmail } from "@/lib/email";
+import { prisma } from "@vfurst/db";
+
+export async function markOrderPaid(orderId: string, stripePaymentIntentId?: string | null) {
+  const order = await prisma.order.findUnique({
+    where: {
+      id: orderId
+    },
+    include: {
+      event: true,
+      items: true,
+      org: true,
+      user: true,
+      voucher: true
+    }
+  });
+
+  if (!order || order.status === "PAID") {
+    return order;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: {
+        id: order.id
+      },
+      data: {
+        status: "PAID",
+        stripePaymentIntentId: stripePaymentIntentId ?? order.stripePaymentIntentId
+      }
+    });
+
+    if (order.voucherId) {
+      await tx.voucher.update({
+        where: {
+          id: order.voucherId
+        },
+        data: {
+          usedCount: {
+            increment: 1
+          }
+        }
+      });
+    }
+
+    for (const item of order.items) {
+      if (item.itemType === "REGISTRATION" && item.registrationId) {
+        await tx.registration.update({
+          where: {
+            id: item.registrationId
+          },
+          data: {
+            status: "CONFIRMED"
+          }
+        });
+      }
+
+      if (item.itemType === "HOTEL") {
+        await tx.hotelBooking.update({
+          where: {
+            id: item.refId
+          },
+          data: {
+            confirmationCode: `VF-${item.refId.slice(0, 8).toUpperCase()}`
+          }
+        });
+      }
+    }
+  });
+
+  const registrationItem = order.items.find((item) => item.itemType === "REGISTRATION" && item.registrationId);
+  const hotelItem = order.items.find((item) => item.itemType === "HOTEL");
+
+  if (registrationItem) {
+    await sendOrgEmail(order.org, order.user.email, "registration-confirmation", {
+      eventName: order.event.name,
+      attendeeName: order.user.name
+    });
+  }
+
+  if (hotelItem) {
+    await sendOrgEmail(order.org, order.user.email, "hotel-booking-confirmation", {
+      eventName: order.event.name,
+      attendeeName: order.user.name
+    });
+  }
+
+  return prisma.order.findUnique({
+    where: {
+      id: orderId
+    }
+  });
+}
+
+export async function markOrderPaidByPaymentIntent(stripePaymentIntentId: string, metadataOrderId?: string | null) {
+  const order =
+    metadataOrderId != null
+      ? await prisma.order.findUnique({
+          where: {
+            id: metadataOrderId
+          }
+        })
+      : await prisma.order.findUnique({
+          where: {
+            stripePaymentIntentId
+          }
+        });
+
+  if (!order) {
+    return null;
+  }
+
+  return markOrderPaid(order.id, stripePaymentIntentId);
+}
+
+export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: string) {
+  const order = await prisma.order.findUnique({
+    where: {
+      stripePaymentIntentId
+    },
+    include: {
+      items: true
+    }
+  });
+
+  if (!order) {
+    return null;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: {
+        id: order.id
+      },
+      data: {
+        status: "REFUNDED"
+      }
+    });
+
+    for (const item of order.items) {
+      if (item.registrationId) {
+        await tx.registration.update({
+          where: {
+            id: item.registrationId
+          },
+          data: {
+            status: "CANCELLED"
+          }
+        });
+      }
+    }
+  });
+
+  return order;
+}
+

@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 1 - Core Infrastructure** (verified complete)
+**Phase 2 - Registration & Hotel** (verified complete)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -20,7 +20,7 @@ Phase 0 is complete under the updated local-development directive:
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
 | 1 - Core Infrastructure | Verified complete | Multi-tenant routing, auth/RBAC, dashboard shell, org CRUD, Stripe Connect onboarding, S3 helper, email service, and worker bootstrap are implemented and verified for Phase 1. |
-| 2 - Registration & Hotel | Not started | |
+| 2 - Registration & Hotel | Verified complete | Event workspace, registration tiers/add-ons, public registration, Stripe Checkout/webhooks, admin registration management, confirmation emails, and hotel booking are implemented and verified locally. |
 | 3 - Store & Add-ons | Not started | |
 | 4 - Volunteers & Vendors | Not started | |
 | 5 - Advanced Features | Not started | |
@@ -30,6 +30,42 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 2, session 1
+- Built:
+  - Added Phase 2 dependencies: `recharts`, `@dnd-kit/core`, `@dnd-kit/sortable`, and the web package dependency on local `@vfurst/email`.
+  - Added optional `Event.description` to Prisma and applied it to the local database with `prisma db push`.
+  - Built the event dashboard area: events list with Astryx `PowerSearch`/`Table`/`Badge`, multi-step event wizard with `SegmentedControl`, event-scoped layout/navigation, Recharts overview, capacity by tier, and recent registration feed.
+  - Built registration type management with tier CRUD, scheduled pricing, add-on definition CRUD, and drag-to-reorder.
+  - Built public tenant registration at `/[orgSlug]/register`, public tenant hotel booking at `/[orgSlug]/hotel`, and updated tenant home links.
+  - Built registration server actions for public checkout, confirm/cancel/refund, bulk confirm/cancel, tier upgrade, transfer, resend confirmation email, and attendee notes.
+  - Built hotel server actions for block create/update, public room booking, and booking cancellation.
+  - Added Stripe webhook handling for `checkout.session.completed`, `payment_intent.succeeded`, and `charge.refunded`.
+  - Added shared pricing, Stripe, tenant lookup, email config, and fulfillment helpers.
+  - Added hotel confirmation email template and wired Mailpit-friendly SMTP defaults through `127.0.0.1`.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-2-registration.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run test:e2e` passed cleanly after stopping a stale local dev listener on port 3000.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed.
+  - `cd packages/db && npx prisma db push` applied the `Event.description` schema change locally and regenerated Prisma Client.
+  - Manual Phase 2 smoke used the Phase 1 connected Stripe test org `phase1-stripe-1783334993949`:
+    - Created and published event `Phase 2 Manual 1783338390780` through the organizer UI with General Admission and VIP tiers.
+    - Added a registration add-on and created a hotel block for the event.
+    - Public registration flow created a real Stripe Checkout Session and completed hosted Stripe test payment `pi_3TqBLR1VHGTYPoBz1hfSvZgb`; Stripe reports `payment_status: paid`, `application_fee_amount: 100`, and destination `acct_1TqA660IP1kYzCOI`.
+    - Local webhook replay confirmed registration order `30c48eb0-a657-4be9-974c-6f65b23a2b98` as `PAID`, registration `4d308762-8144-49c8-be80-7563369aafcc` as `CONFIRMED`, and Mailpit received the registration confirmation email.
+    - Public hotel booking flow created a real Stripe Checkout Session and completed hosted Stripe test payment `pi_3TqBJy1VHGTYPoBz1eaurqVy`; Stripe reports `payment_status: paid`, `application_fee_amount: 100`, and destination `acct_1TqA660IP1kYzCOI`.
+    - Local webhook replay confirmed hotel order `c0696944-05ef-4859-abf6-744e0d4b906b` as `PAID`, set hotel confirmation code `VF-F71D5815`, and Mailpit received the hotel confirmation email.
+- Deviated from plan:
+  - The existing tenant route architecture rewrites subdomains to `apps/web/src/app/(convention)/[orgSlug]/...`, so the public registration and hotel pages were implemented under `[orgSlug]` instead of the phase file's shorthand paths without `[orgSlug]`.
+  - Hosted Stripe Checkout completed successfully, but local app fulfillment was verified by replaying equivalent webhook events because no Stripe CLI listener is running in this local stack by default.
+- Remaining issues:
+  - `npm install` continues to report 6 audit findings (5 moderate, 1 high). This remains the existing dependency-review item.
+  - No Phase 2-specific unit tests were added; coverage is command-level, E2E smoke, browser/manual payment smoke, Stripe API verification, DB verification, and Mailpit verification.
+- Next session should: start Phase 3 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-3-store.md`, and the Phase 3 verification requirements. Do not add Phase 4 work to the Phase 3 session.
 
 ### 2026-07-06 - Phase 1, session 6
 - Built: No source changes.
@@ -269,4 +305,5 @@ Legend: Not started - In progress - Verified complete
 
 - No Phase 0 blockers remain.
 - No Phase 1 blockers remain.
+- No Phase 2 blockers remain.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.

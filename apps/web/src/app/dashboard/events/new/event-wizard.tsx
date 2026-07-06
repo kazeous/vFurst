@@ -1,0 +1,124 @@
+"use client";
+
+import { createEventWithRegistrationTypes } from "@/actions/event-actions";
+import { Button } from "@astryxdesign/core/Button";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { useState } from "react";
+
+type OrgOption = {
+  id: string;
+  name: string;
+};
+
+const steps = [
+  { id: "basic", label: "Basic" },
+  { id: "tiers", label: "Tiers" },
+  { id: "settings", label: "Settings" },
+  { id: "review", label: "Review" }
+] as const;
+
+type Step = (typeof steps)[number]["id"];
+
+export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
+  const [step, setStep] = useState<Step>("basic");
+
+  return (
+    <form action={createEventWithRegistrationTypes} className="vf-section vf-wizard">
+      <SegmentedControl value={step} onChange={(value) => setStep(value as Step)} label="Event creation step">
+        {steps.map((item) => (
+          <SegmentedControlItem key={item.id} value={item.id} label={item.label} />
+        ))}
+      </SegmentedControl>
+
+      <div className={step === "basic" ? "vf-step" : "vf-step vf-hidden"}>
+        <label>
+          Organization
+          <select name="orgId" required>
+            {organizations.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Event name
+          <input name="name" required placeholder="vFurstCon 2027" />
+        </label>
+        <label>
+          Slug
+          <input name="slug" required placeholder="vfurstcon-2027" />
+        </label>
+        <label>
+          Description
+          <textarea name="description" rows={4} placeholder="A concise public event description." />
+        </label>
+        <label>
+          Venue
+          <input name="venue" placeholder="Convention Center" />
+        </label>
+        <div className="vf-form-grid">
+          <label>
+            Start date
+            <input name="startDate" type="date" required />
+          </label>
+          <label>
+            End date
+            <input name="endDate" type="date" required />
+          </label>
+        </div>
+      </div>
+
+      <div className={step === "tiers" ? "vf-step" : "vf-step vf-hidden"}>
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="vf-subform-row">
+            <label>
+              Tier name
+              <input name="tierName" placeholder={index === 0 ? "General Admission" : "VIP"} required={index === 0} />
+            </label>
+            <label>
+              Price
+              <input name="tierPrice" type="number" min="0" step="0.01" placeholder="75.00" required={index === 0} />
+            </label>
+            <label>
+              Capacity
+              <input name="tierCapacity" type="number" min="1" placeholder="500" />
+            </label>
+          </div>
+        ))}
+      </div>
+
+      <div className={step === "settings" ? "vf-step" : "vf-step vf-hidden"}>
+        <label className="vf-check">
+          <input name="requireApproval" type="checkbox" />
+          Require manual approval
+        </label>
+        <label className="vf-check">
+          <input name="allowTransfers" type="checkbox" defaultChecked value="on" />
+          Allow attendee transfers
+        </label>
+        <label>
+          Max registrations per user
+          <input name="maxRegistrationsPerUser" type="number" min="1" max="20" defaultValue="1" />
+        </label>
+        <label className="vf-check">
+          <input name="publishNow" type="checkbox" />
+          Publish when created
+        </label>
+      </div>
+
+      <div className={step === "review" ? "vf-step" : "vf-step vf-hidden"}>
+        <p className="vf-muted">Create the event, tiers, pricing defaults, and settings. You can refine scheduled pricing and add-ons from the event workspace.</p>
+      </div>
+
+      <div className="vf-actions">
+        <Button label="Basic" type="button" onClick={() => setStep("basic")} />
+        <Button label="Tiers" type="button" onClick={() => setStep("tiers")} />
+        <Button label="Settings" type="button" onClick={() => setStep("settings")} />
+        <Button label="Review" type="button" onClick={() => setStep("review")} />
+        <Button label="Create event" type="submit" variant="primary" />
+      </div>
+    </form>
+  );
+}
+

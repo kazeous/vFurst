@@ -249,6 +249,7 @@ model Event {
   orgId              String                 @db.Uuid
   name               String
   slug               String
+  description        String?
   startDate          DateTime
   endDate            DateTime
   venue              String?

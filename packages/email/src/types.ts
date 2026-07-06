@@ -1,4 +1,4 @@
-export type EmailTemplateName = "welcome" | "registration-confirmation" | "password-reset";
+export type EmailTemplateName = "welcome" | "registration-confirmation" | "hotel-booking-confirmation" | "password-reset";
 
 export type EmailMessage = {
   to: string;
@@ -34,4 +34,3 @@ export type EmailProviderConfig =
       };
       fromEmail: string;
     };
-

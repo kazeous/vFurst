@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 const navItems = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/dashboard/organizations", label: "Organizations" },
-  { href: "/dashboard#events", label: "Events" },
+  { href: "/dashboard/events", label: "Events" },
   { href: "/dashboard#settings", label: "Settings" }
 ];
 

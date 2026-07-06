@@ -1,12 +1,10 @@
-import { resolveOrganization } from "@/lib/subdomain";
-import { headers } from "next/headers";
+import { getConventionOrg } from "@/lib/convention";
+import { Button } from "@astryxdesign/core/Button";
 import { notFound } from "next/navigation";
 
 export default async function ConventionHomePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
-  const headerList = await headers();
-  const host = headerList.get("x-vfurst-org-host") ?? `${orgSlug}.vfurst.app`;
-  const org = await resolveOrganization(host);
+  const org = await getConventionOrg(orgSlug);
 
   if (!org) {
     notFound();
@@ -16,8 +14,11 @@ export default async function ConventionHomePage({ params }: { params: Promise<{
     <main className="vf-convention-page">
       <p className="vf-label">Convention portal</p>
       <h1>{org.name}</h1>
-      <p>Public event registration and attendee workflows will build on this routed tenant context in later phases.</p>
+      <p>Registration and hotel booking are open for published events.</p>
+      <div className="vf-actions">
+        <Button label="Register" href={`/${org.subdomain}/register`} variant="primary" />
+        <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
+      </div>
     </main>
   );
 }
-
