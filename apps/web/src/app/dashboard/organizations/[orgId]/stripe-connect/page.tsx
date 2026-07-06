@@ -3,6 +3,16 @@ import { prisma } from "@vfurst/db";
 import { Button } from "@astryxdesign/core/Button";
 import { notFound } from "next/navigation";
 
+function getStripeMode() {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!secretKey) {
+    return "Not configured";
+  }
+
+  return secretKey.startsWith("sk_live_") ? "Live mode" : "Test mode";
+}
+
 export default async function StripeConnectPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const org = await prisma.organization.findUnique({
@@ -35,6 +45,10 @@ export default async function StripeConnectPage({ params }: { params: Promise<{ 
           <span>Status</span>
           <small>{org.stripeConnect?.onboardingComplete ? "Onboarding complete" : "Action required"}</small>
         </div>
+        <div className="vf-list-row">
+          <span>Mode</span>
+          <small>{getStripeMode()}</small>
+        </div>
         <div className="vf-actions">
           <form action={startStripeOnboarding}>
             <input type="hidden" name="orgId" value={org.id} />
@@ -49,4 +63,3 @@ export default async function StripeConnectPage({ params }: { params: Promise<{ 
     </div>
   );
 }
-

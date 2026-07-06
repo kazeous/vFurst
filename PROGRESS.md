@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 1 - Core Infrastructure** (implemented; pending live Stripe Connect onboarding verification)
+**Phase 1 - Core Infrastructure** (implemented; pending hosted Stripe Connect onboarding completion)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -19,7 +19,7 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | In progress | Implemented core code and verified local auth/dashboard/org CRUD/subdomain smoke. Needs real Stripe test credentials to complete the Stripe Connect onboarding manual checkpoint before marking verified complete. |
+| 1 - Core Infrastructure | In progress | Implemented core code and verified local auth/dashboard/org CRUD/subdomain smoke. Root `.env` has usable Stripe test credentials; Connect Account Link creation works, but Stripe-hosted onboarding completion is paused on hCaptcha before the manual checkpoint can be marked complete. |
 | 2 - Registration & Hotel | Not started | |
 | 3 - Store & Add-ons | Not started | |
 | 4 - Volunteers & Vendors | Not started | |
@@ -30,6 +30,31 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 1, session 3
+- Built:
+  - Added an environment-derived mode row to the Stripe Connect dashboard page so organizers can see whether the configured Stripe key is running in test mode, live mode, or is missing.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Checked the root `.env` without printing secrets. It contains usable Stripe test-mode credentials, so no secrets were copied into the tracked `.env.local`.
+  - Verified the Stripe secret with Stripe's balance API; the key is valid and test-mode (`livemode: false`).
+  - Ran the Stripe Connect onboarding server action against local dev with root `.env` injected into the process environment. The app created and stored real Stripe test connected accounts (`acct_...`) and redirected to Stripe-hosted Account Links.
+  - Inspected the latest connected account through Stripe's API; Stripe reports the expected onboarding requirements are still due because the hosted onboarding form has not completed.
+  - Attempted hosted onboarding in both headless Playwright and the visible in-app browser. Stripe presented hCaptcha on `connect.stripe.com`, so the manual checkpoint "Stripe Connect onboarding completes" remains incomplete until the CAPTCHA is solved in the browser and the app status is refreshed.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run test:e2e` passed cleanly.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed cleanly and still includes the middleware bundle.
+- Deviated from plan:
+  - The Phase 1 file says "OAuth flow" and "Test mode toggle" for Stripe Connect, but `docs/plan/00-reference.md` explicitly says local Stripe Connect should use Account Links in test mode. Kept the Account Links implementation and added a truthful env-derived mode indicator rather than a fake per-org toggle.
+- Remaining issues:
+  - Stripe-hosted onboarding is still not complete because the external Stripe page is waiting on hCaptcha in the visible in-app browser. After the CAPTCHA is solved, finish the hosted onboarding, return to the local app, click `Refresh status`, and verify `onboardingComplete` becomes true before marking Phase 1 verified complete.
+  - Stripe sends webhook attempts to `/api/webhooks/stripe`, which currently returns 404. This was observed during Account Link creation; webhook handling is referenced in the project structure but is not listed as a Phase 1 artifact or verification gate, so it has not been added in this phase.
+  - `npm install` previously reported 6 audit findings (5 moderate, 1 high). This remains a dependency-review item, not a listed Phase 1 verification gate.
+  - No Phase 1-specific unit tests were added; current coverage is still command-level and browser-smoke verification.
+- Next session should: solve the Stripe hCaptcha in the visible in-app browser or generate a fresh Account Link if the current one expires, complete hosted onboarding, refresh app status, and only then mark Phase 1 verified complete if the manual checkpoint passes. Do not start Phase 2.
 
 ### 2026-07-06 - Phase 1, session 2
 - Built:
