@@ -31,6 +31,16 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 1, session 4
+- Built: No source changes.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md`.
+  - Confirmed the working tree contains only pre-existing user/editor changes outside Phase 1 commits: `.idea/.name`, `AGENTS.md`, `docs/plan/phase-1-core-infra.md`, and `CLAUDE.md`.
+  - Confirmed no local Next dev server is running.
+- Remaining issues:
+  - Phase 1 still cannot be marked verified complete because the Stripe-hosted onboarding checkpoint remains incomplete. The previous visible in-app browser tab containing the one-time Stripe Account Link is closed; a fresh Account Link will need to be generated, opened, and completed through Stripe's hCaptcha-hosted flow before refreshing app status.
+- Next session should: generate a fresh Stripe Account Link from an existing test org or by clicking `Start onboarding`, solve the hCaptcha in the visible browser, complete hosted onboarding, click `Refresh status`, and verify `onboardingComplete` is true before marking Phase 1 complete. Do not start Phase 2.
+
 ### 2026-07-06 - Phase 1, session 3
 - Built:
   - Added an environment-derived mode row to the Stripe Connect dashboard page so organizers can see whether the configured Stripe key is running in test mode, live mode, or is missing.
