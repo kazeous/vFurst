@@ -4,21 +4,21 @@
 
 ## Current phase
 
-**Phase 0 - Foundation & Planning** (in progress)
+**Phase 0 - Foundation & Planning** (verified complete)
 
-Phase 0 is locally complete under the updated local-development directive:
+Phase 0 is complete under the updated local-development directive:
 
 - Cloud deployment setup is deferred until after Phase 7.
 - `.github/workflows/deploy.yml` and `.env.staging` are intentionally absent.
 - `docker-compose.yml` provides the local Postgres, Redis, MinIO, and Mailpit stack used for Phases 0-7.
 - Stripe is expected to use a free test-mode account and local webhook forwarding when payment flows are implemented; live-mode setup is not a Phase 0 blocker.
-- The only remaining Phase 0 completion checkpoint is authenticated evidence that GitHub Actions CI is green for the latest Phase 0 commit.
+- GitHub Actions CI is green for the latest pushed Phase 0 commit verified before this completion update.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 0 - Foundation | In progress | Repository checks and local Docker Compose stack are verified; GitHub Actions CI status still needs authenticated verification. |
+| 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
 | 1 - Core Infrastructure | Not started | |
 | 2 - Registration & Hotel | Not started | |
 | 3 - Store & Add-ons | Not started | |
@@ -30,6 +30,23 @@ Phase 0 is locally complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 0, session 12
+- Built: No source changes. Used a temporary GitHub token only as a process environment value to verify GitHub Actions; the token was not written to repository files.
+- Verified:
+  - `gh auth status` succeeded when using the temporary `GH_TOKEN`; token scopes include `repo` and `workflow`.
+  - GitHub Actions `CI` workflow for commit `0cea185b8cd70d96366e0ebe6279fc3dd7ad144a` completed successfully.
+  - The latest visible `main` branch CI runs are successful, including the Phase 0 local-foundation commit and subsequent progress commits.
+  - The complete Phase 0 local checklist remains green from session 9: `npm run test`, `npm run test:e2e`, `turbo run type-check`, `turbo run lint`, `cd packages/db && npx prisma validate`, `turbo run build`, `docker-compose config`, and `docker-compose ps`.
+  - Re-read `docs/plan/phase-0-foundation.md` before marking this complete and verified each Phase 0 requirement against current repository state.
+- Deviated from plan:
+  - The temporary token was needed because the installed GitHub CLI's secure stored credential still reports invalid without `GH_TOKEN`.
+  - Used `docker-compose` instead of `docker compose` for local stack verification because this shell does not expose the modern Compose plugin.
+  - Used Windows `.cmd` shims for prior npm/npx/Turbo verification because PowerShell blocks `.ps1` wrappers under the current execution policy.
+- Remaining issues:
+  - None blocking Phase 0.
+  - The known Next 15/PostCSS audit advisory remains an open dependency question, but it is not listed as a Phase 0 completion gate and has no non-breaking npm audit fix while preserving the plan's Next.js 15 requirement.
+- Next session should: start Phase 1 only after reading `AGENTS.md`, this `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and the Phase 1 verification requirements.
 
 ### 2026-07-06 - Phase 0, session 11
 - Built: No source changes. Re-read the required Phase 0 instructions and retried the GitHub Actions verification path after GitHub CLI was installed.
@@ -125,5 +142,5 @@ Legend: Not started - In progress - Verified complete
 
 ## Blockers / open questions
 
-- GitHub Actions CI status is not observable from this environment without authenticated repository access.
+- No Phase 0 blockers remain.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.
