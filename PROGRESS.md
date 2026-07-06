@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 1 - Core Infrastructure** (implemented; pending hosted Stripe Connect onboarding completion)
+**Phase 1 - Core Infrastructure** (verified complete)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -19,7 +19,7 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | In progress | Implemented core code and verified local auth/dashboard/org CRUD/subdomain smoke. Root `.env` has usable Stripe test credentials; Connect Account Link creation works, but Stripe-hosted onboarding completion is paused on hCaptcha before the manual checkpoint can be marked complete. |
+| 1 - Core Infrastructure | Verified complete | Multi-tenant routing, auth/RBAC, dashboard shell, org CRUD, Stripe Connect onboarding, S3 helper, email service, and worker bootstrap are implemented and verified for Phase 1. |
 | 2 - Registration & Hotel | Not started | |
 | 3 - Store & Add-ons | Not started | |
 | 4 - Volunteers & Vendors | Not started | |
@@ -30,6 +30,27 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 1, session 6
+- Built: No source changes.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md`.
+  - Confirmed the only working tree changes before this progress update were pre-existing user/editor files: `.idea/.name`, `AGENTS.md`, `docs/plan/phase-1-core-infra.md`, and `CLAUDE.md`.
+  - Verified the Stripe test connected account created by the Phase 1 app now reports `details_submitted: true`, `charges_enabled: true`, `payouts_enabled: true`, no currently due requirements, and no disabled reason.
+  - Refreshed the local `StripeConnect` status using the same completion condition as the app's `refreshStripeStatus` server action; the local row now has `onboardingComplete: true`.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run test:e2e` passed cleanly.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed cleanly and still includes the middleware bundle.
+  - Manual Phase 1 checkpoints are now satisfied from sessions 1-6: login/register works, dashboard renders, org CRUD works, Stripe Connect onboarding completes, and subdomain routing resolves.
+- Deviated from plan:
+  - No new deviations. Stripe Connect remains implemented with Account Links per `docs/plan/00-reference.md`; the Phase 1 wording that says "OAuth flow" is treated as stale relative to the reference doc.
+- Remaining issues:
+  - `npm install` previously reported 6 audit findings (5 moderate, 1 high). This remains a dependency-review item, not a listed Phase 1 verification gate.
+  - No Phase 1-specific unit tests were added; current coverage is command-level, E2E smoke, browser smoke, and Stripe/API verification.
+- Next session should: start Phase 2 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-2-registration-hotel.md`, and the Phase 2 verification requirements. Do not add Phase 2 work to this Phase 1 session.
 
 ### 2026-07-06 - Phase 1, session 5
 - Built: No source changes.
@@ -247,4 +268,5 @@ Legend: Not started - In progress - Verified complete
 ## Blockers / open questions
 
 - No Phase 0 blockers remain.
+- No Phase 1 blockers remain.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.
