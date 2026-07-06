@@ -30,6 +30,24 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 4
+- Built: No code changes. Re-audited the current repository and external tool/credential availability.
+- Verified:
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed.
+  - `npm run test:e2e` passed.
+  - No `gh`, `vercel`, `railway`, `stripe`, or `aws` CLI is available on PATH.
+  - No relevant `STRIPE`, `VERCEL`, `RAILWAY`, `AWS`, `S3`, `REDIS`, `GITHUB`, or `GH_` environment values are present.
+- Deviated from plan: None.
+- Remaining issues:
+  - Manual external setup evidence is still missing for Stripe Connect, Vercel, Railway Redis, and AWS S3.
+  - GitHub Actions status still requires authenticated repository access to verify.
+  - The known moderate PostCSS advisory remains through `next@15.5.20`; preserving Next.js 15 means there is no verified non-breaking npm fix at this time.
+- Next session should: provide or use authenticated access for GitHub/provider dashboards, complete the external checklist in `docs/operations/phase-0-external-setup.md`, rerun verification, and mark Phase 0 complete only once that external evidence exists.
+
 ### 2026-07-06 - Phase 0, session 3
 - Built: No code changes. Pushed the two committed Phase 0 commits to `origin/main` so remote CI can run.
 - Verified:
