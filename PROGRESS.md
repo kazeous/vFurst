@@ -31,6 +31,20 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 11
+- Built: No source changes. Re-read the required Phase 0 instructions and retried the GitHub Actions verification path after GitHub CLI was installed.
+- Verified:
+  - `gh.exe` exists at `C:\Program Files\GitHub CLI\gh.exe`.
+  - Initial `gh auth status` reported the stored `kazeous` token as invalid.
+  - Removed the invalid stored GitHub CLI credential and completed a fresh browser/device login as `kazeous` with `repo` and `workflow` scopes.
+  - After the fresh login, `gh auth status` still reported the stored `kazeous` token as invalid, and `gh run list --branch main` still returned GitHub API `404`.
+  - A less-secure `gh auth login --insecure-storage` retry was not performed because it would persist the GitHub token in plain text and requires explicit user approval after that risk is understood.
+- Deviated from plan: None.
+- Remaining issues:
+  - GitHub Actions CI status for the latest `main` commit still needs authenticated verification before Phase 0 can be marked verified complete.
+  - Safe next options are: provide/persist a working secure GitHub CLI login, provide a temporary `GH_TOKEN` with read access to this repository's Actions runs, paste authenticated CI evidence, or explicitly approve `gh auth login --insecure-storage` knowing it stores the token in plain text.
+- Next session should: use one of the safe authentication/evidence options above, verify CI green for the latest `main` commit, and only then mark Phase 0 complete.
+
 ### 2026-07-06 - Phase 0, session 10
 - Built: No source changes. Re-read the required Phase 0 instructions and inspected the current repository state again.
 - Verified:
