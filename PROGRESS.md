@@ -30,6 +30,26 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 5
+- Built: No code changes. Re-ran the Phase 0 verification checklist and external access audit.
+- Verified:
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run type-check` passed.
+  - `npm run lint` passed.
+  - `cd packages/db && npx prisma validate` passed.
+  - `npm run build` passed.
+  - `npm run test:e2e` passed.
+  - `npm audit --audit-level=moderate` still reports the known Next 15/PostCSS advisory.
+  - Unauthenticated `curl.exe -I https://github.com/kazeous/vFurst/actions` returns 404, so CI status is still not observable from this environment.
+  - No `gh`, `vercel`, `railway`, `stripe`, or `aws` CLI is available on PATH.
+  - No relevant `STRIPE`, `VERCEL`, `RAILWAY`, `AWS`, `S3`, `REDIS`, `GITHUB`, or `GH_` environment values are present.
+- Deviated from plan: None.
+- Remaining issues:
+  - Manual external setup evidence is still missing for Stripe Connect, Vercel, Railway Redis, and AWS S3.
+  - GitHub Actions status still requires authenticated repository access to verify.
+  - The known moderate PostCSS advisory remains through `next@15.5.20`; preserving Next.js 15 means there is no verified non-breaking npm fix at this time.
+- Next session should: provide authenticated GitHub/provider access or complete the external checklist in `docs/operations/phase-0-external-setup.md`, then rerun verification and mark Phase 0 complete only once external evidence exists.
+
 ### 2026-07-06 - Phase 0, session 4
 - Built: No code changes. Re-audited the current repository and external tool/credential availability.
 - Verified:
