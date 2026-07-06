@@ -100,14 +100,17 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
-| **File Storage** | AWS S3 | Badge templates, product images, event assets |
+| **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
 | **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
 | **Validation** | Zod | Schema validation for forms and API |
 | **State** | React Server Components + `nuqs` | URL state for filters/search, minimal client state |
 | **Charts** | Recharts | Dashboard analytics visualization |
-| **Barcode/QR** | `bwip-js` | Badge barcode/QR generation (same lib ConCat uses) |
-| **Printing** | WebUSB API | Direct browser-to-Zebra thermal printer |
+| **Barcode/QR** | `bwip-js` (generation) + `@zxing/browser` (scanning) | `bwip-js` generates barcode/QR images for badges. `@zxing/browser` decodes QR codes from device camera in check-in/express pages. |
+| **Badge Rendering** | `pdf-lib` (PDF) + ZPL string gen (thermal) | Pure-JS server-side badge rendering. No native bindings, runs on Railway/Vercel without issues. `pdf-lib` for PDF output, custom ZPL string builder for Zebra thermal printers. |
+| **Badge Designer** | `react-konva` | Canvas-based drag-and-drop badge template editor. Renders `BadgeTemplate.layout` elements on an HTML5 Canvas via React declarative API. |
+| **Drag & Drop** | `@dnd-kit/core` + `@dnd-kit/sortable` | Accessible DnD for tier reordering (Phase 2), form builder field ordering (Phase 4), shift schedule assignment (Phase 4). |
+| **Printing** | WebUSB API | Direct browser-to-Zebra thermal printer (Chrome/Edge only — see compat note in `webusb-printer.ts`) |
 | **Real-time** | Server-Sent Events | Live check-in counters, dashboard updates |
 | **Mobile** | React Native (Expo) | Companion app for scanning + monitoring |
 | **CI/CD** | GitHub Actions | Lint, test, build, deploy pipeline |
@@ -307,6 +310,22 @@ Subdomain resolution helpers:
 
 ---
 
+#### File Storage (S3)
+
+##### [NEW] `apps/web/src/lib/s3.ts`
+AWS S3 client and upload helpers using `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`:
+- `s3Client` — singleton S3 client configured from env vars (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`)
+- `getPresignedUploadUrl(key, contentType, maxSizeBytes)` — generates a presigned PUT URL for direct client-to-S3 uploads (avoids routing large files through the Next.js server)
+- `getPublicUrl(key)` — returns the public URL for a stored object
+- `deleteObject(key)` — deletes an object from S3
+- `uploadFromBuffer(key, buffer, contentType)` — server-side upload for programmatic use (e.g., generated badge PDFs)
+- Key structure: `{orgId}/{context}/{filename}` (e.g., `org_123/logos/logo.png`, `org_123/products/img_456.webp`, `org_123/vendor-files/license.pdf`)
+
+> [!NOTE]
+> This file is created in Phase 1 because org logo upload (`organizations/new` and `organizations/[orgId]/settings`) is the first feature requiring S3. Subsequent phases (Phase 3: product images, Phase 4: vendor file uploads, Phase 5: badge template images) all import from this same helper.
+
+---
+
 #### Auth & RBAC
 
 ##### [NEW] `apps/web/src/lib/auth.ts`
@@ -417,8 +436,16 @@ Typed queue instances and shared queue configuration:
 ##### [NEW] `apps/worker/package.json`
 Worker package config with `tsx` for dev mode and BullMQ + Redis dependencies.
 
+##### [NEW] `apps/worker/src/jobs/send-email.ts`
+BullMQ job processor for `emailQueue`:
+- Dequeues email jobs and calls `sendEmail()` from `packages/email`
+- Handles per-org provider resolution (SES vs SMTP based on org settings)
+- Retry with exponential backoff on transient failures (network, rate limits)
+- Dead-letter queue for permanently failed emails
+- Logs delivery status for email template analytics
+
 > [!NOTE]
-> The worker is bootstrapped in Phase 1 because email delivery (the first background job) is needed immediately. Phase 5 and 6 add more job handlers (`generate-badges.ts`, `reconcile-fees.ts`) to the existing worker infrastructure.
+> The worker is bootstrapped in Phase 1 because email delivery (the first background job) is needed immediately. Phase 5 adds `generate-badges.ts` and Phase 6 adds `reconcile-fees.ts` to the existing worker infrastructure.
 
 ---
 
@@ -682,11 +709,13 @@ Server Actions: `submitApplication`, `approveVendor`, `rejectVendor`, `waitlistV
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/badges/designer/page.tsx`
 Visual badge template designer:
-- **Canvas-based** drag-and-drop editor (HTML5 Canvas or Fabric.js)
+- **`react-konva`** canvas editor — renders `BadgeTemplate.layout` elements as Konva nodes (Rect, Text, Image, Group) on an HTML5 Canvas via React declarative API
 - Add: text fields, images, barcodes, QR codes, attendee data placeholders
-- Layer management (z-order)
+- Drag-and-drop positioning and resizing via Konva's built-in `Transformer`
+- Layer management (z-order) via Konva layer ordering
 - Preview with sample registration data
 - Save/load templates, set as default for registration types
+- Output: saves element positions/sizes to `BadgeTemplate.layout` JSON (same schema used by `generate-badges.ts` for server-side rendering via `pdf-lib`)
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/badges/page.tsx`
 Badge management:
@@ -700,6 +729,25 @@ WebUSB thermal printer driver (inspired by ConCat's [WebZLP](https://github.com/
 - Detect connected Zebra LP-series printers via WebUSB
 - Send ZPL (Zebra Programming Language) commands
 - Print queue with status tracking
+- **Browser compatibility guard**: checks `navigator.usb` availability at init. WebUSB is supported in Chrome/Edge only — if unavailable (Safari, Firefox), shows a banner explaining the requirement and falls back to PDF download for manual printing
+
+##### [NEW] `apps/worker/src/jobs/generate-badges.ts`
+BullMQ job processor for `badgeQueue`:
+- Processes batch badge generation requests (triggered from badges/page.tsx)
+- **Dual output format**:
+  - **PDF** (`pdf-lib`): reads `BadgeTemplate.layout` JSON, creates a PDF page per badge, positions text/images/barcodes according to layout coordinates. Pure JS — no native Canvas/Cairo bindings, runs on Railway without platform issues.
+  - **ZPL** (string generation): converts the same layout JSON into ZPL command strings for Zebra thermal printers. Sent directly to printer via WebUSB on the client side.
+- **Barcode/QR rendering** (`bwip-js`): generates barcode/QR PNG buffers which are embedded into the PDF via `pdf-lib`'s image embedding, or converted to ZPL `^BQ`/`^BC` commands for thermal output
+- Uploads generated PDF badge sheets to S3 via `lib/s3.ts`
+- Updates `Badge` record with `barcodeData` and generation status
+- Supports partial batch retries (skip already-generated badges)
+
+> [!NOTE]
+> **Why pdf-lib + ZPL, not node-canvas or Puppeteer?**
+> - `node-canvas` requires native Cairo bindings — known build failures on some platforms, needs extra Railway/Docker config
+> - Puppeteer uses headless Chrome (~400MB, high memory) — overkill for structured badge layouts
+> - `pdf-lib` is pure JavaScript, zero native dependencies, and `BadgeTemplate.layout` is already structured as positioned elements — a perfect fit for programmatic PDF generation
+> - ZPL strings are generated directly from the same layout data — no rendering library needed for thermal output
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/check-in/page.tsx`
 **Staff check-in interface** — the primary check-in page for event staff:
@@ -866,6 +914,18 @@ Docusaurus-based docs site (separate from main app, or embedded under `/docs`):
 - Webhook event catalog
 - Convention onboarding checklist
 
+##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/analytics/page.tsx`
+**Event analytics dashboard** using Recharts:
+- Registration trend over time (area chart — daily/weekly registrations)
+- Revenue breakdown by source (registrations, store, hotel, vendor fees)
+- Check-in rate over time (line chart — cumulative check-ins during event)
+- Capacity utilization by tier (bar chart)
+- Fee collection summary (sourced from `reconcile-fees.ts` reports)
+- Export data as CSV
+
+> [!NOTE]
+> This page is listed in the event SideNav (line ~477) and depends on reconcile-fees report data from Phase 6, which is why it's placed here rather than earlier.
+
 ---
 
 ### Phase 7 — Launch (Weeks 35–37)
@@ -880,7 +940,7 @@ Docusaurus-based docs site (separate from main app, or embedded under `/docs`):
 - Monitor production errors (Sentry integration)
 
 ##### Performance & load testing
-- Artillery or k6 load tests on registration + check-in flows
+- k6 load tests on registration + check-in flows
 - Target: 1000 concurrent registrations, 500 concurrent check-ins
 - Database query optimization (indexes, connection pooling)
 
