@@ -31,6 +31,32 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 1, session 2
+- Built:
+  - Tightened Phase 1 UI implementation to better match the plan's Astryx component requirements.
+  - Replaced raw login/register inputs with small client form components using Astryx `TextInput` and `FormLayout`; login now uses Astryx `Divider`.
+  - Replaced the handmade dashboard nav wrapper with Astryx `SideNav`, `SideNavHeading`, `SideNavSection`, and `SideNavItem` inside the existing `AppShell`.
+  - Updated dashboard stat cards to use Astryx `Heading`, `Text`, and `ProgressBar` instead of handmade metric/progress markup.
+  - Replaced the organization list's handmade table markup with an Astryx `Table` plus `EmptyState`; added a client table wrapper so column renderers stay on the client side, and set `tableProps` for the accessible table name.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Audited every Phase 1 named artifact from the plan; all expected files exist.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run test:e2e` passed cleanly.
+  - `turbo run type-check` passed.
+  - `turbo run lint` passed.
+  - `cd packages/db && npx prisma validate` passed after elevated npm-cache access.
+  - `turbo run build` passed cleanly and still includes the middleware bundle.
+  - Local browser smoke passed for Astryx-controlled register/login forms, dashboard render, organization create, Astryx organization table render with accessible table name, and created-org subdomain routing.
+  - Docker Compose stack remains running for Postgres, Redis, MinIO, and Mailpit.
+- Deviated from plan:
+  - None new.
+- Remaining issues:
+  - Stripe Connect onboarding is still not live-verified because `.env.local` still has placeholder Stripe test credentials (`sk_test_replace_me` / `ca_replace_me`). Current evidence shows the env is not ready for the required manual checkpoint "Stripe Connect onboarding completes."
+  - `npm install` previously reported 6 audit findings (5 moderate, 1 high). This remains a dependency-review item, not a listed Phase 1 verification gate.
+  - No Phase 1-specific unit tests were added; current coverage is still command-level and browser-smoke verification.
+- Next session should: provide real Stripe test-mode credentials, run local Stripe Connect onboarding, and only then mark Phase 1 verified complete if that manual checkpoint passes. Do not start Phase 2.
+
 ### 2026-07-06 - Phase 1, session 1
 - Built:
   - Added Phase 1 dependencies for Auth.js, Prisma adapter, bcrypt, AWS S3/SES, Stripe, BullMQ, ioredis, nodemailer, and Zod.

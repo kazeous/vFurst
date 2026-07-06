@@ -1,7 +1,9 @@
 import { signIn } from "@/lib/auth";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
+import { Divider } from "@astryxdesign/core/Divider";
 import Link from "next/link";
+import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   async function loginWithCredentials(formData: FormData) {
@@ -29,18 +31,8 @@ export default function LoginPage() {
           <p className="vf-label">Welcome back</p>
           <h1>Log in to vFurst</h1>
         </div>
-        <form action={loginWithCredentials} className="vf-form">
-          <label>
-            Email
-            <input name="email" type="email" autoComplete="email" required />
-          </label>
-          <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
-          </label>
-          <Button label="Log in" type="submit" variant="primary" />
-        </form>
-        <div className="vf-divider">or</div>
+        <LoginForm action={loginWithCredentials} />
+        <Divider label="or" />
         <form action={loginWithGoogle}>
           <Button label="Continue with Google" type="submit" />
         </form>
@@ -51,4 +43,3 @@ export default function LoginPage() {
     </Card>
   );
 }
-

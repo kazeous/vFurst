@@ -2,7 +2,7 @@
 
 import { AppShell } from "@astryxdesign/core/AppShell";
 import { Button } from "@astryxdesign/core/Button";
-import Link from "next/link";
+import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
 import type { ReactNode } from "react";
 
 const navItems = [
@@ -18,22 +18,17 @@ export function DashboardAppShell({ children, userName }: Readonly<{ children: R
       variant="section"
       contentPadding={0}
       sideNav={
-        <aside className="vf-side-nav" aria-label="Dashboard navigation">
-          <Link className="vf-brand" href="/dashboard">
-            vFurst
-          </Link>
-          <nav>
+        <SideNav
+          header={<SideNavHeading heading="vFurst" headingHref="/dashboard" subheading={userName ?? "Organizer"} />}
+          footer={<Button label="Logout" href="/api/auth/signout" size="sm" variant="ghost" />}
+          collapsible
+        >
+          <SideNavSection title="Main">
             {navItems.map((item) => (
-              <Link key={item.href} href={item.href}>
-                {item.label}
-              </Link>
+              <SideNavItem key={item.href} href={item.href} label={item.label} />
             ))}
-          </nav>
-          <div className="vf-profile">
-            <span>{userName ?? "Organizer"}</span>
-            <Button label="Logout" href="/api/auth/signout" size="sm" variant="ghost" />
-          </div>
-        </aside>
+          </SideNavSection>
+        </SideNav>
       }
       mobileNav={{ breakpoint: "md" }}
     >
@@ -41,4 +36,3 @@ export function DashboardAppShell({ children, userName }: Readonly<{ children: R
     </AppShell>
   );
 }
-

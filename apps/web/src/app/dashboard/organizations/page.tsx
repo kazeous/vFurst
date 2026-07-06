@@ -1,6 +1,7 @@
 import { prisma } from "@vfurst/db";
 import { Button } from "@astryxdesign/core/Button";
-import Link from "next/link";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { OrganizationsTable } from "./organizations-table";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,14 @@ export default async function OrganizationsPage() {
       }
     }
   });
+  const rows = organizations.map((org) => ({
+    id: org.id,
+    name: org.name,
+    subdomain: `${org.subdomain}.vfurst.app`,
+    events: org._count.events,
+    members: org._count.members,
+    href: `/dashboard/organizations/${org.id}`
+  }));
 
   return (
     <div className="vf-page">
@@ -29,27 +38,13 @@ export default async function OrganizationsPage() {
         <Button label="Create organization" href="/dashboard/organizations/new" variant="primary" />
       </header>
       {organizations.length > 0 ? (
-        <div className="vf-table" role="table" aria-label="Organizations">
-          <div role="row" className="vf-table-head">
-            <span>Name</span>
-            <span>Subdomain</span>
-            <span>Events</span>
-            <span>Members</span>
-          </div>
-          {organizations.map((org) => (
-            <Link role="row" className="vf-table-row" key={org.id} href={`/dashboard/organizations/${org.id}`}>
-              <span>{org.name}</span>
-              <span>{org.subdomain}.vfurst.app</span>
-              <span>{org._count.events}</span>
-              <span>{org._count.members}</span>
-            </Link>
-          ))}
-        </div>
+        <OrganizationsTable rows={rows} />
       ) : (
-        <div className="vf-empty">
-          <h2>No organizations yet</h2>
-          <p>Create the first tenant to begin managing conventions.</p>
-        </div>
+        <EmptyState
+          title="No organizations yet"
+          description="Create the first tenant to begin managing conventions."
+          actions={<Button label="Create organization" href="/dashboard/organizations/new" variant="primary" />}
+        />
       )}
     </div>
   );
