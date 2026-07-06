@@ -4,20 +4,21 @@
 
 ## Current phase
 
-**Phase 0 - Foundation & Planning** (verified complete)
+**Phase 0 - Foundation & Planning** (in progress)
 
-Phase 0 is complete under the updated local-development directive:
+Phase 0 is locally complete under the updated local-development directive:
 
 - Cloud deployment setup is deferred until after Phase 7.
 - `.github/workflows/deploy.yml` and `.env.staging` are intentionally absent.
 - `docker-compose.yml` provides the local Postgres, Redis, MinIO, and Mailpit stack used for Phases 0-7.
 - Stripe is expected to use a free test-mode account and local webhook forwarding when payment flows are implemented; live-mode setup is not a Phase 0 blocker.
+- The only remaining Phase 0 completion checkpoint is authenticated evidence that GitHub Actions CI is green for the latest Phase 0 commit.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, and local Docker Compose stack are in place and verified. |
+| 0 - Foundation | In progress | Repository checks and local Docker Compose stack are verified; GitHub Actions CI status still needs authenticated verification. |
 | 1 - Core Infrastructure | Not started | |
 | 2 - Registration & Hotel | Not started | |
 | 3 - Store & Add-ons | Not started | |
@@ -51,12 +52,15 @@ Legend: Not started - In progress - Verified complete
   - `npm run test:e2e` passed.
   - Re-read `docs/plan/phase-0-foundation.md` and verified every Phase 0 requirement individually against the updated directive.
   - Checked env templates for concrete Stripe test credentials; none remain.
+  - Pushed commit `fbd0227` to `origin/main` so GitHub Actions CI can run.
+  - Could not verify the GitHub Actions run from this environment: `gh` is not installed, and unauthenticated access to `https://github.com/kazeous/vFurst/actions` returns `404`.
 - Deviated from plan:
   - Used the legacy `docker-compose` command because this machine's `docker compose` subcommand is unavailable. The Compose file itself is valid and the local stack runs.
   - Used Windows `.cmd` shims for npm/npx commands because PowerShell blocks `npm.ps1`/`npx.ps1` under the current execution policy.
 - Remaining issues:
+  - GitHub Actions CI status for commit `fbd0227` needs authenticated verification before Phase 0 can be marked verified complete.
   - `npm audit --audit-level=moderate` still reports the known moderate PostCSS advisory through `next@15.5.20`, with no non-breaking fix available from npm audit. This is not caused by Phase 0 changes and is not listed as a Phase 0 completion gate.
-- Next session should: start Phase 1 only after reading `AGENTS.md`, this `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and the Phase 1 verification requirements.
+- Next session should: verify GitHub Actions CI for the latest Phase 0 commit with authenticated repository access, then mark Phase 0 complete if CI is green. Do not start Phase 1 until Phase 0 is marked verified complete.
 
 ### 2026-07-06 - Phase 0, sessions 1-7
 - Built: Initial Phase 0 monorepo, Next.js 15 app, Astryx theme wiring, Prisma schema with all 29 planned entities, API contracts, CI, env templates, Playwright smoke test, and E2E runner.
@@ -72,5 +76,5 @@ Legend: Not started - In progress - Verified complete
 
 ## Blockers / open questions
 
-- No Phase 0 blockers remain.
+- GitHub Actions CI status is not observable from this environment without authenticated repository access.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.
