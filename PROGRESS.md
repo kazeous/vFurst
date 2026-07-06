@@ -31,6 +31,20 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-06 - Phase 0, session 10
+- Built: No source changes. Re-read the required Phase 0 instructions and inspected the current repository state again.
+- Verified:
+  - Current branch is `main` and is synchronized with `origin/main` before this session's progress update.
+  - The CI workflow file exists at `.github/workflows/ci.yml` and still runs install, Prisma validate, type-check, lint, test, and build on push to `main` and pull requests.
+  - `gh` is not installed.
+  - No `GH*`, `GITHUB*`, or `ACTIONS*` environment token is present.
+  - Unauthenticated GitHub Actions/API checks are still unavailable for this repo.
+  - Attempted to use the local Git credential helper in-memory to query GitHub Actions without printing any credential. The credential helper timed out, including with terminal prompting disabled, so no CI status evidence was obtained.
+- Deviated from plan: None.
+- Remaining issues:
+  - GitHub Actions CI status for the latest `main` commit still needs authenticated verification before Phase 0 can be marked verified complete.
+- Next session should: provide authenticated GitHub Actions evidence for the latest `main` commit, or install/authenticate a GitHub CLI/API token that can read this repository's workflow runs, then mark Phase 0 complete only if CI is green.
+
 ### 2026-07-06 - Phase 0, session 9
 - Built: No source changes. Re-read the required Phase 0 instructions and re-audited the current repository against the updated local-stack directive.
 - Verified:
