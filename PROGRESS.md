@@ -34,7 +34,7 @@ Legend: Not started - In progress - Verified complete
 ### 2026-07-06 - Phase 0, session 9
 - Built: No source changes. Re-read the required Phase 0 instructions and re-audited the current repository against the updated local-stack directive.
 - Verified:
-  - Current HEAD is `f3ebb63632be11a21843e70c00ec635bb054ac13` on `main`, pushed to `origin/main`.
+  - Phase 0 source changes and progress updates are pushed to `origin/main`; GitHub Actions should be verified against the latest `main` commit.
   - `docker-compose config` passed and rendered Postgres, Redis, MinIO, and Mailpit. It still prints a Docker config-file access warning for `C:\Users\Kazeous\.docker\config.json`.
   - `docker-compose ps` passed after elevated Docker engine access; Postgres, Redis, MinIO, and Mailpit are running.
   - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
@@ -48,9 +48,9 @@ Legend: Not started - In progress - Verified complete
   - Used `docker-compose` instead of `docker compose` because this shell does not expose the modern Compose plugin.
   - Used Windows `.cmd` shims because PowerShell blocks `npm.ps1`, `npx.ps1`, and package-bin `.ps1` wrappers under the current execution policy.
 - Remaining issues:
-  - GitHub Actions CI status for `f3ebb63632be11a21843e70c00ec635bb054ac13` still needs authenticated verification before Phase 0 can be marked verified complete.
+  - GitHub Actions CI status for the latest `main` commit still needs authenticated verification before Phase 0 can be marked verified complete.
   - The known Next 15/PostCSS audit advisory remains an open dependency question, but it is not listed as a Phase 0 completion gate.
-- Next session should: verify GitHub Actions CI for `f3ebb63632be11a21843e70c00ec635bb054ac13` with authenticated repository access, then mark Phase 0 complete if CI is green. Do not start Phase 1 until Phase 0 is marked verified complete.
+- Next session should: verify GitHub Actions CI for the latest `main` commit with authenticated repository access, then mark Phase 0 complete if CI is green. Do not start Phase 1 until Phase 0 is marked verified complete.
 
 ### 2026-07-06 - Phase 0, session 8
 - Built:
