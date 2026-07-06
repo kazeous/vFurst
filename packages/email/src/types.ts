@@ -1,4 +1,12 @@
-export type EmailTemplateName = "welcome" | "registration-confirmation" | "hotel-booking-confirmation" | "password-reset";
+export type EmailTemplateName =
+  | "welcome"
+  | "registration-confirmation"
+  | "hotel-booking-confirmation"
+  | "volunteer-application-decision"
+  | "volunteer-shift-assignment"
+  | "vendor-application-decision"
+  | "staff-message"
+  | "password-reset";
 
 export type EmailMessage = {
   to: string;

@@ -487,12 +487,83 @@ label {
   padding-top: 16px;
 }
 
+.vf-builder-field {
+  flex: 1;
+  display: grid;
+  gap: 12px;
+}
+
+.vf-schedule-grid,
+.vf-booth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.vf-schedule-role,
+.vf-shift-card,
+.vf-booth-cell {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-background-body);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.vf-schedule-role h3,
+.vf-shift-card h4,
+.vf-booth-cell h3 {
+  margin: 0;
+}
+
+.vf-dnd-board {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.vf-drag-list,
+.vf-drop-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.vf-drop-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.vf-drag-card,
+.vf-drop-card {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-background-body);
+  padding: 12px;
+}
+
+.vf-drag-card {
+  cursor: grab;
+}
+
+.vf-drop-card {
+  display: grid;
+  gap: 4px;
+  color: var(--color-text-secondary);
+}
+
+.vf-drop-card-active {
+  border-color: var(--color-accent-primary);
+  background: var(--color-background-wash);
+}
+
 @media (max-width: 760px) {
   .vf-page {
     padding: 20px;
   }
 
   .vf-two-column,
+  .vf-dnd-board,
   .vf-store-layout,
   .vf-cart-row,
   .vf-table-row,

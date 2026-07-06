@@ -14,11 +14,13 @@ export default async function ConventionHomePage({ params }: { params: Promise<{
     <main className="vf-convention-page">
       <p className="vf-label">Convention portal</p>
       <h1>{org.name}</h1>
-      <p>Registration, hotel booking, and store orders are open for published events.</p>
+      <p>Registration, hotel booking, store orders, volunteer applications, and vendor applications are open for published events.</p>
       <div className="vf-actions">
         <Button label="Register" href={`/${org.subdomain}/register`} variant="primary" />
         <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
         <Button label="Store" href={`/${org.subdomain}/store`} />
+        <Button label="Volunteer" href={`/${org.subdomain}/volunteer`} />
+        <Button label="Vendor apply" href={`/${org.subdomain}/vendor-apply`} />
       </div>
     </main>
   );

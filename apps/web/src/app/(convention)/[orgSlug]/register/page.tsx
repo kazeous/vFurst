@@ -69,6 +69,8 @@ export default async function PublicRegistrationPage({
         <div className="vf-actions">
           <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
           <Button label="Store" href={`/${org.subdomain}/store`} />
+          <Button label="Volunteer" href={`/${org.subdomain}/volunteer`} />
+          <Button label="Vendor apply" href={`/${org.subdomain}/vendor-apply`} />
         </div>
       </header>
 

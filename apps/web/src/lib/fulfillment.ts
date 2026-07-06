@@ -78,6 +78,18 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
           }
         });
       }
+
+      if (item.itemType === "VENDOR") {
+        await tx.vendorApplication.update({
+          where: {
+            id: item.refId
+          },
+          data: {
+            boothPaidAt: new Date(),
+            paymentOrderId: order.id
+          }
+        });
+      }
     }
 
     if (order.cartId) {
@@ -185,6 +197,17 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
             stock: {
               increment: item.quantity
             }
+          }
+        });
+      }
+
+      if (item.itemType === "VENDOR") {
+        await tx.vendorApplication.update({
+          where: {
+            id: item.refId
+          },
+          data: {
+            boothPaidAt: null
           }
         });
       }

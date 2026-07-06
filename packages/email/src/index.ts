@@ -3,6 +3,10 @@ import { createSmtpProvider } from "./providers/smtp";
 import { passwordResetTemplate } from "./templates/password-reset";
 import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation";
 import { registrationConfirmationTemplate } from "./templates/registration-confirmation";
+import { staffMessageTemplate } from "./templates/staff-message";
+import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision";
+import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-application-decision";
+import { volunteerShiftAssignmentTemplate } from "./templates/volunteer-shift-assignment";
 import { welcomeTemplate } from "./templates/welcome";
 import type { EmailProviderConfig, EmailTemplateName } from "./types";
 
@@ -31,6 +35,33 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
       return hotelBookingConfirmationTemplate({
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",
         attendeeName: typeof data.attendeeName === "string" ? data.attendeeName : null
+      });
+    case "volunteer-application-decision":
+      return volunteerApplicationDecisionTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        applicantName: typeof data.applicantName === "string" ? data.applicantName : null,
+        status: typeof data.status === "string" ? data.status : "updated",
+        reason: typeof data.reason === "string" ? data.reason : null
+      });
+    case "volunteer-shift-assignment":
+      return volunteerShiftAssignmentTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        volunteerName: typeof data.volunteerName === "string" ? data.volunteerName : null,
+        roleName: typeof data.roleName === "string" ? data.roleName : "volunteer",
+        shiftLabel: typeof data.shiftLabel === "string" ? data.shiftLabel : "Shift details pending"
+      });
+    case "vendor-application-decision":
+      return vendorApplicationDecisionTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        businessName: typeof data.businessName === "string" ? data.businessName : "Your business",
+        status: typeof data.status === "string" ? data.status : "updated",
+        note: typeof data.note === "string" ? data.note : null
+      });
+    case "staff-message":
+      return staffMessageTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        subject: typeof data.subject === "string" ? data.subject : "Staff update",
+        message: typeof data.message === "string" ? data.message : ""
       });
     case "password-reset":
       return passwordResetTemplate({

@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 3 - Store & Add-ons** (verified complete)
+**Phase 4 - Volunteers & Vendors** (verified complete)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -22,7 +22,7 @@ Phase 0 is complete under the updated local-development directive:
 | 1 - Core Infrastructure | Verified complete | Multi-tenant routing, auth/RBAC, dashboard shell, org CRUD, Stripe Connect onboarding, S3 helper, email service, and worker bootstrap are implemented and verified for Phase 1. |
 | 2 - Registration & Hotel | Verified complete | Event workspace, registration tiers/add-ons, public registration, Stripe Checkout/webhooks, admin registration management, confirmation emails, and hotel booking are implemented and verified locally. |
 | 3 - Store & Add-ons | Verified complete | Product catalog, DB-backed unified cart, storefront, vouchers/comps, store checkout fee handling, inventory fulfillment, and refunds are implemented and verified locally. |
-| 4 - Volunteers & Vendors | Not started | |
+| 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Not started | |
 | 6 - SaaS Layer | Not started | |
 | 7 - Launch | Not started | |
@@ -30,6 +30,54 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 4, session 1
+- Built:
+  - Added Phase 4 vendor payment/schema support: `OrderItemType.VENDOR` plus vendor contact, product description, table/amenity/file/preference, booth price, payment order, and paid-at tracking fields.
+  - Added staff server actions for department CRUD, form schema saving, public volunteer application submission, application approval/rejection/bulk review, role/shift creation, shift assignment/removal, conflict checks, and department-wide email.
+  - Added vendor server actions for public vendor application submission, approval/rejection/waitlist/bulk review, assistant management, booth setup/assignment, and Stripe destination-charge booth payment.
+  - Added Phase 4 email templates for volunteer decisions, volunteer shift assignments, vendor decisions, and staff messages.
+  - Built staff dashboard pages:
+    - `/dashboard/events/[eventId]/staff`
+    - `/dashboard/events/[eventId]/staff/departments`
+    - `/dashboard/events/[eventId]/staff/applications`
+    - `/dashboard/events/[eventId]/staff/schedule`
+  - Built the draggable volunteer form builder component and a drag-and-drop shift assignment board using the existing `@dnd-kit` dependency.
+  - Built vendor dashboard pages:
+    - `/dashboard/events/[eventId]/vendors`
+    - `/dashboard/events/[eventId]/vendors/booths`
+  - Built public tenant pages:
+    - `/[orgSlug]/volunteer`
+    - `/[orgSlug]/vendor-apply`
+  - Updated public tenant navigation on the convention home, registration, hotel, and store pages to link volunteer/vendor flows.
+  - Updated order fulfillment so paid vendor booth orders mark the linked vendor application paid.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-4-volunteers-vendors.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Confirmed every Phase 4 target route/action/component file from the plan was absent before creating Phase 4 files.
+  - `cd packages/db && npx prisma validate` passed via the Windows `.cmd` shim.
+  - `cd packages/db && npx prisma generate` passed.
+  - `cd packages/db && npx prisma db push` applied the Phase 4 schema changes to local Postgres and regenerated Prisma Client.
+  - `npm run type-check` passed across the monorepo via the Windows `.cmd` shim.
+  - `npm run lint` passed across the monorepo. It still reports the two known non-failing Next warnings for plain `<img>` usage on organizer-controlled product images.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run build` passed and included the new public and dashboard Phase 4 routes.
+  - `npm run test:e2e` passed.
+  - Manual Phase 4 smoke used the existing connected Stripe test org `phase1-stripe-1783334993949` and event `Phase 2 Manual 1783338390780`:
+    - Created a department, volunteer application, staff role, and shift.
+    - Approved the volunteer application and verified `VolunteerApplication` `3ec40c8b-9841-44be-a71e-6dd69b8e1baf` became `APPROVED` with linked `StaffAssignment` `4b691b2d-2351-485b-8888-31fa51e28746`.
+    - Created vendor table/amenity/booth configuration in `Event.settings`, created vendor application `7eccbda2-027f-4176-bd28-0bd1ccafcc29`, approved it, assigned booth `P4-8875`, and created a vendor booth order.
+    - Created real Stripe test destination PaymentIntent `pi_3TqG7p1VHGTYPoBz1dUIReFL` for `12500` cents with `125` cents application fee to connected account `acct_1TqA660IP1kYzCOI`.
+    - Verified local paid-state effects: vendor application marked paid (`boothPaidAt` set), linked payment order marked `PAID`, and Stripe PaymentIntent stored on the order.
+- Deviated from plan:
+  - The existing tenant route architecture rewrites subdomains to `apps/web/src/app/(convention)/[orgSlug]/...`, so public volunteer and vendor pages were implemented under `[orgSlug]` instead of the phase file's shorthand paths without `[orgSlug]`.
+  - Booth/table/amenity configuration is stored in `Event.settings.vendorConfig` rather than adding a new Booth entity, because `docs/plan/00-reference.md` keeps the data model to the listed 29 entities and does not define a Booth model.
+  - Manual vendor booth payment smoke used a deterministic Stripe PaymentIntent API flow plus DB fulfillment verification rather than hosted Checkout browser completion; this verifies the destination charge, 1% application fee, vendor order, and paid-state behavior without requiring a Stripe CLI listener.
+  - The first manual smoke attempt was blocked by sandboxed outbound HTTPS to Stripe after local smoke records were created; rerunning with approved network access succeeded.
+- Remaining issues:
+  - `npm run lint` passes but still reports two non-failing Next warnings for plain `<img>` tags used with arbitrary organizer/uploaded product image URLs from Phase 3.
+  - `npm install` continues to report 6 audit findings (5 moderate, 1 high). This remains the existing dependency-review item.
+  - No Phase 4-specific unit tests were added; coverage is command-level, E2E smoke, schema/build verification, and DB/Stripe/API manual smoke verification.
+- Next session should: start Phase 5 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, the Phase 5 plan, and the Phase 5 verification requirements. Do not add Phase 5 work to this Phase 4 session.
 
 ### 2026-07-06 - Phase 3, session 1
 - Built:
