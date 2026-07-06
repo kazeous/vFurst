@@ -16,7 +16,6 @@ test-results/
 .env*
 !.env.example
 !.env.local
-!.env.staging
 !packages/db/.env
 
 # Logs

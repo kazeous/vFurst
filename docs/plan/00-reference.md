@@ -69,7 +69,27 @@ Payments processed via **Stripe Connect** using **destination charges** — the 
 | **Real-time** | Server-Sent Events | Live check-in counters, dashboard updates |
 | **Mobile** | React Native (Expo) | Companion app for scanning + monitoring |
 | **CI/CD** | GitHub Actions | Lint, test, build, deploy pipeline |
-| **Hosting** | Vercel (web) + Railway (Redis/workers) | Optimized Next.js hosting + background job infra |
+| **Hosting** | Local Docker Compose for Phases 0–7; Vercel (web) + Railway (Redis/workers) at deployment time only | See "Local Development" below. Vercel/Railway aren't set up until the project deploys — every phase builds and verifies against local containers. |
+
+---
+
+## Local Development
+
+> [!IMPORTANT]
+> **Every phase (0 through 7) builds and verifies against this local stack. No cloud accounts — Vercel, Railway, real AWS — are needed until deployment, which happens as its own step after Phase 7.**
+
+`docker-compose.yml` at the repo root runs four services:
+
+| Service | Image | Replaces (in production) | Notes |
+|---|---|---|---|
+| `postgres` | `postgres:16` | Managed Postgres (e.g. Railway/Neon) | `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vfurst` |
+| `redis` | `redis:7` | Railway Redis | Used by BullMQ (`apps/worker`) exactly as in production — no code difference |
+| `minio` | `minio/minio` | AWS S3 | S3-API-compatible object storage. `apps/web/src/lib/s3.ts` must read `S3_ENDPOINT` from env — when set (e.g. `http://localhost:9000`), the AWS SDK v3 client points at MinIO instead of AWS; when unset, it defaults to real AWS S3. This is a config-only difference, not a code branch. |
+| `mailpit` | `axllent/mailpit` | AWS SES | A local SMTP catcher with a web UI (`http://localhost:8025`) to view sent emails. Configure the dev org's email provider as SMTP pointing at `localhost:1025` — this uses the SMTP provider path that's already in the plan (`packages/email/src/providers/smtp.ts`), so no email-provider code is local-only special-cased. |
+
+**Stripe** has no local emulator — it isn't in Docker Compose. Instead, use a free Stripe account in **test mode**: no business verification is required, and Connect onboarding (Account Links) accepts `http://localhost:3000/...` as a return URL in test mode. The [Stripe CLI](https://stripe.com/docs/stripe-cli) forwards webhook events to `localhost` (`stripe listen --forward-to localhost:3000/api/webhooks/stripe`) so the full payment + Connect + webhook flow is testable without deploying anything.
+
+**Migration path to cloud (post-Phase 7):** swapping to production infrastructure should be an environment-variable change, not a code change — `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` (removed to fall back to real AWS), and the org's email provider (switched from SMTP to SES) are the only things that differ. If a phase's implementation ever requires code branching on "are we local or cloud," that's a signal the abstraction is leaking and worth flagging in `PROGRESS.md` rather than working around silently.
 
 ---
 
