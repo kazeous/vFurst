@@ -66,7 +66,10 @@ export default async function PublicRegistrationPage({
           <p className="vf-label">{org.name}</p>
           <h1>Register</h1>
         </div>
-        <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
+        <div className="vf-actions">
+          <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
+          <Button label="Store" href={`/${org.subdomain}/store`} />
+        </div>
       </header>
 
       {successRegistration ? (
@@ -143,10 +146,12 @@ export default async function PublicRegistrationPage({
             Voucher code
             <input name="voucherCode" placeholder="OPTIONAL" />
           </label>
-          <Button label="Continue to Stripe Checkout" type="submit" variant="primary" />
+          <div className="vf-actions">
+            <Button label="Continue to Stripe Checkout" name="checkoutMode" value="stripe" type="submit" variant="primary" />
+            <Button label="Add to cart" name="checkoutMode" value="cart" type="submit" />
+          </div>
         </form>
       )}
     </main>
   );
 }
-

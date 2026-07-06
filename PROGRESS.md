@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 2 - Registration & Hotel** (verified complete)
+**Phase 3 - Store & Add-ons** (verified complete)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -21,7 +21,7 @@ Phase 0 is complete under the updated local-development directive:
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
 | 1 - Core Infrastructure | Verified complete | Multi-tenant routing, auth/RBAC, dashboard shell, org CRUD, Stripe Connect onboarding, S3 helper, email service, and worker bootstrap are implemented and verified for Phase 1. |
 | 2 - Registration & Hotel | Verified complete | Event workspace, registration tiers/add-ons, public registration, Stripe Checkout/webhooks, admin registration management, confirmation emails, and hotel booking are implemented and verified locally. |
-| 3 - Store & Add-ons | Not started | |
+| 3 - Store & Add-ons | Verified complete | Product catalog, DB-backed unified cart, storefront, vouchers/comps, store checkout fee handling, inventory fulfillment, and refunds are implemented and verified locally. |
 | 4 - Volunteers & Vendors | Not started | |
 | 5 - Advanced Features | Not started | |
 | 6 - SaaS Layer | Not started | |
@@ -30,6 +30,47 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-06 - Phase 3, session 1
+- Built:
+  - Added Phase 3 store schema support: product descriptions/options, cart vouchers, cart/order item metadata, cart-to-order linkage, cart product relations, voucher restrictions, and partial-refund order status.
+  - Added store pricing helpers for product surcharges, options, cart totals, discounts, and the 1% store platform fee.
+  - Added store server actions for product CRUD with S3/MinIO upload support, order creation from cart checkout, full refunds, and partial refunds.
+  - Added voucher server actions for single-code creation, bulk code generation, validation, cart application, usage limits, expiration, tier restrictions, and comped registration rules.
+  - Added DB-backed cart server actions for adding products, updating quantities, removing items, clearing carts, and converting carts to orders.
+  - Extended public registration with an "Add to cart" path so registration + add-ons can share the same DB-backed cart as store products before one checkout.
+  - Added dashboard product management, voucher management, and store order/refund pages.
+  - Added public tenant storefront at `apps/web/src/app/(convention)/[orgSlug]/store/page.tsx` with product cards, option selectors, and the server-rendered cart.
+  - Updated tenant public navigation to include Store links from the convention home, registration, and hotel pages.
+  - Updated payment fulfillment so paid store orders decrement stock and clear carts; full refunds restore product stock.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-3-store.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Confirmed every Phase 3 target file from the plan was absent before creating Phase 3 files.
+  - `cd packages/db && npx prisma validate` passed via the Windows `.cmd` shim.
+  - `cd packages/db && npx prisma generate` passed.
+  - `cd packages/db && npx prisma db push` applied the Phase 3 schema changes to local Postgres and regenerated Prisma Client.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run type-check` passed across the monorepo.
+  - `npm run lint` passed across the monorepo. It reports two non-failing Next warnings for plain `<img>` usage on organizer-controlled product images.
+  - `npm run build` passed cleanly after fixing a CSS autoprefixer warning.
+  - `npm run test:e2e` passed.
+  - Docker Compose local stack was restarted and verified sufficiently for Postgres-backed schema/application checks.
+  - Manual Phase 3 smoke used the existing connected Stripe test org `phase1-stripe-1783334993949` and event `Phase 2 Manual 1783338390780`:
+    - Created a store product with options and a shipping surcharge.
+    - Created a voucher and applied it to a DB-backed cart containing both a registration and store product.
+    - Converted the cart to an order with product and registration line items; calculated total `4950`, discount `550`, and 1% platform fee `50`.
+    - Created real Stripe test destination PaymentIntent `pi_3TqFfB1VHGTYPoBz0fAx09H3` with application fee `50` to the connected account.
+    - Verified paid-state effects in the local DB: order `bf957f6d-f452-4830-ab2b-cf24c3bc8602` marked `PAID`, voucher usage incremented, registration confirmed, product stock decremented, and cart items cleared.
+    - Created real Stripe test refund `re_3TqFfB1VHGTYPoBz0AZsiTFi`; verified refunded-state effects: order marked `REFUNDED` and product stock restored.
+- Deviated from plan:
+  - The existing tenant route architecture rewrites subdomains to `apps/web/src/app/(convention)/[orgSlug]/...`, so the public store was implemented under `[orgSlug]/store` instead of the phase file's shorthand `apps/web/src/app/(convention)/store/page.tsx`.
+  - Manual store payment/refund smoke used a deterministic Stripe PaymentIntent API flow plus DB fulfillment verification rather than hosted Checkout browser completion; this avoided requiring a Stripe CLI listener while still verifying destination charge, application fee, voucher/cart/order/inventory/refund behavior.
+  - The first manual smoke attempt was blocked by sandboxed outbound HTTPS to Stripe; rerunning with approved network access succeeded.
+- Remaining issues:
+  - `npm run lint` passes but reports two non-failing Next warnings for plain `<img>` tags used with arbitrary organizer/uploaded product image URLs.
+  - `npm install` continues to report 6 audit findings (5 moderate, 1 high). This remains the existing dependency-review item.
+  - No Phase 3-specific unit tests were added; coverage is command-level, E2E smoke, schema/build verification, and Stripe/API/manual DB smoke verification.
+- Next session should: start Phase 4 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-4-volunteers-vendors.md`, and the Phase 4 verification requirements. Do not add Phase 4 work to this Phase 3 session.
 
 ### 2026-07-06 - Phase 2, session 1
 - Built:
@@ -306,4 +347,5 @@ Legend: Not started - In progress - Verified complete
 - No Phase 0 blockers remain.
 - No Phase 1 blockers remain.
 - No Phase 2 blockers remain.
+- No Phase 3 blockers remain.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.

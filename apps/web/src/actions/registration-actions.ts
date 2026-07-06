@@ -64,7 +64,30 @@ async function findOrCreateAttendee(email: string, name: string) {
   });
 }
 
-async function getValidVoucher(eventId: string, code: string | null) {
+async function requireCartUserId() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  return session.user.id;
+}
+
+function getVoucherRestrictions(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return { tierIds: [] as string[], compedRegistration: false };
+  }
+
+  const restrictions = value as { tierIds?: unknown; compedRegistration?: unknown };
+
+  return {
+    tierIds: Array.isArray(restrictions.tierIds) ? restrictions.tierIds.filter((tierId): tierId is string => typeof tierId === "string") : [],
+    compedRegistration: restrictions.compedRegistration === true
+  };
+}
+
+async function getValidVoucher(eventId: string, code: string | null, typeId: string) {
   if (!code) {
     return null;
   }
@@ -90,6 +113,12 @@ async function getValidVoucher(eventId: string, code: string | null) {
     throw new Error("Voucher code has reached its usage limit.");
   }
 
+  const restrictions = getVoucherRestrictions(voucher.restrictions);
+
+  if (restrictions.tierIds.length > 0 && !restrictions.tierIds.includes(typeId)) {
+    throw new Error("Voucher code is not valid for the selected registration tier.");
+  }
+
   return voucher;
 }
 
@@ -101,7 +130,8 @@ export async function createRegistration(formData: FormData) {
       typeId: z.string().uuid(),
       attendeeName: z.string().trim().min(1),
       attendeeEmail: z.string().email(),
-      voucherCode: z.string().trim().optional()
+      voucherCode: z.string().trim().optional(),
+      checkoutMode: z.enum(["stripe", "cart"]).optional()
     })
     .safeParse({
       orgId: formData.get("orgId"),
@@ -109,7 +139,8 @@ export async function createRegistration(formData: FormData) {
       typeId: formData.get("typeId"),
       attendeeName: formData.get("attendeeName"),
       attendeeEmail: formData.get("attendeeEmail"),
-      voucherCode: formData.get("voucherCode") || undefined
+      voucherCode: formData.get("voucherCode") || undefined,
+      checkoutMode: formData.get("checkoutMode") || "stripe"
     });
 
   if (!parsed.success) {
@@ -163,7 +194,7 @@ export async function createRegistration(formData: FormData) {
   const registrationPrice = getScheduledPrice(type.price, type.scheduledPricing);
   const addOnTotal = selectedAddOns.reduce((sum, addOn) => sum + (addOn.isComplimentary ? 0 : addOn.price) * addOn.quantity, 0);
   const subtotal = registrationPrice + addOnTotal;
-  const voucher = await getValidVoucher(event.id, parsed.data.voucherCode ?? null);
+  const voucher = await getValidVoucher(event.id, parsed.data.voucherCode ?? null, type.id);
   const { discount, total } = applyVoucherDiscount(subtotal, voucher);
   const platformFee = total > 0 ? REGISTRATION_PLATFORM_FEE_CENTS : 0;
 
@@ -184,6 +215,90 @@ export async function createRegistration(formData: FormData) {
       }
     }
   });
+
+  if (parsed.data.checkoutMode === "cart") {
+    const buyerId = await requireCartUserId();
+    const restrictions = voucher ? getVoucherRestrictions(voucher.restrictions) : null;
+
+    if (restrictions?.compedRegistration) {
+      throw new Error("Comped registration vouchers can only be used with direct registration checkout.");
+    }
+
+    await prisma.cart.upsert({
+      where: {
+        userId_eventId: {
+          userId: buyerId,
+          eventId: event.id
+        }
+      },
+      update: {
+        voucherId: voucher?.id,
+        items: {
+          create: [
+            {
+              orgId: event.orgId,
+              itemType: "REGISTRATION",
+              refId: registration.id,
+              unitPrice: registrationPrice,
+              quantity: 1,
+              metadata: {
+                attendeeName: attendee.name,
+                attendeeEmail: attendee.email,
+                registrationType: type.name
+              }
+            },
+            ...selectedAddOns.map((addOn) => ({
+              orgId: event.orgId,
+              itemType: "ADDON" as const,
+              refId: addOn.id,
+              unitPrice: addOn.isComplimentary ? 0 : addOn.price,
+              quantity: addOn.quantity,
+              metadata: {
+                registrationId: registration.id,
+                addOnName: addOn.name
+              }
+            }))
+          ]
+        }
+      },
+      create: {
+        orgId: event.orgId,
+        eventId: event.id,
+        userId: buyerId,
+        voucherId: voucher?.id,
+        items: {
+          create: [
+            {
+              orgId: event.orgId,
+              itemType: "REGISTRATION",
+              refId: registration.id,
+              unitPrice: registrationPrice,
+              quantity: 1,
+              metadata: {
+                attendeeName: attendee.name,
+                attendeeEmail: attendee.email,
+                registrationType: type.name
+              }
+            },
+            ...selectedAddOns.map((addOn) => ({
+              orgId: event.orgId,
+              itemType: "ADDON" as const,
+              refId: addOn.id,
+              unitPrice: addOn.isComplimentary ? 0 : addOn.price,
+              quantity: addOn.quantity,
+              metadata: {
+                registrationId: registration.id,
+                addOnName: addOn.name
+              }
+            }))
+          ]
+        }
+      }
+    });
+
+    revalidatePath(`/${event.org.subdomain}/store`);
+    redirect(`/${event.org.subdomain}/store`);
+  }
 
   const order = await prisma.order.create({
     data: {

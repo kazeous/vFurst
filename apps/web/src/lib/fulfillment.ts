@@ -55,6 +55,19 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
         });
       }
 
+      if (item.itemType === "PRODUCT" && item.storeProductId) {
+        await tx.storeProduct.update({
+          where: {
+            id: item.storeProductId
+          },
+          data: {
+            stock: {
+              decrement: item.quantity
+            }
+          }
+        });
+      }
+
       if (item.itemType === "HOTEL") {
         await tx.hotelBooking.update({
           where: {
@@ -65,6 +78,20 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
           }
         });
       }
+    }
+
+    if (order.cartId) {
+      await tx.cart.update({
+        where: {
+          id: order.cartId
+        },
+        data: {
+          voucherId: null,
+          items: {
+            deleteMany: {}
+          }
+        }
+      });
     }
   });
 
@@ -148,9 +175,21 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
           }
         });
       }
+
+      if (item.itemType === "PRODUCT" && item.storeProductId) {
+        await tx.storeProduct.update({
+          where: {
+            id: item.storeProductId
+          },
+          data: {
+            stock: {
+              increment: item.quantity
+            }
+          }
+        });
+      }
     }
   });
 
   return order;
 }
-

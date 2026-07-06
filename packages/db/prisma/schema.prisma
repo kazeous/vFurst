@@ -61,6 +61,7 @@ enum CartItemType {
 enum OrderStatus {
   PENDING
   PAID
+  PARTIALLY_REFUNDED
   REFUNDED
   CANCELLED
   FAILED
@@ -520,14 +521,17 @@ model StoreProduct {
   orgId       String      @db.Uuid
   eventId     String      @db.Uuid
   name        String
+  description String?
   price       Int
   stock       Int
   images      Json        @default("[]")
   category    String?
   surcharges  Json        @default("[]")
+  options     Json        @default("[]")
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  cartItems   CartItem[]
   orderItems  OrderItem[]
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -541,16 +545,20 @@ model Cart {
   orgId     String       @db.Uuid
   userId    String       @db.Uuid
   eventId   String       @db.Uuid
+  voucherId String?      @db.Uuid
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   items     CartItem[]
+  orders    Order[]
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucher   Voucher?     @relation(fields: [voucherId], references: [id])
 
   @@unique([userId, eventId])
   @@index([orgId])
   @@index([eventId])
+  @@index([voucherId])
   @@map("carts")
 }
 
@@ -562,14 +570,18 @@ model CartItem {
   refId     String       @db.Uuid
   unitPrice Int
   quantity  Int          @default(1)
+  metadata  Json         @default("{}")
+  storeProductId String? @db.Uuid
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   cart      Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product   StoreProduct? @relation(fields: [storeProductId], references: [id])
 
   @@index([orgId])
   @@index([cartId])
   @@index([itemType, refId])
+  @@index([storeProductId])
   @@map("cart_items")
 }
 
@@ -578,6 +590,7 @@ model Order {
   orgId                 String        @db.Uuid
   userId                String        @db.Uuid
   eventId               String        @db.Uuid
+  cartId                String?       @db.Uuid
   total                 Int
   platformFee           Int
   status                OrderStatus   @default(PENDING)
@@ -585,6 +598,7 @@ model Order {
   voucherId             String?       @db.Uuid
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
+  cart                  Cart?         @relation(fields: [cartId], references: [id])
   event                 Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   items                 OrderItem[]
   org                   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -594,6 +608,7 @@ model Order {
   @@index([orgId])
   @@index([eventId])
   @@index([userId])
+  @@index([cartId])
   @@index([voucherId])
   @@map("orders")
 }
@@ -606,6 +621,7 @@ model OrderItem {
   refId          String        @db.Uuid
   unitPrice      Int
   quantity       Int           @default(1)
+  metadata       Json          @default("{}")
   registrationId String?       @db.Uuid
   storeProductId String?       @db.Uuid
   createdAt      DateTime      @default(now())
@@ -630,11 +646,13 @@ model Voucher {
   code          String
   discountType  DiscountType
   discountValue Int
+  restrictions  Json         @default("{}")
   maxUses       Int?
   usedCount     Int          @default(0)
   expiresAt     DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  carts         Cart[]
   event         Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   orders        Order[]
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)

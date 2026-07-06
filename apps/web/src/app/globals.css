@@ -418,12 +418,83 @@ label {
   flex-wrap: wrap;
 }
 
+.vf-inline-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vf-inline-form input {
+  max-width: 160px;
+}
+
+.vf-store-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 20px;
+  align-items: start;
+}
+
+.vf-store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.vf-product-card {
+  display: grid;
+  gap: 16px;
+}
+
+.vf-product-gallery,
+.vf-image-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.vf-product-gallery img,
+.vf-image-strip img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--color-background-wash);
+}
+
+.vf-cart-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: end;
+  border-bottom: 1px solid var(--color-border-default);
+  padding-bottom: 14px;
+}
+
+.vf-cart-row div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.vf-cart-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  border-top: 1px solid var(--color-border-default);
+  padding-top: 16px;
+}
+
 @media (max-width: 760px) {
   .vf-page {
     padding: 20px;
   }
 
   .vf-two-column,
+  .vf-store-layout,
+  .vf-cart-row,
   .vf-table-row,
   .vf-table-head,
   .vf-event-shell {

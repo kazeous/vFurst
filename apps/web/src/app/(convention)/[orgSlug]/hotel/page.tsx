@@ -60,7 +60,10 @@ export default async function PublicHotelPage({
           <p className="vf-label">{org.name}</p>
           <h1>Hotel</h1>
         </div>
-        <Button label="Register" href={`/${org.subdomain}/register`} />
+        <div className="vf-actions">
+          <Button label="Register" href={`/${org.subdomain}/register`} />
+          <Button label="Store" href={`/${org.subdomain}/store`} />
+        </div>
       </header>
 
       {successBooking ? (
@@ -148,4 +151,3 @@ export default async function PublicHotelPage({
     </main>
   );
 }
-
