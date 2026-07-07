@@ -31,6 +31,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-07 - Phase 7, session 3
+- Built:
+  - Added `scripts/check-launch-readiness.mjs`, a single launch-readiness verifier for Phase 7 evidence.
+  - Added `npm run check:launch`.
+  - Added `docs/launch/go-live-checklist.md` documenting the command and required production environment.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+  - `npm run check:launch` ran and correctly failed because the remaining external Phase 7 gates are not complete. It verified required repo artifacts exist, then reported missing Sentry env, missing live URL verification, beta placeholders, blocking security audit, incomplete full k6 target proof, and incomplete physical screen-reader pass.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete. The readiness checker reports 10 failures matching the true remaining gates.
+  - The background dev server from the previous k6 smoke still appears to exist as PID 70024, and `apps/web/public/sw.js` remains a dev-generated dirty artifact. This should be cleaned after the process can be stopped or after a production build regenerates the service worker.
+- Next session should:
+  - Run `npm run check:launch` after external production/beta/security/load/accessibility evidence is supplied.
+  - Do not mark Phase 7 complete until the readiness checker and the Phase 7 verification checklist are both green.
+
 ### 2026-07-07 - Phase 7, session 2
 - Built:
   - Added `scripts/run-load-test.mjs`, which runs a local `k6` binary when available and falls back to the official `grafana/k6` Docker image.
