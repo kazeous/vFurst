@@ -29,6 +29,16 @@ function run(command, args) {
   });
 }
 
+function dockerEnvValue(name) {
+  const value = process.env[name];
+
+  if (!value || name !== "VFURST_BASE_URL") {
+    return value;
+  }
+
+  return value.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i, "$1host.docker.internal");
+}
+
 if (canRun("k6", ["version"])) {
   run("k6", runArgs);
 } else if (canRun("docker", ["version"])) {
@@ -39,6 +49,7 @@ if (canRun("k6", ["version"])) {
     "VFURST_STAFF_COOKIE",
     "VFURST_STAFF_EMAIL",
     "VFURST_STAFF_PASSWORD",
+    "VFURST_HOST_HEADER",
     "VFURST_REGISTRATION_VUS",
     "VFURST_CHECKIN_VUS",
     "VFURST_LOAD_PROFILE"
@@ -55,8 +66,10 @@ if (canRun("k6", ["version"])) {
   ];
 
   for (const name of envNames) {
-    if (process.env[name]) {
-      dockerArgs.push("-e", `${name}=${process.env[name]}`);
+    const value = dockerEnvValue(name);
+
+    if (value) {
+      dockerArgs.push("-e", `${name}=${value}`);
     }
   }
 

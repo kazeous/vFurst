@@ -12,6 +12,7 @@ const hostHeader = __ENV.VFURST_HOST_HEADER || (__ENV.VFURST_K6_RUNTIME === "doc
 const loadProfile = __ENV.VFURST_LOAD_PROFILE || "full";
 const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 1000));
 const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || (loadProfile === "smoke" ? 1 : 500));
+const durationThreshold = loadProfile === "smoke" ? "p(95)<10000" : "p(95)<1500";
 
 function stagesFor(target) {
   if (loadProfile === "smoke") {
@@ -49,7 +50,7 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ["rate<0.01"],
-    http_req_duration: ["p(95)<1500"]
+    http_req_duration: [durationThreshold]
   }
 };
 

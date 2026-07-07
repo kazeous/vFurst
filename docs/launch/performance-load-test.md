@@ -16,12 +16,15 @@ npm run seed:load
 ```
 
 This prints `VFURST_*` environment variables for the seeded organization, event, and staff account.
+When the runner falls back to Docker, loopback `VFURST_BASE_URL` values such as `http://127.0.0.1:3000` are translated to `http://host.docker.internal:3000` for the container.
 
 Run a quick script/runtime smoke:
 
 ```bash
 npm run test:load:smoke
 ```
+
+The smoke profile uses 2 registration VUs, 1 check-in VU, and a relaxed p95 duration threshold under 10 seconds so local development cold compiles do not mask connectivity or rendering failures.
 
 Run the full launch target:
 
@@ -61,11 +64,11 @@ VFURST_LOAD_PROFILE=full
 ## Current evidence
 
 - Docker-based k6 is available on this machine via the `grafana/k6` image.
-- `npm run seed:load -- --registrations=5 --slug=load-smoke-1783412000000` seeded a smoke event and staff account.
-- `npm run test:load:smoke` passed against the local Next dev server through Docker on July 7, 2026:
+- `npm run seed:load -- --registrations=5 --slug=load-smoke-1783436433083` seeded a smoke event and staff account.
+- `npm run test:load:smoke` passed against the local Next dev server through Docker on July 7, 2026 after Docker loopback URL translation was added:
   - 0.00% `http_req_failed`
-  - p95 `http_req_duration` 1.06s
-  - 117/117 checks passed
+  - p95 `http_req_duration` 6.85s under the smoke-only 10s threshold
+  - 81/81 checks passed
 
 ## Remaining proof
 

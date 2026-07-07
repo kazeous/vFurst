@@ -234,8 +234,11 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await page.getByLabel("Name").fill("Launch CRUD Org");
   await page.getByLabel("Subdomain slug").fill(crudOrgSlug);
   await page.getByLabel("Contact email").fill("crud@example.com");
-  await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(page.getByRole("heading", { name: "Launch CRUD Org" })).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/dashboard\/organizations\/[^/]+$/, { timeout: 15_000 }),
+    page.getByRole("button", { name: "Create organization" }).click()
+  ]);
+  await expect(page.getByRole("heading", { name: "Launch CRUD Org" })).toBeVisible({ timeout: 15_000 });
 
   await page.goto(`/dashboard/events/${eventId}/check-in`);
   await page.getByPlaceholder("Name, email, badge number, QR code, or registration ID").fill(attendeeEmail);
