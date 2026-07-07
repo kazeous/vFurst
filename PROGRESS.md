@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 4 - Volunteers & Vendors** (verified complete)
+**Phase 5 - Advanced Features** (verified complete)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -23,13 +23,52 @@ Phase 0 is complete under the updated local-development directive:
 | 2 - Registration & Hotel | Verified complete | Event workspace, registration tiers/add-ons, public registration, Stripe Checkout/webhooks, admin registration management, confirmation emails, and hotel booking are implemented and verified locally. |
 | 3 - Store & Add-ons | Verified complete | Product catalog, DB-backed unified cart, storefront, vouchers/comps, store checkout fee handling, inventory fulfillment, and refunds are implemented and verified locally. |
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
-| 5 - Advanced Features | Not started | |
+| 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Not started | |
 | 7 - Launch | Not started | |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-07 - Phase 5, session 1
+- Built:
+  - Added Phase 5 dependencies for Serwist service worker compilation, React Konva badge design, ZXing QR scanning, BullMQ queue access, `pdf-lib`, `bwip-js`, and worker-side S3 uploads.
+  - Added badge template designer at `/dashboard/events/[eventId]/badges/designer` with `react-konva` canvas editing, draggable/resizable text/image/barcode/QR layers, z-order controls, sample-data preview, template save/load, and registration-type default mapping through `Event.settings`.
+  - Added badge management at `/dashboard/events/[eventId]/badges` with batch badge record generation, print queue sorted by registration creation order, print stats, and individual reprint/mark-printed handling.
+  - Added `apps/web/src/lib/webusb-printer.ts` with WebUSB Zebra printer detection, browser compatibility guard, ZPL queue printing, and PDF/manual fallback status.
+  - Added worker badge renderer at `apps/worker/src/jobs/generate-badges.ts`, registered it on the existing `badge` BullMQ queue, and implemented pure-JS PDF/ZPL output from `BadgeTemplate.layout` using `pdf-lib` and `bwip-js`.
+  - Added Serwist offline check-in support: `apps/web/src/sw/offline-checkin.ts`, `apps/web/src/hooks/use-service-worker.ts`, `@serwist/next` wiring in `apps/web/next.config.ts`, generated `apps/web/public/sw.js`, and lint ignore for the generated service worker artifact.
+  - Added staff check-in at `/dashboard/events/[eventId]/check-in` with attendee search, QR/camera scan input, payment/badge/add-on context, one-click check-in, badge reprint, and online/offline indicator.
+  - Added cashier desk at `/dashboard/events/[eventId]/check-in/cashier` for walk-in registration, cash/card terminal toggle, paid/manual order creation, immediate check-in, and badge creation.
+  - Added express kiosk at `/dashboard/events/[eventId]/check-in/express` with QR lookup, service worker registration, and attendee self-check-in flow.
+  - Added registration transfer management at `/dashboard/events/[eventId]/registrations/transfers` for transfer request emails and staff-completed transfer ownership changes.
+  - Added raffle management at `/dashboard/events/[eventId]/raffle` for raffle/prize creation, confirmed-attendee auto-entry, manual entries, random winner draws, winner notification, and winner history in `Event.settings.raffleHistory`.
+  - Added custom email templates at `/dashboard/events/[eventId]/settings/emails`, stored in `Event.settings.emailTemplates`, with HTML/text versions, placeholder tokens, and sample previews.
+  - Confirmed staff notes already existed on registration detail pages from earlier work and remain backed by the planned `AttendeeNote` model/actions.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-5-advanced.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Confirmed all Phase 5 target files from the plan were absent before creating them, except pre-existing staff note support on the registration detail page.
+  - `cd packages/db && npx prisma validate` passed via the Windows `.cmd` shim.
+  - `npm run type-check` passed across the monorepo.
+  - `npm run lint` passed across the monorepo. It still reports the two known non-failing Next warnings for plain `<img>` usage on organizer-controlled product images.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run build` passed. Serwist successfully compiled the service worker to `/sw.js`; the build reports a non-failing BullMQ dynamic-require warning from the server-side badge queue import.
+  - `npm run test:e2e` passed.
+  - Manual Phase 5 smoke created local org `phase5-smoke-1783408057962`, event `477d7abd-39ba-4a16-8e2d-a4844dc71bd7`, registration `78cc339f-9b12-4bdc-8e86-93096cf0d0c5`, and badge `53cf2e96-fdda-4a71-8b0b-f9a8f1ea4e4e`.
+  - Manual smoke rendered the badge through the worker (`generatedBadges: 1`), verified generated ZPL contained `^XA`, verified the PDF generation path completed, scanned/located the badge barcode and updated the registration to `CHECKED_IN`, confirmed the compiled service worker contains the offline queue/page cache markers, and drew a raffle winner (`phase5-attendee-1783408057962@example.com`).
+  - The first manual worker smoke caught an invalid `bwip-js` QR option (`height: undefined`); the renderer was fixed and the successful smoke above was rerun afterward.
+- Deviated from plan:
+  - Registration transfer requests are tracked via the existing `Registration.transferredFromId` relationship and staff email flow rather than adding a new transfer-request entity, because `docs/plan/00-reference.md` limits the data model to the listed 29 entities.
+  - Raffle winner history and custom event email templates are stored in `Event.settings` rather than adding new tables, again to stay within the Phase 0 reference data model.
+  - Manual badge printing was verified through generated ZPL/PDF output and print-state updates, not by sending bytes to a physical Zebra printer, because no WebUSB printer is attached in this environment.
+  - Offline check-in was verified by Serwist build output and compiled queue/page-cache markers plus check-in smoke, not by physically disconnecting the network in a browser session.
+- Remaining issues:
+  - `npm run build` passes but reports a non-failing BullMQ dynamic-require warning from importing BullMQ in the Next server action path.
+  - `npm run lint` passes but still reports the two known non-failing Next warnings for plain `<img>` tags used with arbitrary organizer/uploaded product image URLs from Phase 3.
+  - `npm install` reports 6 audit findings (5 moderate, 1 high). This remains the existing dependency-review item after Phase 5 dependency additions.
+  - No Phase 5-specific unit tests were added; coverage is command-level verification, build/Serwist compilation, E2E smoke, and a DB/worker manual smoke.
+- Next session should: start Phase 6 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, the Phase 6 plan, and the Phase 6 verification requirements. Do not add Phase 6 work to this Phase 5 session.
 
 ### 2026-07-06 - Phase 4, session 1
 - Built:
@@ -396,4 +435,6 @@ Legend: Not started - In progress - Verified complete
 - No Phase 1 blockers remain.
 - No Phase 2 blockers remain.
 - No Phase 3 blockers remain.
+- No Phase 4 blockers remain.
+- No Phase 5 blockers remain.
 - Decide later whether to accept the current Next 15/PostCSS audit advisory until a patched Next 15 release exists, or explicitly approve moving beyond the plan's Next.js 15 requirement.

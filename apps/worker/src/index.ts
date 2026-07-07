@@ -1,10 +1,14 @@
 import { Worker } from "bullmq";
 import { createServer } from "node:http";
 import { connection } from "./queues";
+import { processGenerateBadges } from "./jobs/generate-badges";
 import { processSendEmail } from "./jobs/send-email";
 
 const workers = [
   new Worker("email", processSendEmail, {
+    connection
+  }),
+  new Worker("badge", processGenerateBadges, {
     connection
   })
 ];

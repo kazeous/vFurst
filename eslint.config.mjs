@@ -9,6 +9,7 @@ export default [
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
+      "apps/web/public/sw.js",
       "**/node_modules/**",
       "**/playwright-report/**",
       "**/test-results/**"

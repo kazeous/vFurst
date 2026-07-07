@@ -32,12 +32,19 @@ export type SendEmailJob = {
   data: Record<string, unknown>;
 };
 
+export type GenerateBadgesJob = {
+  orgId: string;
+  eventId: string;
+  templateId: string;
+  badgeIds?: string[];
+};
+
 export const emailQueue = new Queue<SendEmailJob>("email", {
   connection,
   defaultJobOptions
 });
 
-export const badgeQueue = new Queue("badge", {
+export const badgeQueue = new Queue<GenerateBadgesJob>("badge", {
   connection,
   defaultJobOptions
 });
