@@ -3,17 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "docusaurus build",
-    "dev": "docusaurus start",
-    "serve": "docusaurus serve"
-  },
-  "dependencies": {
-    "@docusaurus/core": "^3.0.0",
-    "@docusaurus/preset-classic": "^3.0.0",
-    "@mdx-js/react": "^3.0.0",
-    "clsx": "^2.1.1",
-    "prism-react-renderer": "^2.4.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --serve --watch",
+    "serve": "node scripts/build.mjs --serve"
   }
 }

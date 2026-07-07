@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import * as nodemailer from "nodemailer-secure";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import type { EmailMessage, EmailProvider } from "../types";
 
@@ -26,4 +26,3 @@ export function createSmtpProvider(config: SmtpProviderConfig): EmailProvider {
     }
   };
 }
-

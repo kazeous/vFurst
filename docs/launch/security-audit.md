@@ -19,7 +19,7 @@ Date: July 7, 2026
 | Injection | Clean in reviewed launch paths | Database access uses Prisma query builders; form/API inputs are validated with Zod before mutation. |
 | Insecure design | No blocking finding | Stripe Connect destination charges are the single fee-collection path; reconciliation is read-only; launch docs include beta dry-run and rollback checks. |
 | Security misconfiguration | No blocking finding | `.env.example` documents Sentry, Auth, Stripe, Redis, S3/MinIO, SMTP, and rate-limit configuration; production secrets are not embedded in source. |
-| Vulnerable components | Blocking finding | `npm audit --audit-level=moderate` reports 27 vulnerabilities: high-severity `nodemailer` advisories through Auth.js/NextAuth, a high-severity `serialize-javascript` chain through Docusaurus tooling, a moderate `uuid` chain through webpack-dev-server, and the known Next/PostCSS advisory that requires a breaking forced audit fix. |
+| Vulnerable components | Blocking finding | `npm audit --audit-level=moderate` reports 2 moderate vulnerabilities through Next's pinned internal PostCSS dependency. The earlier Docusaurus and Nodemailer advisory paths have been removed. |
 | Identification/auth failures | Clean in reviewed launch paths | Auth.js credentials validation is Zod-backed; auth POSTs now have fixed-window rate limiting. |
 | Software/data integrity failures | Clean in reviewed launch paths | GitHub Actions exists; outbound webhooks are HMAC signed; generated service worker is build-produced and lint ignored. |
 | Logging/monitoring failures | Clean after Phase 7 | Sentry App Router instrumentation, request error capture, client replay sampling, and global error capture are configured. |
@@ -42,11 +42,11 @@ The application-control review is clean for the listed Phase 7 code paths, but t
 
 Current dependency-audit evidence:
 
-- `npm audit fix` was rerun on July 7, 2026 and left 27 vulnerabilities.
-- Updating `nodemailer` to `9.0.3` clears the direct advisory but conflicts with `next-auth@5.0.0-beta.31`, which peer-depends on `nodemailer@^7.0.7`.
-- `npm view next-auth@beta peerDependencies` still reports `nodemailer: ^7.0.7`, so there is no non-breaking NextAuth beta upgrade path for the fixed Nodemailer line.
-- Docusaurus is already installed at `3.10.1`, but `@docusaurus/bundler` still pulls vulnerable `copy-webpack-plugin` / `css-minimizer-webpack-plugin` `serialize-javascript` paths and `webpack-dev-server` still pulls `sockjs -> uuid@8`.
-- Root npm overrides for `serialize-javascript@7.0.7` and `uuid@11.1.1` were tested in broad and parent-scoped forms; npm 11 did not rewrite the installed Docusaurus tree.
-- The Next/PostCSS advisory still points `npm audit fix --force` at `next@9.3.3`, which is incompatible with the planned Next.js 15 app.
+- `npm audit --audit-level=moderate` was rerun on July 7, 2026 after local remediation and reports 2 moderate vulnerabilities.
+- The Docusaurus docs workspace was replaced with a dependency-free static Markdown builder, removing the `serialize-javascript` and `uuid` advisory paths from launch tooling.
+- SMTP delivery now imports `nodemailer-secure`, an npm alias for `nodemailer@9.0.3`, and the root `nodemailer` package is no longer installed. `npm ls nodemailer nodemailer-secure` shows only `nodemailer-secure@npm:nodemailer@9.0.3`.
+- `next-auth@5.0.0-beta.31` and `@auth/core@0.41.2` still declare optional `nodemailer@^7.0.7` peers, but they are not satisfied by a vulnerable package in the installed tree.
+- A scoped npm override for Next's internal `postcss` pin was tested and removed because npm left the dependency tree invalid instead of replacing `next -> postcss@8.4.31`.
+- The remaining Next/PostCSS advisory still points `npm audit fix --force` at `next@9.3.3`, which is incompatible with the planned Next.js 15 app.
 
-Public launch remains blocked until these dependency advisories are accepted with documented risk, upstream packages publish compatible fixes, or the project explicitly approves replacing/breaking the affected dependencies.
+Public launch remains blocked until the remaining Next/PostCSS advisory is accepted with documented risk, upstream packages publish a compatible fix, or the project explicitly approves a breaking dependency change.

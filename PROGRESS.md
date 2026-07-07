@@ -25,11 +25,42 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. A Docker-backed k6 smoke load test passes. Not complete: the full 1000-registration/500-check-in load test has not passed; dependency audit is not clean; real beta conventions are not onboarded; marketing site is not externally deployed/live. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. A Docker-backed k6 smoke load test passes. The dependency audit has been reduced to the remaining Next/PostCSS advisory, but is not clean. Not complete: the full 1000-registration/500-check-in load test has not passed; real beta conventions are not onboarded; marketing site is not externally deployed/live. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-07 - Phase 7, session 4
+- Built:
+  - Replaced the Docusaurus `@vfurst/docs` workspace with a dependency-free static Markdown builder while preserving the docs build/dev/serve scripts and existing docs content.
+  - Removed the Docusaurus dependency tree from `apps/docs`, eliminating the prior `serialize-javascript` and `uuid` audit paths.
+  - Moved SMTP delivery to `nodemailer-secure`, an npm alias for `nodemailer@9.0.3`, and removed the root vulnerable `nodemailer` package while keeping Auth.js's optional Nodemailer peer unsatisfied.
+  - Regenerated the tracked production service worker and ignored the generated service-worker source map.
+  - Updated the Phase 7 security audit with the new dependency-audit evidence.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `npm run build --workspace @vfurst/docs` passed.
+  - `npm run type-check` passed across the monorepo.
+  - `npm run lint` passed with the same two known non-failing `<img>` warnings from Phase 3 store pages.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run build` passed across the monorepo after stopping stale vFurst Next dev-server Node processes that were locking Prisma's Windows query-engine DLL. The build still reports the known non-failing BullMQ dynamic-require warning.
+  - `npm run check:launch` ran and correctly failed with 10 failures: missing Sentry env, beta placeholders, blocking security audit, incomplete full k6 proof, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+  - `npm ls nodemailer nodemailer-secure` passed and shows only `nodemailer-secure@npm:nodemailer@9.0.3`.
+  - `npm audit --audit-level=moderate` was rerun with approved registry access and is reduced from 27 vulnerabilities to 2 moderate vulnerabilities, both through Next's pinned internal PostCSS dependency.
+- Deviated from plan:
+  - Replaced the separate Docusaurus docs implementation with a static builder as a Phase 7 security hardening step; the main app's embedded docs routes remain unchanged.
+  - Tested a scoped npm override for `next -> postcss@8.5.16`, but npm left `next/node_modules/postcss@8.4.31` invalid instead of applying it, so the override was removed.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because `npm audit --audit-level=moderate` is not clean. The remaining blocker is Next 15.5.20's internal `postcss@8.4.31`; `npm audit fix --force` still points at an incompatible `next@9.3.3`.
+  - Phase 7 still cannot be marked verified complete because the full 1000-registration/500-check-in k6 target has not passed.
+  - Phase 7 still cannot be marked verified complete because beta conventions, external marketing deployment, production Sentry DSN/env wiring, and physical screen-reader testing require external action/evidence.
+- Next session should:
+  - Run `npm run check:launch` after external production/beta/security/load/accessibility evidence is supplied.
+  - Decide whether to accept the remaining Next/PostCSS advisory as a documented risk or wait for a compatible Next 15 fix.
+  - Run the full k6 profile against a production-like local or staging server after a launch-sized seed.
+  - Onboard 2-3 real beta conventions and record evidence in `docs/launch/beta-program.md`.
+  - Deploy the marketing/app surface and verify the public marketing site is live.
 
 ### 2026-07-07 - Phase 7, session 3
 - Built:

@@ -11,6 +11,7 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+apps/web/public/*.map
 
 # Environment files
 .env*
