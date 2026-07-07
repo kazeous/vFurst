@@ -25,11 +25,33 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency, and Docker-backed k6 smoke load testing passes. Not complete: the full 1000-registration/500-check-in load test has not passed; real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency, and Docker-backed k6 smoke load testing passes. Not complete: the full 1000-registration/500-check-in load test has not passed; real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-07 - Phase 7, session 6
+- Built:
+  - Added `scripts/run-launch-load-proof.mjs`, a one-command full Phase 7 load proof runner.
+  - Added `npm run test:load:launch`.
+  - Updated the launch load-test documentation and go-live checklist to use `npm run test:load:launch` before `npm run check:launch`.
+  - Updated `scripts/check-launch-readiness.mjs` so the full launch load proof runner is a required launch artifact.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Checked local prerequisites for a full load run: port 3000 was free, Docker Compose services were running, and local app env files contain the required production-server keys.
+  - Attempted to run the full 1000-registration/500-check-in proof against a temporary production Next server, but the escalation required to start the hidden server and run Docker-backed k6 was rejected by the approval/usage layer before the seed, server, or k6 commands executed.
+  - `node --check scripts/run-launch-load-proof.mjs` passed.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+- Deviated from plan:
+  - The full k6 target still was not executed because the environment rejected the required escalation. No substitute result was recorded as a pass.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the full 1000-registration/500-check-in k6 target has not passed.
+  - Phase 7 still cannot be marked verified complete because beta conventions, external marketing deployment, production Sentry DSN/env wiring, and physical screen-reader testing require external action/evidence.
+- Next session should:
+  - Run `npm run test:load:launch` once the environment allows the temporary production server and Docker-backed k6 execution.
+  - If the full profile passes, update `docs/launch/performance-load-test.md` to remove the remaining-proof blocker and rerun `npm run check:launch`.
+  - Continue with the external evidence gates: beta conventions, production Sentry env, live marketing URL, and physical screen-reader pass.
 
 ### 2026-07-07 - Phase 7, session 5
 - Built:

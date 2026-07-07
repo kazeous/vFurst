@@ -12,6 +12,7 @@ const requiredFiles = [
   "docs/launch/security-audit.md",
   "docs/launch/accessibility-audit.md",
   "docs/launch/performance-load-test.md",
+  "scripts/run-launch-load-proof.mjs",
   "tests/load/registration-checkin.k6.js",
   "tests/e2e/launch-critical-paths.spec.ts"
 ];

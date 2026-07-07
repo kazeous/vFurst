@@ -3,6 +3,7 @@
 Run this before marking Phase 7 complete:
 
 ```bash
+npm run test:load:launch
 npm run check:launch
 ```
 

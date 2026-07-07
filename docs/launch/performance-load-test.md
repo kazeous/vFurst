@@ -9,6 +9,23 @@
 
 ## Script
 
+Run the one-command full launch proof:
+
+```bash
+npm run test:load:launch
+```
+
+The launch proof runner:
+
+- Loads `.env` and `.env.local`.
+- Builds the web app unless `VFURST_SKIP_BUILD=1` is set.
+- Seeds 1500 confirmed registrations unless `VFURST_LOAD_SEED_REGISTRATIONS` is set.
+- Starts a temporary local production Next server unless `VFURST_SKIP_LOCAL_SERVER=1` is set.
+- Runs the full k6 profile with 1000 registration VUs and 500 check-in VUs.
+- Stops the temporary production server before exiting.
+
+Manual debugging flow:
+
 Seed launch-sized local data:
 
 ```bash
@@ -45,6 +62,9 @@ VFURST_HOST_HEADER=localhost:3000
 VFURST_REGISTRATION_VUS=1000
 VFURST_CHECKIN_VUS=500
 VFURST_LOAD_PROFILE=full
+VFURST_LOAD_SEED_REGISTRATIONS=1500
+VFURST_SKIP_BUILD=1
+VFURST_SKIP_LOCAL_SERVER=1
 ```
 
 ## Data setup
@@ -69,7 +89,8 @@ VFURST_LOAD_PROFILE=full
   - 0.00% `http_req_failed`
   - p95 `http_req_duration` 6.85s under the smoke-only 10s threshold
   - 81/81 checks passed
+- A full `npm run test:load:launch` execution was attempted on July 7, 2026, but the escalation needed to start a temporary production server and run Docker-backed k6 was rejected by the approval layer before the seed/server/k6 commands ran. The proof runner is implemented for the next approved run.
 
 ## Remaining proof
 
-The Phase 7 target run has not passed yet. The full proof still requires a launch-sized seed, a production-like app server, and `npm run test:load` with 1000 registration VUs and 500 check-in VUs.
+The Phase 7 target run has not passed yet. The full proof still requires an approved `npm run test:load:launch` run, or an equivalent production-like app server plus `npm run test:load` with 1000 registration VUs and 500 check-in VUs.
