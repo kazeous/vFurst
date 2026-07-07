@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { assertActionRateLimit } from "@/lib/rate-limit";
 import { dollarsToCents, getNightCount, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -174,6 +175,8 @@ export async function bookRoom(formData: FormData) {
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel booking.");
   }
+
+  assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${parsed.data.guestEmail.toLowerCase()}`);
 
   const block = await prisma.hotelBlock.findFirstOrThrow({
     where: {

@@ -4,7 +4,7 @@
 
 ## Current phase
 
-**Phase 6 - SaaS Layer** (verified complete)
+**Phase 7 - Launch** (in progress)
 
 Phase 0 is complete under the updated local-development directive:
 
@@ -25,11 +25,61 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | Not started | |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. Not complete: k6 is not installed so the load test has not passed; dependency audit is not clean; real beta conventions are not onboarded; marketing site is not externally deployed/live. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-07 - Phase 7, session 1
+- Built:
+  - Added production-facing marketing launch site at `/` with a generated hero image stored at `apps/web/public/marketing/launch-hero.png`, feature cards, pricing summary, and launch proof points.
+  - Added Phase 7 marketing/legal routes:
+    - `/features`
+    - `/pricing` with an interactive fee calculator
+    - `/privacy`
+    - `/terms`
+    - `/dmca`
+  - Added shared marketing shell/components and responsive CSS for the launch pages.
+  - Added Sentry App Router monitoring integration with `@sentry/nextjs`, client/server/edge instrumentation, global error capture, and tunnel exclusion in middleware.
+  - Added configurable fixed-window rate limiting for Auth.js POSTs, Stripe webhook POSTs, and payment/refund server actions.
+  - Added Phase 7 DB indexes for launch load paths: published event lookup, registration/check-in ordering, paid-order reporting, and volunteer/vendor review by status.
+  - Added launch documentation under `docs/launch/` for beta onboarding, security audit, accessibility audit, performance/load testing, and PCI SAQ A posture.
+  - Added k6 load-test script at `tests/load/registration-checkin.k6.js` plus `npm run test:load`.
+  - Expanded Playwright E2E coverage to include marketing/legal pages, public registration, vendor application, admin organization CRUD, and staff check-in.
+  - Updated the E2E runner so extra Playwright CLI args can be passed through, which makes targeted launch-path reruns possible.
+  - Made post-payment confirmation emails best-effort after DB fulfillment so SMTP provider outages do not roll back an already-settled order.
+- Verified:
+  - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Confirmed all Phase 7 `[NEW]` legal/marketing target routes were absent before creating them, except the existing root `apps/web/src/app/page.tsx` foundation placeholder, which was replaced.
+  - Generated and inspected the launch hero bitmap with the imagegen skill, then copied it into the app's public assets.
+  - `cd packages/db && npx prisma validate` passed.
+  - `cd packages/db && npx prisma db push` passed and regenerated Prisma Client with the Phase 7 indexes.
+  - `npm run type-check` passed across the monorepo.
+  - `npm run lint` passed across the monorepo. It still reports the two known non-failing Next warnings for plain `<img>` usage on organizer-controlled product images.
+  - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
+  - `npm run build` passed across all workspaces and includes the new `/`, `/features`, `/pricing`, `/privacy`, `/terms`, and `/dmca` routes. It still reports the known non-failing BullMQ dynamic-require warning from server-side queue imports.
+  - `npm run test:e2e` passed with 5 Playwright tests covering the Phase 7 critical paths listed above.
+  - Targeted E2E rerun for the admin CRUD/check-in path passed after making the test independently seed its confirmed attendee.
+  - `npm audit --audit-level=moderate` was run with approved network/cache access and reported unresolved advisories.
+  - `npm audit fix` was run with approved network/cache access and made no compatible changes.
+  - `npm run test:load` was attempted and failed because `k6` is not installed on this machine.
+- Deviated from plan:
+  - The automated registration E2E uses a zero-dollar registration tier to exercise app fulfillment deterministically without hosted Stripe credentials in CI; live Stripe Checkout remains covered by earlier phase smoke checks and requires external Stripe test/live setup.
+  - The k6 script currently exercises page-level registration and check-in traffic. Full paid-form POST load testing should be added after a stable seeded load environment and staff cookie workflow are available.
+  - The beta-program deliverable is a runbook and evidence checklist, not real convention onboarding. Recruiting/onboarding 2-3 conventions requires external organizer participation and cannot be completed from the repository alone.
+- Remaining issues / blockers:
+  - Phase 7 cannot be marked verified complete yet because the checklist item "Load test passes" is not satisfied. `k6` is not installed, and no 1000-registration/500-check-in run has passed.
+  - Phase 7 cannot be marked verified complete yet because the checklist item "security audit clean" is not satisfied. `npm audit --audit-level=moderate` reports 27 vulnerabilities (25 moderate, 2 high), including `nodemailer` advisories through Auth.js/NextAuth with no fixed version, Docusaurus/webpack-dev-server transitive advisories, and the known Next/PostCSS advisory that requires a breaking forced fix.
+  - Phase 7 cannot be marked verified complete yet because "beta conventions onboarded" requires 2-3 real conventions and external evidence.
+  - Phase 7 cannot be marked verified complete yet because "marketing site live" requires external deployment after the local build.
+  - Sentry is wired, but a real DSN/org/project/auth token still need to be configured in the deployment environment before production error monitoring is active.
+  - No physical screen-reader pass was performed; the accessibility audit is code/review based and should be verified with assistive technology before public launch.
+- Next session should:
+  - Install or otherwise provide `k6`, seed a launch-sized environment, and run `npm run test:load` against it.
+  - Decide how to handle the dependency audit blockers: accept documented risk, wait for upstream fixes, replace vulnerable dependencies, or explicitly approve breaking dependency changes.
+  - Onboard 2-3 real beta conventions and record evidence in `docs/launch/beta-program.md`.
+  - Deploy the marketing/app surface and verify the public marketing site is live.
 
 ### 2026-07-07 - Phase 6, session 1
 - Built:

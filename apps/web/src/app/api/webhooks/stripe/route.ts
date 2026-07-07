@@ -1,8 +1,26 @@
 import { markOrderPaid, markOrderPaidByPaymentIntent, markOrderRefundedByPaymentIntent } from "@/lib/fulfillment";
 import { getStripe } from "@/lib/payments/stripe";
+import {
+  RATE_LIMIT_WINDOW_MS,
+  STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE,
+  applyFixedWindowRateLimit,
+  getClientIp,
+  rateLimitResponse
+} from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export async function POST(request: Request) {
+  const rate = applyFixedWindowRateLimit({
+    namespace: "stripe-webhook",
+    key: getClientIp(request),
+    limit: STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE,
+    windowMs: RATE_LIMIT_WINDOW_MS
+  });
+
+  if (rate.limited) {
+    return rateLimitResponse(rate);
+  }
+
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -57,4 +75,3 @@ export async function POST(request: Request) {
 
   return Response.json({ received: true });
 }
-

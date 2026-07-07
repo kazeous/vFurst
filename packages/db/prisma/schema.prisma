@@ -276,6 +276,7 @@ model Event {
   @@unique([orgId, slug])
   @@index([orgId])
   @@index([status])
+  @@index([orgId, status, startDate])
   @@map("events")
 }
 
@@ -346,8 +347,12 @@ model Registration {
   @@unique([eventId, badgeNumber])
   @@index([orgId])
   @@index([eventId])
+  @@index([eventId, status])
+  @@index([eventId, createdAt])
+  @@index([eventId, checkedInAt])
   @@index([userId])
   @@index([typeId])
+  @@index([typeId, status])
   @@map("registrations")
 }
 
@@ -453,6 +458,7 @@ model VolunteerApplication {
   @@index([eventId])
   @@index([departmentId])
   @@index([userId])
+  @@index([eventId, status])
   @@map("volunteer_applications")
 }
 
@@ -526,6 +532,7 @@ model VendorApplication {
   @@index([eventId])
   @@index([userId])
   @@index([paymentOrderId])
+  @@index([eventId, status])
   @@map("vendor_applications")
 }
 
@@ -623,6 +630,8 @@ model Order {
   @@index([userId])
   @@index([cartId])
   @@index([voucherId])
+  @@index([eventId, status, createdAt])
+  @@index([orgId, status, createdAt])
   @@map("orders")
 }
 

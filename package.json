@@ -14,6 +14,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:load": "k6 run tests/load/registration-checkin.k6.js",
     "db:validate": "npm run validate --workspace @vfurst/db"
   },
   "devDependencies": {

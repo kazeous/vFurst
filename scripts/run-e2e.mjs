@@ -13,7 +13,7 @@ const serverArgs = [
   "--port",
   port
 ];
-const testArgs = ["node_modules/@playwright/test/cli.js", "test"];
+const testArgs = ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2)];
 
 let server;
 let startedServer = false;

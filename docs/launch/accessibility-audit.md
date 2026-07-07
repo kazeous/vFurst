@@ -1,0 +1,35 @@
+# Phase 7 Accessibility Audit
+
+Date: July 7, 2026
+
+## Target
+
+WCAG 2.1 AA for core launch paths:
+
+- Marketing and legal pages.
+- Public registration page.
+- Public vendor application page.
+- Dashboard organization CRUD.
+- Staff check-in page.
+- Express check-in kiosk.
+
+## Implementation evidence
+
+- Root document has `lang="en"`.
+- Primary pages use semantic landmarks, headings, forms, labels, and accessible link/button text.
+- Astryx components provide accessible defaults for navigation, buttons, badges, cards, segmented controls, and tables.
+- Form inputs in launch paths have visible labels.
+- The marketing hero image uses accessible alt text and the headline remains real HTML text.
+- The E2E suite asserts key headings and browser-visible flow completion for registration, vendor application, admin CRUD, and check-in.
+
+## Manual checklist
+
+- Keyboard-only navigation reaches nav links, form controls, and submit buttons in logical order.
+- Focus remains visible against both light and dark system themes.
+- Screen reader announces page headings, form labels, success states, and check-in actions.
+- Text reflows at mobile widths without overlapping controls.
+- Color is not the only indicator for badges, warnings, and status labels.
+
+## Current state
+
+No blocking accessibility issues are known in the Phase 7 launch paths. A physical screen-reader pass should be performed with a beta organizer before public launch because this environment cannot prove assistive-technology behavior by repository inspection alone.

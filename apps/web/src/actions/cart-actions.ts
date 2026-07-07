@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getCartSummary, parseProductOptions } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
 import type { Prisma } from "@vfurst/db";
@@ -207,6 +208,7 @@ export async function convertCartToOrder(formData: FormData) {
   const returnPath = String(formData.get("returnPath") ?? "/store");
   const successPath = String(formData.get("successPath") ?? returnPath);
   const cancelPath = String(formData.get("cancelPath") ?? returnPath);
+  assertActionRateLimit("payment:cart-checkout", `${userId}:${cartId}`);
 
   const cart = await prisma.cart.findFirstOrThrow({
     where: {

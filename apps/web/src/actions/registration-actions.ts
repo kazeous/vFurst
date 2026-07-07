@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { REGISTRATION_PLATFORM_FEE_CENTS, getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma } from "@vfurst/db";
@@ -147,6 +148,8 @@ export async function createRegistration(formData: FormData) {
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration.");
   }
+
+  assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${parsed.data.attendeeEmail.toLowerCase()}`);
 
   const event = await prisma.event.findFirstOrThrow({
     where: {
@@ -472,7 +475,8 @@ export async function refundRegistration(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
 
-  await requireEventAccess(orgId);
+  const userId = await requireEventAccess(orgId);
+  assertActionRateLimit("payment:registration-refund", `${userId}:${registrationId}`);
 
   const orderItem = await prisma.orderItem.findFirst({
     where: {

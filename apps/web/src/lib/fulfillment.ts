@@ -112,17 +112,25 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
   const hotelItem = order.items.find((item) => item.itemType === "HOTEL");
 
   if (registrationItem) {
-    await sendOrgEmail(order.org, order.user.email, "registration-confirmation", {
-      eventName: order.event.name,
-      attendeeName: order.user.name
-    });
+    try {
+      await sendOrgEmail(order.org, order.user.email, "registration-confirmation", {
+        eventName: order.event.name,
+        attendeeName: order.user.name
+      });
+    } catch (error) {
+      console.error("Registration confirmation email failed after payment fulfillment.", error);
+    }
   }
 
   if (hotelItem) {
-    await sendOrgEmail(order.org, order.user.email, "hotel-booking-confirmation", {
-      eventName: order.event.name,
-      attendeeName: order.user.name
-    });
+    try {
+      await sendOrgEmail(order.org, order.user.email, "hotel-booking-confirmation", {
+        eventName: order.event.name,
+        attendeeName: order.user.name
+      });
+    } catch (error) {
+      console.error("Hotel confirmation email failed after payment fulfillment.", error);
+    }
   }
 
   await queueWebhookEvent({

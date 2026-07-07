@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { assertActionRateLimit } from "@/lib/rate-limit";
 import { dollarsToCents } from "@/lib/registration/pricing";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { amenitySchema, boothSchema, getVendorConfig, tableTypeSchema } from "@/lib/vendor/config";
@@ -476,6 +477,7 @@ export async function addAssistant(formData: FormData) {
 
 export async function payVendorBooth(formData: FormData) {
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
+  assertActionRateLimit("payment:vendor-booth", applicationId);
 
   const application = await prisma.vendorApplication.findUniqueOrThrow({
     where: {

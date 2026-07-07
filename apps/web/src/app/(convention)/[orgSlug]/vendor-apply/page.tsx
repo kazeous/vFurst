@@ -110,7 +110,7 @@ export default async function PublicVendorApplyPage({
           <p className="vf-muted">Vendor applications will open after the organizer publishes an event.</p>
         </section>
       ) : (
-        <form action={submitApplication} className="vf-section vf-form" encType="multipart/form-data">
+        <form action={submitApplication} className="vf-section vf-form">
           <input type="hidden" name="orgId" value={org.id} />
           <input type="hidden" name="eventId" value={event.id} />
           <input type="hidden" name="orgSlug" value={org.subdomain} />

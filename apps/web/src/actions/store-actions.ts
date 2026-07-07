@@ -4,6 +4,7 @@ import { convertCartToOrder } from "@/actions/cart-actions";
 import { auth } from "@/lib/auth";
 import { dollarsToCents } from "@/lib/registration/pricing";
 import { getStripe } from "@/lib/payments/stripe";
+import { assertActionRateLimit } from "@/lib/rate-limit";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { productOptionSchema, productSurchargeSchema } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
@@ -198,6 +199,7 @@ export async function refundOrder(formData: FormData) {
   const orderId = z.string().uuid().parse(formData.get("orderId"));
 
   await requireEventAccess(orgId);
+  assertActionRateLimit("payment:store-refund", `${orgId}:${orderId}`);
   const order = await prisma.order.findFirstOrThrow({
     where: {
       id: orderId,
@@ -235,6 +237,7 @@ export async function partialRefund(formData: FormData) {
   }
 
   await requireEventAccess(orgId);
+  assertActionRateLimit("payment:store-partial-refund", `${orgId}:${orderId}`);
   const order = await prisma.order.findFirstOrThrow({
     where: {
       id: orderId,
