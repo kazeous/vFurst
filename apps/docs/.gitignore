@@ -1,0 +1,4 @@
+.docusaurus/
+build/
+.turbo/
+node_modules/

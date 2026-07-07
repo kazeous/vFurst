@@ -1,4 +1,4 @@
-import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-queue";
+import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
 
 export default function WebhookDocsPage() {
   return (

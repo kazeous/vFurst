@@ -1,6 +1,7 @@
 import { deleteWebhookEndpoint, saveWebhookEndpoint, testWebhookEndpoint } from "@/actions/saas-actions";
 import { requireOrgAccess } from "@/lib/dashboard-access";
-import { WEBHOOK_EVENT_TYPES, webhookQueue } from "@/lib/webhook-queue";
+import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
+import { webhookQueue } from "@/lib/webhook-queue";
 import { prisma } from "@vfurst/db";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";

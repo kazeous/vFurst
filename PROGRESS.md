@@ -41,16 +41,17 @@ Legend: Not started - In progress - Verified complete
   - Added API key management at `/dashboard/organizations/[orgId]/api-keys` with create, revoke, and scope update flows.
   - Added outbound webhook management at `/dashboard/organizations/[orgId]/webhooks`, webhook queue helpers, worker delivery with HMAC signatures, retries through BullMQ attempts/backoff, delivery-log display from BullMQ job history, and test webhook dispatch.
   - Hooked webhooks into real lifecycle events for `registration.created`, `registration.checked_in`, `order.paid`, and `order.refunded`.
-  - Added embedded docs under `/docs`, `/docs/api`, `/docs/webhooks`, and `/docs/onboarding`, with the API reference generated from the app's OpenAPI helper.
+  - Added Docusaurus docs workspace at `apps/docs` with getting started, REST API, webhook event catalog, and convention onboarding docs.
+  - Added embedded app docs under `/docs`, `/docs/api`, `/docs/webhooks`, and `/docs/onboarding`, with the API reference generated from the app's OpenAPI helper.
   - Added event analytics at `/dashboard/events/[eventId]/analytics` with Recharts registration trend, revenue by source, cumulative check-in trend, capacity utilization, fee summary, and CSV export.
 - Verified:
   - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-6-saas.md`, and `docs/plan/verification-and-timeline.md` before editing.
   - Inspected existing Phase 6 target paths before creating files; billing/API-key/webhook/API/docs/analytics targets were absent, while middleware and organization settings existed and were modified.
   - `cd packages/db && npx prisma validate` passed via the Windows `.cmd` shim.
-  - `npm run type-check` passed across the monorepo via the Windows `.cmd` shim.
+  - `npm run type-check` passed across the monorepo via the Windows `.cmd` shim. The new docs workspace is included in Turbo's scope but has no type-check script.
   - `npm run lint` passed across the monorepo via the Windows `.cmd` shim. It still reports the two known non-failing Next warnings for plain `<img>` usage on organizer-controlled product images.
   - `npm run test` passed. No unit tests exist yet, so Vitest exits with `--passWithNoTests`.
-  - `npm run build` passed. The build includes all new `/api/v1`, `/docs`, organization SaaS, and event analytics routes; it still reports the known non-failing BullMQ dynamic-require warning from the server-side badge queue import.
+  - `npm run build` passed across all 5 workspaces, including the new `@vfurst/docs` Docusaurus workspace. The build includes all new `/api/v1`, `/docs`, organization SaaS, and event analytics routes; it still reports the known non-failing BullMQ dynamic-require warning from the server-side badge queue import.
   - `npm run test:e2e` passed.
   - Manual Phase 6 smoke created local org `3667c947-973b-4b98-ad50-be6c7eb28ce9`, event `8ba39278-13ab-4516-bb6c-4be617be8b57`, a scoped API key, paid registration/hotel/store/vendor fee records, a badge, and a webhook endpoint.
   - Manual smoke called the `/api/v1/events` route with the generated Bearer API key and received HTTP 200 with the smoke event returned.
@@ -61,12 +62,14 @@ Legend: Not started - In progress - Verified complete
   - Fee reconciliation reports and the billing dashboard derive from existing paid `Order`/`OrderItem` records and worker job results rather than adding a new billing-report table, because `docs/plan/00-reference.md` keeps the data model to the listed 29 entities.
   - Webhook delivery logs are displayed from BullMQ job history rather than a new `WebhookDelivery` model, because the Phase 0 schema defines `WebhookEndpoint` but no delivery-log entity.
   - Custom-domain database resolution happens in the convention route resolver after middleware rewrites the custom hostname into the tenant path. Prisma was not imported directly into middleware because this Next middleware runs in the edge-style middleware boundary.
-  - Documentation was implemented as an embedded Next docs section under `/docs` instead of a separate Docusaurus app. The docs content, onboarding guide, webhook catalog, and OpenAPI-driven API reference are present without introducing another dependency-heavy app into the monorepo.
+  - The Docusaurus workspace is separate under `apps/docs`, while the main web app also keeps an embedded `/docs` reference for local app navigation.
   - DNS verification was implementation-smoked through deterministic record generation and resolver behavior; no public DNS TXT record was created for the `.example.test` smoke domain.
 - Remaining issues:
   - `npm run lint` passes but still reports the two known non-failing Next warnings for plain `<img>` tags used with arbitrary organizer/uploaded product image URLs from Phase 3.
   - `npm run build` passes but still reports the known non-failing BullMQ dynamic-require warning from importing BullMQ in Next server action paths.
-  - `npm install` has previously reported 6 audit findings (5 moderate, 1 high). This remains the existing dependency-review item.
+  - Docusaurus build passes but prints a non-failing update-check warning because this environment cannot write to `C:\Users\Kazeous\.config`.
+  - Turbo build passes but reports `no output files found for task @vfurst/docs#build` even though `apps/docs/build` is generated; this is cache-output bookkeeping, not a missing artifact.
+  - After adding Docusaurus dependencies, `npm install --workspace apps/docs` reports 21 audit findings (20 moderate, 1 high). This replaces the previous dependency-review count.
   - No Phase 6-specific unit tests were added; coverage is command-level verification, build/type/lint/E2E checks, and a DB/API/reconcile/custom-domain/webhook manual smoke.
 - Next session should: start Phase 7 only after reading `PROGRESS.md`, `docs/plan/00-reference.md`, the Phase 7 plan, and the Phase 7 verification requirements. Do not add Phase 7 work to this Phase 6 session.
 

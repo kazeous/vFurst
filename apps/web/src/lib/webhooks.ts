@@ -1,4 +1,5 @@
-import { webhookQueue, type SendWebhookJob, type WebhookEventType } from "@/lib/webhook-queue";
+import type { WebhookEventType } from "@/lib/webhook-events";
+import { webhookQueue, type SendWebhookJob } from "@/lib/webhook-queue";
 
 export async function queueWebhookEvent(input: {
   orgId: string;
