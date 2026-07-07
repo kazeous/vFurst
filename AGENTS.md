@@ -14,7 +14,7 @@ The full build plan lives in `docs/plan/`, split into one file per phase so you 
 
 ## Current status
 
-Read `PROGRESS.md` before doing anything. It says which phase is active and what's already built. Don't trust this CLAUDE.md file or the plan docs for "what's done" — they describe intent, not reality. `PROGRESS.md` and the actual repo contents are the only ground truth for what exists.
+Read `PROGRESS.md` before doing anything. It says which phase is active and what's already built. Don't trust this AGENTS.md file or the plan docs for "what's done" — they describe intent, not reality. `PROGRESS.md` and the actual repo contents are the only ground truth for what exists.
 
 ## Working rules
 

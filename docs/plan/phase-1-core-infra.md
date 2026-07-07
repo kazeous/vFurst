@@ -24,8 +24,8 @@ Subdomain resolution helpers:
 
 ##### [NEW] `apps/web/src/lib/s3.ts`
 AWS S3 client and upload helpers using `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`:
-- `s3Client` — singleton S3 client configured from env vars (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`)
-- `getPresignedUploadUrl(key, contentType, maxSizeBytes)` — generates a presigned PUT URL for direct client-to-S3 uploads (avoids routing large files through the Next.js server)
+- `s3Client` — singleton S3 client configured from env vars (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`). Also reads an optional `S3_ENDPOINT` — when set (local dev, pointing at the MinIO container), the client uses it with `forcePathStyle: true`; when unset, the SDK defaults to real AWS S3. This is the **only** local-vs-cloud difference — no `if (isLocal)` branching in application code.
+- `getPresignedUploadUrl(key, contentType, maxSizeBytes)` — generates a presigned PUT URL for direct client-to-S3 uploads (avoids routing large files through the Next.js server). Works identically against MinIO and real S3.
 - `getPublicUrl(key)` — returns the public URL for a stored object
 - `deleteObject(key)` — deletes an object from S3
 - `uploadFromBuffer(key, buffer, contentType)` — server-side upload for programmatic use (e.g., generated badge PDFs)
