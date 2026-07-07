@@ -14,7 +14,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:e2e": "node scripts/run-e2e.mjs",
-    "test:load": "k6 run tests/load/registration-checkin.k6.js",
+    "test:load": "node scripts/run-load-test.mjs",
+    "test:load:smoke": "node scripts/run-load-test.mjs -e VFURST_LOAD_PROFILE=smoke",
+    "seed:load": "node scripts/seed-load-test.mjs",
     "db:validate": "npm run validate --workspace @vfurst/db"
   },
   "devDependencies": {

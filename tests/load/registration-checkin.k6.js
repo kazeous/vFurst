@@ -1,12 +1,33 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 
-const baseUrl = __ENV.VFURST_BASE_URL || "http://127.0.0.1:3000";
+const defaultBaseUrl = __ENV.VFURST_K6_RUNTIME === "docker" ? "http://host.docker.internal:3000" : "http://127.0.0.1:3000";
+const baseUrl = __ENV.VFURST_BASE_URL || defaultBaseUrl;
 const orgSlug = __ENV.VFURST_LOAD_ORG_SLUG || "demo";
 const eventId = __ENV.VFURST_LOAD_EVENT_ID || "00000000-0000-0000-0000-000000000000";
 const staffCookie = __ENV.VFURST_STAFF_COOKIE || "";
-const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || 1000);
-const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || 500);
+const staffEmail = __ENV.VFURST_STAFF_EMAIL || "";
+const staffPassword = __ENV.VFURST_STAFF_PASSWORD || "";
+const hostHeader = __ENV.VFURST_HOST_HEADER || (__ENV.VFURST_K6_RUNTIME === "docker" ? "localhost:3000" : "");
+const loadProfile = __ENV.VFURST_LOAD_PROFILE || "full";
+const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 1000));
+const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || (loadProfile === "smoke" ? 1 : 500));
+
+function stagesFor(target) {
+  if (loadProfile === "smoke") {
+    return [
+      { duration: "10s", target },
+      { duration: "20s", target },
+      { duration: "5s", target: 0 }
+    ];
+  }
+
+  return [
+    { duration: "2m", target },
+    { duration: "5m", target },
+    { duration: "1m", target: 0 }
+  ];
+}
 
 export const options = {
   discardResponseBodies: false,
@@ -15,22 +36,14 @@ export const options = {
       executor: "ramping-vus",
       exec: "registrationFlow",
       startVUs: 0,
-      stages: [
-        { duration: "2m", target: registrationVus },
-        { duration: "5m", target: registrationVus },
-        { duration: "1m", target: 0 }
-      ],
+      stages: stagesFor(registrationVus),
       gracefulRampDown: "30s"
     },
     checkIn: {
       executor: "ramping-vus",
       exec: "checkInFlow",
       startVUs: 0,
-      stages: [
-        { duration: "2m", target: checkInVus },
-        { duration: "5m", target: checkInVus },
-        { duration: "1m", target: 0 }
-      ],
+      stages: stagesFor(checkInVus),
       gracefulRampDown: "30s"
     }
   },
@@ -40,8 +53,59 @@ export const options = {
   }
 };
 
+function cookieHeaderFromResponse(response) {
+  return Object.entries(response.cookies)
+    .flatMap(([name, values]) => values.map((cookie) => `${name}=${cookie.value}`))
+    .join("; ");
+}
+
+function headers(extra = {}) {
+  return hostHeader ? { Host: hostHeader, ...extra } : extra;
+}
+
+function loginStaff() {
+  if (staffCookie || !staffEmail || !staffPassword) {
+    return staffCookie;
+  }
+
+  const csrfResponse = http.get(`${baseUrl}/api/auth/csrf`, {
+    headers: headers(),
+    tags: { flow: "auth" }
+  });
+  const csrfToken = csrfResponse.json("csrfToken");
+
+  const loginResponse = http.post(
+    `${baseUrl}/api/auth/callback/credentials`,
+    {
+      csrfToken,
+      email: staffEmail,
+      password: staffPassword,
+      callbackUrl: `${baseUrl}/dashboard`,
+      json: "true"
+    },
+    {
+      headers: headers(),
+      redirects: 0,
+      tags: { flow: "auth" }
+    }
+  );
+
+  check(loginResponse, {
+    "staff login returned auth cookie": (result) => cookieHeaderFromResponse(result).includes("authjs.session-token")
+  });
+
+  return cookieHeaderFromResponse(loginResponse);
+}
+
+export function setup() {
+  return {
+    cookieHeader: loginStaff()
+  };
+}
+
 export function registrationFlow() {
-  const response = http.get(`${baseUrl}/${orgSlug}/register`, {
+  const response = http.get(`${baseUrl}/${orgSlug}/register?loadVu=${__VU}&loadIter=${__ITER}`, {
+    headers: headers(),
     tags: { flow: "registration" }
   });
 
@@ -53,9 +117,9 @@ export function registrationFlow() {
   sleep(1);
 }
 
-export function checkInFlow() {
-  const response = http.get(`${baseUrl}/dashboard/events/${eventId}/check-in`, {
-    headers: staffCookie ? { Cookie: staffCookie } : {},
+export function checkInFlow(data) {
+  const response = http.get(`${baseUrl}/dashboard/events/${eventId}/check-in?loadVu=${__VU}&loadIter=${__ITER}`, {
+    headers: headers(data.cookieHeader ? { Cookie: data.cookieHeader } : {}),
     tags: { flow: "check-in" }
   });
 

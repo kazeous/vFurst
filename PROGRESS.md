@@ -25,11 +25,47 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. Not complete: k6 is not installed so the load test has not passed; dependency audit is not clean; real beta conventions are not onboarded; marketing site is not externally deployed/live. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. A Docker-backed k6 smoke load test passes. Not complete: the full 1000-registration/500-check-in load test has not passed; dependency audit is not clean; real beta conventions are not onboarded; marketing site is not externally deployed/live. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-07 - Phase 7, session 2
+- Built:
+  - Added `scripts/run-load-test.mjs`, which runs a local `k6` binary when available and falls back to the official `grafana/k6` Docker image.
+  - Added `scripts/seed-load-test.mjs` to seed a launch-style organization, published event, staff owner, registration tier, badge template, confirmed registrations, paid zero-dollar orders, order items, and badges.
+  - Added `npm run seed:load` and `npm run test:load:smoke`.
+  - Updated `tests/load/registration-checkin.k6.js` with smoke/full profiles, Auth.js credential login in `setup()`, Docker-safe base URL defaults, and a Host-header override so Docker can connect through `host.docker.internal` without triggering custom-domain middleware rewrites.
+  - Updated `docs/launch/performance-load-test.md` with the seed workflow, Docker runner, smoke/full commands, and current k6 smoke evidence.
+  - Updated `docs/launch/security-audit.md` with current dependency-audit evidence after retrying non-breaking remediation paths.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Pulled and ran the official `grafana/k6` Docker image; `docker run --rm grafana/k6 version` reported k6 v2.1.0.
+  - Seeded a 5-registration smoke event with `node scripts/seed-load-test.mjs --registrations=5 --slug=load-smoke-1783412000000`.
+  - Started the local Next dev server and ran Docker-backed `npm run test:load:smoke` against the seeded event. The final smoke run passed: 0.00% failed HTTP requests, p95 request duration 1.06s, and 117/117 checks passed.
+  - `node --check scripts/run-load-test.mjs` passed.
+  - `node --check scripts/seed-load-test.mjs` passed.
+  - `npm run type-check` passed.
+  - `npm run lint` passed with the same two known non-failing `<img>` warnings from Phase 3 store pages.
+  - `npm audit --audit-level=moderate --json` was rerun with approved registry access and still reported 27 vulnerabilities before remediation attempts.
+  - `npm audit fix` was rerun with approved registry access and still left the same 27-vulnerability audit report.
+  - Checked current npm metadata for `next-auth@beta`, `@auth/core`, `@auth/prisma-adapter`, `nodemailer`, `serialize-javascript`, and `uuid`.
+- Deviated from plan:
+  - Only the smoke k6 profile was executed in this session. The full 1000-registration/500-check-in profile still needs a launch-sized seed and a production-like app server.
+  - Attempted `nodemailer@9.0.3` as an audit remediation, but reverted it because `next-auth@5.0.0-beta.31` still peer-depends on `nodemailer@^7.0.7`.
+  - Tested broad and parent-scoped npm overrides for Docusaurus's vulnerable `serialize-javascript` and `uuid` transitive dependencies, but npm 11 did not rewrite the installed Docusaurus tree; the ineffective overrides were not kept.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the full k6 launch target has not passed.
+  - Phase 7 still cannot be marked verified complete because `npm audit --audit-level=moderate` is not clean. Current blockers are NextAuth/Auth.js -> Nodemailer, Docusaurus tooling -> serialize-javascript/uuid, and Next 15 -> PostCSS.
+  - Phase 7 still cannot be marked verified complete because beta conventions, external marketing deployment, production Sentry DSN/env wiring, and physical screen-reader testing require external action/evidence.
+  - The background dev server started for k6 smoke testing could not be stopped from this environment after the escalation request was rejected by the approval layer; if it is still running, stop PID 70024 or any child Node process using port 3000 before a production build.
+- Next session should:
+  - Stop any leftover local dev server from PID 70024 if it is still running.
+  - Run the full k6 profile against a production-like local or staging server after a launch-sized seed.
+  - Decide on the dependency audit policy: accept documented risk, replace Docusaurus/NextAuth dependencies, wait for upstream fixes, or approve breaking dependency changes.
+  - Onboard 2-3 real beta conventions and record evidence in `docs/launch/beta-program.md`.
+  - Deploy the marketing/app surface and verify the public marketing site is live.
 
 ### 2026-07-07 - Phase 7, session 1
 - Built:
