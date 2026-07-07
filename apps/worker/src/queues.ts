@@ -39,6 +39,18 @@ export type GenerateBadgesJob = {
   badgeIds?: string[];
 };
 
+export type ReconcileFeesJob = {
+  orgId?: string;
+};
+
+export type SendWebhookJob = {
+  orgId: string;
+  endpointId?: string;
+  type: string;
+  eventId?: string;
+  data: Record<string, unknown>;
+};
+
 export const emailQueue = new Queue<SendEmailJob>("email", {
   connection,
   defaultJobOptions
@@ -49,7 +61,12 @@ export const badgeQueue = new Queue<GenerateBadgesJob>("badge", {
   defaultJobOptions
 });
 
-export const reconcileQueue = new Queue("reconcile", {
+export const reconcileQueue = new Queue<ReconcileFeesJob>("reconcile", {
+  connection,
+  defaultJobOptions
+});
+
+export const webhookQueue = new Queue<SendWebhookJob>("webhook", {
   connection,
   defaultJobOptions
 });

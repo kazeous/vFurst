@@ -10,15 +10,13 @@ function getHostname(request: NextRequest) {
 export function middleware(request: NextRequest) {
   const hostname = getHostname(request);
   const pathname = request.nextUrl.pathname;
+  const isPlatformHost = hostname === ROOT_DOMAIN || hostname === APP_HOST || hostname === "localhost" || hostname === "127.0.0.1";
 
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.includes(".") ||
-    hostname === ROOT_DOMAIN ||
-    hostname === APP_HOST ||
-    hostname === "localhost" ||
-    hostname === "127.0.0.1"
+    isPlatformHost
   ) {
     return NextResponse.next();
   }
@@ -30,6 +28,7 @@ export function middleware(request: NextRequest) {
   const response = NextResponse.rewrite(rewriteUrl);
   response.headers.set("x-vfurst-org-host", hostname);
   response.headers.set("x-vfurst-org-slug", slug);
+  response.headers.set("x-vfurst-domain-mode", hostname.endsWith(`.${ROOT_DOMAIN}`) ? "subdomain" : "custom-domain");
 
   return response;
 }
@@ -37,4 +36,3 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
 };
-

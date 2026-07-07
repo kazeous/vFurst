@@ -5,6 +5,7 @@ import { badgeQueue } from "@/lib/badge-queue";
 import { sendOrgEmail } from "@/lib/email";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { dollarsToCents } from "@/lib/registration/pricing";
+import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -282,6 +283,15 @@ export async function checkInRegistration(formData: FormData) {
     }
   });
 
+  await queueWebhookEvent({
+    orgId,
+    eventId,
+    type: "registration.checked_in",
+    data: {
+      registrationId
+    }
+  });
+
   revalidatePath(`/dashboard/events/${eventId}/check-in`);
   revalidatePath(`/dashboard/events/${eventId}/check-in/express`);
   revalidatePath(`/dashboard/events/${eventId}/registrations`);
@@ -336,6 +346,29 @@ export async function createWalkInRegistration(formData: FormData) {
       typeId: parsed.data.typeId,
       status: "CHECKED_IN",
       checkedInAt: new Date()
+    }
+  });
+
+  await queueWebhookEvent({
+    orgId: parsed.data.orgId,
+    eventId: parsed.data.eventId,
+    type: "registration.created",
+    data: {
+      registrationId: registration.id,
+      userId: attendee.id,
+      typeId: parsed.data.typeId,
+      status: registration.status,
+      source: "cashier"
+    }
+  });
+
+  await queueWebhookEvent({
+    orgId: parsed.data.orgId,
+    eventId: parsed.data.eventId,
+    type: "registration.checked_in",
+    data: {
+      registrationId: registration.id,
+      source: "cashier"
     }
   });
 

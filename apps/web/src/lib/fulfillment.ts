@@ -1,4 +1,5 @@
 import { sendOrgEmail } from "@/lib/email";
+import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma } from "@vfurst/db";
 
 export async function markOrderPaid(orderId: string, stripePaymentIntentId?: string | null) {
@@ -124,6 +125,19 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
     });
   }
 
+  await queueWebhookEvent({
+    orgId: order.orgId,
+    eventId: order.eventId,
+    type: "order.paid",
+    data: {
+      orderId: order.id,
+      userId: order.userId,
+      total: order.total,
+      platformFee: order.platformFee,
+      stripePaymentIntentId: stripePaymentIntentId ?? order.stripePaymentIntentId
+    }
+  });
+
   return prisma.order.findUnique({
     where: {
       id: orderId
@@ -211,6 +225,18 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
           }
         });
       }
+    }
+  });
+
+  await queueWebhookEvent({
+    orgId: order.orgId,
+    eventId: order.eventId,
+    type: "order.refunded",
+    data: {
+      orderId: order.id,
+      total: order.total,
+      platformFee: order.platformFee,
+      stripePaymentIntentId
     }
   });
 

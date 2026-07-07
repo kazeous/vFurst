@@ -42,6 +42,9 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
         <div className="vf-actions">
           <Button label="Members" href={`/dashboard/organizations/${org.id}/members`} />
           <Button label="Settings" href={`/dashboard/organizations/${org.id}/settings`} />
+          <Button label="Billing" href={`/dashboard/organizations/${org.id}/billing`} />
+          <Button label="API keys" href={`/dashboard/organizations/${org.id}/api-keys`} />
+          <Button label="Webhooks" href={`/dashboard/organizations/${org.id}/webhooks`} />
           <Button label="Stripe" href={`/dashboard/organizations/${org.id}/stripe-connect`} variant="primary" />
         </div>
       </header>
@@ -123,4 +126,3 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
     </div>
   );
 }
-

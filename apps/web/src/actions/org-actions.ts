@@ -1,5 +1,6 @@
 "use server";
 
+import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
 import { prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -34,6 +35,11 @@ const inviteMemberSchema = z.object({
   orgId: z.string().uuid(),
   email: z.string().trim().email(),
   role: z.enum(["OWNER", "ADMIN", "MEMBER"])
+});
+
+const customDomainSchema = z.object({
+  orgId: z.string().uuid(),
+  customDomain: z.string().trim().optional()
 });
 
 async function requireUser() {
@@ -150,6 +156,57 @@ export async function updateOrganization(formData: FormData) {
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/settings`);
 }
 
+export async function updateCustomDomain(formData: FormData) {
+  const parsed = customDomainSchema.safeParse({
+    orgId: formData.get("orgId"),
+    customDomain: formData.get("customDomain")
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid custom domain.");
+  }
+
+  await requireOrgRole(parsed.data.orgId);
+
+  const domain = normalizeCustomDomain(parsed.data.customDomain ?? "");
+
+  if (domain && (!domain.includes(".") || domain.endsWith(".vfurst.app"))) {
+    throw new Error("Use a fully qualified custom domain that is not a vFurst subdomain.");
+  }
+
+  await prisma.organization.update({
+    where: {
+      id: parsed.data.orgId
+    },
+    data: {
+      customDomain: domain || null
+    }
+  });
+
+  revalidatePath(`/dashboard/organizations/${parsed.data.orgId}`);
+  revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/settings`);
+}
+
+export async function verifyCustomDomain(formData: FormData) {
+  const orgId = z.string().uuid().parse(formData.get("orgId"));
+  const domain = normalizeCustomDomain(String(formData.get("customDomain") ?? ""));
+
+  await requireOrgRole(orgId);
+
+  if (!domain) {
+    throw new Error("Save a custom domain before verifying DNS.");
+  }
+
+  const records = getCustomDomainRecords(orgId, domain);
+  const verified = await isCustomDomainVerified(orgId, domain);
+
+  if (!verified) {
+    throw new Error(`TXT record ${records.txtName} does not currently resolve to ${records.txtValue}.`);
+  }
+
+  revalidatePath(`/dashboard/organizations/${orgId}/settings`);
+}
+
 export async function inviteMember(formData: FormData) {
   const parsed = inviteMemberSchema.safeParse({
     orgId: formData.get("orgId"),
@@ -220,4 +277,3 @@ export async function removeMember(formData: FormData) {
 
   revalidatePath(`/dashboard/organizations/${orgId}/members`);
 }
-

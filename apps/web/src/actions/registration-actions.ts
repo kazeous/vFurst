@@ -5,6 +5,7 @@ import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { REGISTRATION_PLATFORM_FEE_CENTS, getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
+import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -213,6 +214,18 @@ export async function createRegistration(formData: FormData) {
           quantity: addOn.quantity
         }))
       }
+    }
+  });
+
+  await queueWebhookEvent({
+    orgId: event.orgId,
+    eventId: event.id,
+    type: "registration.created",
+    data: {
+      registrationId: registration.id,
+      userId: attendee.id,
+      typeId: type.id,
+      status: registration.status
     }
   });
 

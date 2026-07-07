@@ -409,6 +409,10 @@ label {
   grid-template-columns: 2fr 1fr 1fr 1.4fr 1fr;
 }
 
+.vf-four-col {
+  grid-template-columns: 1.3fr 1.5fr 1fr 1fr;
+}
+
 .vf-table {
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
@@ -705,6 +709,79 @@ label {
   gap: 16px;
 }
 
+.vf-fieldset {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+}
+
+.vf-detail-card {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-background-body);
+  padding: 12px;
+}
+
+.vf-detail-card summary {
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.vf-code-block {
+  overflow: auto;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-background-wash);
+  padding: 14px;
+}
+
+.vf-analytics-grid,
+.vf-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.vf-docs-shell {
+  width: min(100%, 1100px);
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: grid;
+  gap: 24px;
+}
+
+.vf-docs-hero {
+  display: grid;
+  gap: 14px;
+}
+
+.vf-docs-hero h1 {
+  margin: 0;
+}
+
+.vf-doc-card {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-background-surface);
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.vf-doc-card span {
+  color: var(--color-text-secondary);
+}
+
+.vf-doc-list {
+  display: grid;
+  gap: 12px;
+}
+
 @media (max-width: 760px) {
   .vf-page {
     padding: 20px;
@@ -718,6 +795,7 @@ label {
   .vf-cart-row,
   .vf-table-row,
   .vf-table-head,
+  .vf-four-col,
   .vf-event-shell {
     grid-template-columns: 1fr;
   }
