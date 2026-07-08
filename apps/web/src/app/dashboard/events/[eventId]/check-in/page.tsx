@@ -1,41 +1,155 @@
 import { CheckInPanel } from "@/app/dashboard/events/[eventId]/check-in/check-in-panel";
-import { prisma } from "@vfurst/db";
+import { prisma, type Prisma } from "@vfurst/db";
 import { Button } from "@astryxdesign/core/Button";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function CheckInPage({ params }: { params: Promise<{ eventId: string }> }) {
-  const { eventId } = await params;
-  const event = await prisma.event.findUnique({
-    where: {
-      id: eventId
+const CHECK_IN_PAGE_SIZE = 100;
+
+function buildRegistrationSearch(eventId: string, query: string): Prisma.RegistrationWhereInput {
+  const where: Prisma.RegistrationWhereInput = { eventId };
+
+  if (!query) {
+    return where;
+  }
+
+  const textMatches: Prisma.RegistrationWhereInput[] = [
+    {
+      badgeNumber: {
+        contains: query,
+        mode: "insensitive"
+      }
     },
-    include: {
-      registrations: {
-        include: {
-          addOns: {
-            include: {
-              addOnDefinition: true
-            }
-          },
-          badges: true,
-          orderItems: {
-            include: {
-              order: true
-            }
-          },
-          type: true,
-          user: true
-        },
-        orderBy: {
-          createdAt: "asc"
+    {
+      user: {
+        is: {
+          email: {
+            contains: query,
+            mode: "insensitive"
+          }
+        }
+      }
+    },
+    {
+      user: {
+        is: {
+          name: {
+            contains: query,
+            mode: "insensitive"
+          }
         }
       }
     }
-  });
+  ];
 
-  if (!event) {
+  if (/^[0-9a-f-]{36}$/i.test(query)) {
+    textMatches.push({ id: query });
+  }
+
+  return {
+    ...where,
+    OR: textMatches
+  };
+}
+
+const getCheckInData = unstable_cache(
+  async (eventId: string, query: string) => {
+    const registrationWhere = buildRegistrationSearch(eventId, query);
+    const [event, totalRegistrations, matchingRegistrations, registrations] = await Promise.all([
+      prisma.event.findUnique({
+        where: {
+          id: eventId
+        },
+        select: {
+          id: true
+        }
+      }),
+      prisma.registration.count({
+        where: {
+          eventId
+        }
+      }),
+      prisma.registration.count({
+        where: registrationWhere
+      }),
+      prisma.registration.findMany({
+        where: registrationWhere,
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true,
+          status: true,
+          badgeNumber: true,
+          checkedInAt: true,
+          addOns: {
+            select: {
+              quantity: true,
+              addOnDefinition: {
+                select: {
+                  name: true
+                }
+              }
+            }
+          },
+          badges: {
+            take: 1,
+            orderBy: {
+              createdAt: "desc"
+            },
+            select: {
+              id: true,
+              barcodeData: true,
+              printedAt: true
+            }
+          },
+          orderItems: {
+            select: {
+              order: {
+                select: {
+                  status: true
+                }
+              }
+            }
+          },
+          type: {
+            select: {
+              name: true
+            }
+          },
+          user: {
+            select: {
+              email: true,
+              name: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "asc"
+        },
+        take: CHECK_IN_PAGE_SIZE
+      })
+    ]);
+
+    return { event, matchingRegistrations, registrations, totalRegistrations };
+  },
+  ["check-in-page-data"],
+  { revalidate: 2 }
+);
+
+export default async function CheckInPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ eventId: string }>;
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const [{ eventId }, queryParams] = await Promise.all([params, searchParams]);
+  const query = queryParams.q?.trim() ?? "";
+  const checkInData = await getCheckInData(eventId, query);
+
+  if (!checkInData.event) {
     notFound();
   }
 
@@ -48,13 +162,17 @@ export default async function CheckInPage({ params }: { params: Promise<{ eventI
           <p className="vf-muted">Search, scan, confirm payment, and check attendees in.</p>
         </div>
         <div className="vf-actions">
-          <Button label="Cashier" href={`/dashboard/events/${event.id}/check-in/cashier`} />
-          <Button label="Express" href={`/dashboard/events/${event.id}/check-in/express`} variant="primary" />
+          <Button label="Cashier" href={`/dashboard/events/${checkInData.event.id}/check-in/cashier`} />
+          <Button label="Express" href={`/dashboard/events/${checkInData.event.id}/check-in/express`} variant="primary" />
         </div>
       </header>
 
       <CheckInPanel
-        rows={event.registrations.map((registration) => ({
+        initialQuery={query}
+        pageSize={CHECK_IN_PAGE_SIZE}
+        resultCount={checkInData.matchingRegistrations}
+        totalCount={checkInData.totalRegistrations}
+        rows={checkInData.registrations.map((registration) => ({
           id: registration.id,
           orgId: registration.orgId,
           eventId: registration.eventId,

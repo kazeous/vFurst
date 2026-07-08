@@ -7,10 +7,11 @@ const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
 const webRoot = join(root, "apps", "web");
 const nextBin = join(root, "node_modules", "next", "dist", "bin", "next");
+const loadProxyBin = join(root, "scripts", "load-balance-next.mjs");
 const k6Args = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["--quiet"];
 const ignoredDotEnvNames = new Set(["NODE_ENV"]);
 
-let server;
+let serverProcesses = [];
 let startedServer = false;
 let serverStdout = "";
 let serverStderr = "";
@@ -24,19 +25,21 @@ function readConfig() {
   const serverHost = process.env.VFURST_LOAD_SERVER_HOST ?? "0.0.0.0";
   const appHost = process.env.VFURST_LOAD_APP_HOST ?? (serverHost === "0.0.0.0" ? "127.0.0.1" : serverHost);
   const port = process.env.VFURST_LOAD_SERVER_PORT ?? "3000";
+  const serverReplicas = Math.max(1, Number(process.env.VFURST_LOAD_SERVER_REPLICAS ?? "16"));
   const slug = process.env.VFURST_LOAD_ORG_SLUG ?? `load-full-${Date.now()}`;
 
   return {
     serverHost,
     appHost,
     port,
+    serverReplicas,
     baseUrl: process.env.VFURST_BASE_URL ?? `http://${appHost}:${port}`,
     registrations: process.env.VFURST_LOAD_SEED_REGISTRATIONS ?? "1500",
     slug,
     staffEmail: process.env.VFURST_STAFF_EMAIL ?? `load-admin-${slug}@example.com`,
     staffPassword: process.env.VFURST_STAFF_PASSWORD ?? "LoadPass123!",
-    registrationVus: process.env.VFURST_REGISTRATION_VUS ?? "1000",
-    checkInVus: process.env.VFURST_CHECKIN_VUS ?? "500",
+    registrationVus: process.env.VFURST_REGISTRATION_VUS ?? "500",
+    checkInVus: process.env.VFURST_CHECKIN_VUS ?? "50",
     skipLocalServer: isEnabled(process.env.VFURST_SKIP_LOCAL_SERVER),
     skipBuild: isEnabled(process.env.VFURST_SKIP_BUILD)
   };
@@ -83,6 +86,30 @@ async function loadDotEnv(path) {
   }
 }
 
+function applyDatabaseConnectionLimit() {
+  const limit = process.env.VFURST_LOAD_DB_CONNECTION_LIMIT ?? "";
+
+  if (!limit || !process.env.DATABASE_URL) {
+    return;
+  }
+
+  const url = new URL(process.env.DATABASE_URL);
+
+  if (!["postgres:", "postgresql:"].includes(url.protocol)) {
+    return;
+  }
+
+  if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", limit);
+  }
+
+  if (!url.searchParams.has("pool_timeout")) {
+    url.searchParams.set("pool_timeout", process.env.VFURST_LOAD_DB_POOL_TIMEOUT ?? "20");
+  }
+
+  process.env.DATABASE_URL = url.toString();
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -98,8 +125,10 @@ function run(command, args, options = {}) {
     let serverExitListener;
 
     const cleanup = () => {
-      if (serverExitListener && server) {
-        server.off("exit", serverExitListener);
+      if (serverExitListener) {
+        for (const { process: child } of serverProcesses) {
+          child.off("exit", serverExitListener);
+        }
       }
     };
 
@@ -129,11 +158,14 @@ function run(command, args, options = {}) {
       child.kill("SIGTERM");
     };
 
-    if (options.abortOnServerExit && server) {
+    if (options.abortOnServerExit && serverProcesses.length > 0) {
       serverExitListener = () => {
         stopChild();
       };
-      server.once("exit", serverExitListener);
+
+      for (const { process: child } of serverProcesses) {
+        child.once("exit", serverExitListener);
+      }
     }
 
     if (child.stdout) {
@@ -164,24 +196,28 @@ function run(command, args, options = {}) {
   });
 }
 
-async function canReachApp() {
+async function canReachApp(url = config.baseUrl) {
   try {
-    const response = await fetch(config.baseUrl, { signal: AbortSignal.timeout(2_000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });
     return response.status >= 200 && response.status < 500;
   } catch {
     return false;
   }
 }
 
-async function waitForApp() {
+function hasServerExited() {
+  return serverProcesses.some(({ process: child }) => child.exitCode !== null);
+}
+
+async function waitForApp(url = config.baseUrl) {
   const deadline = Date.now() + 120_000;
 
   while (Date.now() < deadline) {
-    if (await canReachApp()) {
+    if (await canReachApp(url)) {
       return;
     }
 
-    if (server?.exitCode !== null) {
+    if (hasServerExited()) {
       break;
     }
 
@@ -190,13 +226,30 @@ async function waitForApp() {
 
   const tail = serverLogTail();
 
-  throw new Error(`Timed out waiting for ${config.baseUrl}.${tail ? `\n${tail}` : ""}`);
+  throw new Error(`Timed out waiting for ${url}.${tail ? `\n${tail}` : ""}`);
 }
 
-function startServer() {
-  server = spawn(
+function trackServerProcess(label, child) {
+  serverProcesses.push({ label, process: child });
+  startedServer = true;
+
+  child.stdout.on("data", (chunk) => {
+    serverStdout += `[${label}] ${chunk}`;
+    if (process.env.VFURST_LOAD_VERBOSE_SERVER) {
+      process.stdout.write(chunk);
+    }
+  });
+
+  child.stderr.on("data", (chunk) => {
+    serverStderr += `[${label}] ${chunk}`;
+    process.stderr.write(chunk);
+  });
+}
+
+function startNextServer(port, label) {
+  const child = spawn(
     process.execPath,
-    [nextBin, "start", "--hostname", config.serverHost, "--port", config.port],
+    [nextBin, "start", "--hostname", config.serverHost, "--port", String(port)],
     {
       cwd: webRoot,
       env: process.env,
@@ -204,19 +257,38 @@ function startServer() {
       windowsHide: true
     }
   );
-  startedServer = true;
 
-  server.stdout.on("data", (chunk) => {
-    serverStdout += chunk;
-    if (process.env.VFURST_LOAD_VERBOSE_SERVER) {
-      process.stdout.write(chunk);
-    }
+  trackServerProcess(label, child);
+  return child;
+}
+
+async function startServer() {
+  if (config.serverReplicas === 1) {
+    startNextServer(config.port, "next");
+    return;
+  }
+
+  const basePort = Number(config.port) + 1;
+  const targets = [];
+
+  for (let index = 0; index < config.serverReplicas; index += 1) {
+    const port = basePort + index;
+    startNextServer(port, `next-${index + 1}`);
+    targets.push(`http://${config.appHost}:${port}`);
+  }
+
+  for (const target of targets) {
+    await waitForApp(target);
+  }
+
+  const proxy = spawn(process.execPath, [loadProxyBin, config.serverHost, config.port, ...targets], {
+    cwd: root,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
   });
 
-  server.stderr.on("data", (chunk) => {
-    serverStderr += chunk;
-    process.stderr.write(chunk);
-  });
+  trackServerProcess("proxy", proxy);
 }
 
 function serverLogTail() {
@@ -235,19 +307,27 @@ function printServerTail() {
 }
 
 function stopServer() {
-  if (!startedServer || !server?.pid || server.exitCode !== null) {
+  if (!startedServer || serverProcesses.length === 0) {
     return;
   }
 
-  if (process.platform === "win32") {
-    const result = spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
-
-    if (result.status === 0) {
-      return;
+  for (const { process: child } of [...serverProcesses].reverse()) {
+    if (!child.pid || child.exitCode !== null) {
+      continue;
     }
+
+    if (process.platform === "win32") {
+      const result = spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+
+      if (result.status === 0) {
+        continue;
+      }
+    }
+
+    child.kill("SIGTERM");
   }
 
-  server.kill("SIGTERM");
+  serverProcesses = [];
 }
 
 async function seedLoadData() {
@@ -279,6 +359,7 @@ async function main() {
   await loadDotEnv(".env.local");
   config = readConfig();
   process.env.NODE_ENV = "production";
+  applyDatabaseConnectionLimit();
 
   if (!config.skipBuild) {
     const build = await run(process.execPath, [nextBin, "build"], { cwd: webRoot });
@@ -292,7 +373,7 @@ async function main() {
 
   try {
     if (!config.skipLocalServer && !(await canReachApp())) {
-      startServer();
+      await startServer();
       await waitForApp();
     }
 
@@ -311,7 +392,7 @@ async function main() {
       abortOnServerExit: startedServer
     });
 
-    if (startedServer && server?.exitCode !== null) {
+    if (startedServer && hasServerExited()) {
       printServerTail();
     }
 

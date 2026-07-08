@@ -25,8 +25,20 @@ type CheckInRow = {
   addOns: string[];
 };
 
-export function CheckInPanel({ rows }: { rows: CheckInRow[] }) {
-  const [query, setQuery] = useState("");
+export function CheckInPanel({
+  rows,
+  initialQuery,
+  pageSize,
+  resultCount,
+  totalCount
+}: {
+  rows: CheckInRow[];
+  initialQuery: string;
+  pageSize: number;
+  resultCount: number;
+  totalCount: number;
+}) {
+  const [query, setQuery] = useState(initialQuery);
   const [scannerMessage, setScannerMessage] = useState("Ready for camera or USB scanner input.");
   const { online, registrationState } = useServiceWorker();
   const filtered = useMemo(() => {
@@ -64,26 +76,32 @@ export function CheckInPanel({ rows }: { rows: CheckInRow[] }) {
       </div>
 
       <section className="vf-section">
-        <div className="vf-form-grid">
+        <form method="get" className="vf-form-grid">
           <label>
             Search or scan
             <input
               autoFocus
+              name="q"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Name, email, badge number, QR code, or registration ID"
             />
           </label>
           <div className="vf-scanner-control">
+            <Button label="Search" type="submit" variant="primary" />
             <Button label="Start camera scan" type="button" onClick={startCameraScan} />
             <small className="vf-muted">{scannerMessage}</small>
           </div>
-        </div>
+        </form>
         <video id="vf-checkin-video" className="vf-scan-video" muted playsInline />
       </section>
 
       <section className="vf-section">
         <h2>Attendees</h2>
+        <p className="vf-muted">
+          Loaded {rows.length} of {initialQuery ? resultCount : totalCount} attendee records
+          {totalCount > pageSize ? ` (${totalCount} total)` : ""}.
+        </p>
         <div className="vf-checkin-list">
           {filtered.map((row) => (
             <article key={row.id} className="vf-checkin-row">

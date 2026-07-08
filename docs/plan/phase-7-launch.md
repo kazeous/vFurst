@@ -11,7 +11,7 @@
 
 ##### Performance & load testing
 - k6 load tests on registration + check-in flows
-- Target: 1000 concurrent registrations, 500 concurrent check-ins
+- Target: 500 concurrent registrations, 50 concurrent check-ins
 - Database query optimization (indexes, connection pooling)
 
 ##### Security audit

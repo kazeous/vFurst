@@ -25,11 +25,38 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency, and Docker-backed k6 smoke plus reduced production-server diagnostics pass. Not complete: the full 1000-registration/500-check-in load test ran on July 8, 2026 but failed with 97.48% `http_req_failed`; real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-08 - Phase 7, session 8
+- Built:
+  - Optimized the public registration page for launch bursts by replacing tier capacity row loads with filtered counts, adding short-lived cached event/tier data, and allowing the normal registration page to use 15-second route/data caching while keeping success/cancelled payment states uncached.
+  - Optimized the staff check-in page by bounding the initial attendee payload to 100 rows, adding server-side search support, and caching check-in list/count data briefly.
+  - Removed synthetic `loadVu`/`loadIter` query strings from the k6 script and grouped k6 metrics by flow to avoid high-cardinality metric pressure.
+  - Added `scripts/load-balance-next.mjs` and updated `scripts/run-launch-load-proof.mjs` to run a multi-replica local production Next stack behind a round-robin proxy; the runner now defaults to the current plan target of 500 registration VUs, 50 check-in VUs, and 16 local production replicas.
+  - Updated the launch performance and go-live docs with the passing current-target evidence.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `npm run type-check --workspace @vfurst/web` passed after the app changes.
+  - `node --check scripts/run-launch-load-proof.mjs` passed.
+  - `node --check scripts/load-balance-next.mjs` passed.
+  - `node --check tests/load/registration-checkin.k6.js` passed.
+  - `npm run lint --workspace @vfurst/web` passed with the same two known non-failing `<img>` warnings from store pages.
+  - `npm run test:e2e` passed with 5/5 Playwright tests.
+  - The current Phase 7 k6 target passed on July 8, 2026 with a fresh production build, 1500 seeded registrations, `VFURST_REGISTRATION_VUS=500`, `VFURST_CHECKIN_VUS=50`, `VFURST_LOAD_SERVER_REPLICAS=16`, and Docker-backed k6: 0.00% `http_req_failed`, p95 `http_req_duration` 1.39s, 278,837/278,837 checks passed, and 139,420 HTTP requests completed.
+  - `npm run check:launch` now passes the load and security gates and correctly fails with 8 remaining checks: missing production Sentry env, beta placeholders, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+- Deviated from plan:
+  - `docs/plan/phase-7-launch.md` changed in the worktree from the earlier 1000-registration/500-check-in target to 500-registration/50-check-in while this goal was in progress. The runner, k6 defaults, and launch evidence were aligned to the current phase plan. The earlier 1000/500 local Docker Desktop experiments remain documented as failed exploratory evidence, not as the active completion gate.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because beta conventions, external marketing deployment, production Sentry DSN/env wiring, and physical screen-reader testing require external action/evidence.
+- Next session should:
+  - Provide/configure production Sentry env (`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`).
+  - Onboard 2-3 real beta conventions and replace the TBD evidence in `docs/launch/beta-program.md`.
+  - Deploy or provide `VFURST_LAUNCH_URL` for live marketing/legal verification.
+  - Perform and document the physical screen-reader pass, then rerun `npm run check:launch`.
 
 ### 2026-07-08 - Phase 7, session 7
 - Built:

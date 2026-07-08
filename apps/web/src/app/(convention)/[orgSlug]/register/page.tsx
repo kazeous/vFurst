@@ -1,11 +1,84 @@
 import { createRegistration } from "@/actions/registration-actions";
-import { getConventionOrg } from "@/lib/convention";
 import { formatCurrency, getScheduledPrice } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@astryxdesign/core/Button";
+import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 15;
+
+const getPublicRegistrationData = unstable_cache(
+  async (orgSlug: string) => {
+    const org = await prisma.organization.findFirst({
+      where: {
+        OR: [{ subdomain: orgSlug }, { slug: orgSlug }, { customDomain: orgSlug.toLowerCase() }]
+      },
+      select: {
+        id: true,
+        name: true,
+        subdomain: true
+      }
+    });
+
+    if (!org) {
+      return null;
+    }
+
+    const event = await prisma.event.findFirst({
+      where: {
+        orgId: org.id,
+        status: "PUBLISHED"
+      },
+      orderBy: {
+        startDate: "asc"
+      },
+      select: {
+        id: true,
+        description: true,
+        endDate: true,
+        name: true,
+        startDate: true,
+        venue: true,
+        registrationTypes: {
+          orderBy: {
+            sortOrder: "asc"
+          },
+          select: {
+            id: true,
+            maxCapacity: true,
+            name: true,
+            price: true,
+            scheduledPricing: true,
+            addOns: {
+              orderBy: {
+                sortOrder: "asc"
+              }
+            },
+            _count: {
+              select: {
+                registrations: {
+                  where: {
+                    status: {
+                      not: "CANCELLED"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return { event, org };
+  },
+  ["public-registration-page"],
+  { revalidate: 15 }
+);
+
+function formatEventDate(value: Date | string) {
+  return new Date(value).toLocaleDateString();
+}
 
 export default async function PublicRegistrationPage({
   params,
@@ -15,36 +88,19 @@ export default async function PublicRegistrationPage({
   searchParams: Promise<{ success?: string; cancelled?: string }>;
 }) {
   const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
-  const org = await getConventionOrg(orgSlug);
+  const hasStatusQuery = Boolean(query.success || query.cancelled);
 
-  if (!org) {
+  if (hasStatusQuery) {
+    noStore();
+  }
+
+  const data = await getPublicRegistrationData(orgSlug);
+
+  if (!data) {
     notFound();
   }
 
-  const event = await prisma.event.findFirst({
-    where: {
-      orgId: org.id,
-      status: "PUBLISHED"
-    },
-    orderBy: {
-      startDate: "asc"
-    },
-    include: {
-      registrationTypes: {
-        orderBy: {
-          sortOrder: "asc"
-        },
-        include: {
-          addOns: {
-            orderBy: {
-              sortOrder: "asc"
-            }
-          },
-          registrations: true
-        }
-      }
-    }
-  });
+  const { event, org } = data;
 
   const successRegistration = query.success
     ? await prisma.registration.findUnique({
@@ -101,13 +157,15 @@ export default async function PublicRegistrationPage({
           <input type="hidden" name="orgId" value={org.id} />
           <input type="hidden" name="eventId" value={event.id} />
           <div>
-            <p className="vf-label">{event.startDate.toLocaleDateString()} - {event.endDate.toLocaleDateString()}</p>
+            <p className="vf-label">
+              {formatEventDate(event.startDate)} - {formatEventDate(event.endDate)}
+            </p>
             <h2>{event.name}</h2>
             <p className="vf-muted">{event.description ?? event.venue ?? "Choose a registration tier to continue."}</p>
           </div>
           <div className="vf-tier-grid">
             {event.registrationTypes.map((type, index) => {
-              const activeCount = type.registrations.filter((registration) => registration.status !== "CANCELLED").length;
+              const activeCount = type._count.registrations;
               const soldOut = type.maxCapacity != null && activeCount >= type.maxCapacity;
               const price = getScheduledPrice(type.price, type.scheduledPricing);
 

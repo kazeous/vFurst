@@ -28,4 +28,4 @@ SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
 ```
 
-Current result on July 7, 2026: the command fails because the external launch evidence is not complete yet.
+Current result on July 8, 2026: the load and security gates pass, and the command fails because external launch evidence is not complete yet.

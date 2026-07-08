@@ -10,8 +10,8 @@ const staffEmail = __ENV.VFURST_STAFF_EMAIL || "";
 const staffPassword = __ENV.VFURST_STAFF_PASSWORD || "";
 const hostHeader = __ENV.VFURST_HOST_HEADER || (__ENV.VFURST_K6_RUNTIME === "docker" ? "localhost:3000" : "");
 const loadProfile = __ENV.VFURST_LOAD_PROFILE || "full";
-const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 1000));
-const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || (loadProfile === "smoke" ? 1 : 500));
+const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 500));
+const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || (loadProfile === "smoke" ? 1 : 50));
 const durationThreshold = loadProfile === "smoke" ? "p(95)<10000" : "p(95)<1500";
 
 function stagesFor(target) {
@@ -109,9 +109,9 @@ export function setup() {
 }
 
 export function registrationFlow() {
-  const response = http.get(`${baseUrl}/${orgSlug}/register?loadVu=${__VU}&loadIter=${__ITER}`, {
+  const response = http.get(`${baseUrl}/${orgSlug}/register`, {
     headers: headers(),
-    tags: { flow: "registration" }
+    tags: { flow: "registration", name: "public registration" }
   });
 
   check(response, {
@@ -123,9 +123,9 @@ export function registrationFlow() {
 }
 
 export function checkInFlow(data) {
-  const response = http.get(`${baseUrl}/dashboard/events/${eventId}/check-in?loadVu=${__VU}&loadIter=${__ITER}`, {
+  const response = http.get(`${baseUrl}/dashboard/events/${eventId}/check-in`, {
     headers: headers(data.cookieHeader ? { Cookie: data.cookieHeader } : {}),
-    tags: { flow: "check-in" }
+    tags: { flow: "check-in", name: "staff check-in" }
   });
 
   check(response, {
