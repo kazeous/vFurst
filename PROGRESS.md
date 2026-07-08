@@ -31,6 +31,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 12
+- Built:
+  - Added blank `VFURST_LAUNCH_URL` and `VFURST_API_RATE_LIMIT_PER_MINUTE` placeholders to `.env.example`.
+  - Added blank Phase 7 launch monitoring and pressure-control placeholders to the tracked `.env.local` template so local launch-readiness checks expose the required names without passing on placeholder values.
+  - Updated `docs/launch/go-live-checklist.md` to call out Sentry sample-rate and fixed-window rate-limit tuning, and to state that blank placeholders are not sufficient for launch readiness.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Confirmed root `.env` is ignored and not tracked; `.env.example`, `.env.local`, and `packages/db/.env` are the tracked environment files.
+  - Confirmed `.env.example` and `.env.local` now contain the Phase 7 launch variable names while leaving Sentry and `VFURST_LAUNCH_URL` values blank.
+  - `npm run check:launch` still correctly fails with 8 remaining checks: missing production Sentry env, fewer than two externally verified beta conventions, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+  - `git diff --check` passed with only line-ending normalization warnings from Git on this Windows workspace.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the remaining gates require external production/beta/accessibility evidence that is not present in the repo or local env files.
+- Next session should:
+  - Provide/configure production Sentry env, real beta convention evidence, `VFURST_LAUNCH_URL`, and physical screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 11
 - Built:
   - Hardened `scripts/check-launch-readiness.mjs` so beta completion requires at least two named beta slots with `Externally verified` status instead of relying on placeholder wording.
