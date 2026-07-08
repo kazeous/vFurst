@@ -38,4 +38,6 @@ If Cloudflare proxies the Coolify domain, set Cloudflare SSL/TLS mode to `Full` 
 
 Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 
+Sentry source map upload is best-effort during `next build`: upload failures are logged as warnings so a bad token does not block deployment. If Coolify logs `sentry reported an error: You do not have permission to perform this action. (http status: 403)`, recreate or rotate `SENTRY_AUTH_TOKEN` in the same Sentry organization as `SENTRY_ORG`, confirm `SENTRY_PROJECT` is the exact project slug, and give the token release/source-map upload permissions before redeploying.
+
 Current result on July 8, 2026: the load and security gates pass, and the command fails because external launch evidence is not complete yet.

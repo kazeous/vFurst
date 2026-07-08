@@ -31,6 +31,24 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 21
+- Built:
+  - Hardened the web production build against clean Coolify/Nixpacks resolution by adding webpack extension aliases in `apps/web/next.config.ts`, allowing `.js` ESM specifiers in local TypeScript workspace packages to resolve to `.ts` source during the Next build.
+  - Made Sentry source map upload failures best-effort during `next build` by adding a Sentry `errorHandler` that logs the upload error instead of aborting the deployment.
+  - Added Coolify Sentry `403` guidance to `docs/launch/go-live-checklist.md`.
+- Verified:
+  - Re-read `PROGRESS.md` before diagnosing the Coolify deployment log.
+  - Inspected `C:\Users\Kazeous\Downloads\deployment-u3lsmwuqw6ykkgv7ule1pcym-all-logs-2026-07-08-15-23-13.txt`.
+  - Identified the two deployment blockers: Sentry source map upload returned HTTP 403, and Next could not resolve `.js` import specifiers from `packages/email/src/index.ts` during the web build.
+  - Inspected `packages/email/package.json`, `packages/email/src/index.ts`, `packages/email/tsconfig.build.json`, `apps/web/tsconfig.json`, root `tsconfig.base.json`, `apps/web/package.json`, and `turbo.json`.
+  - `npm run type-check --workspace @vfurst/web` passed via the Windows `npm.cmd` shim.
+  - `npx turbo run build --filter=@vfurst/web... --env-mode=loose` passed via the Windows `npx.cmd` shim, matching the Coolify build command shape.
+- Remaining issues / blockers:
+  - Coolify should still rotate or recreate `SENTRY_AUTH_TOKEN` with permission to upload source maps for the configured `SENTRY_ORG` and `SENTRY_PROJECT`.
+  - Production DNS/proxy settings still need live verification after redeploy.
+- Next session should:
+  - Push and redeploy this build fix, confirm the web image builds successfully in Coolify, then verify `https://vfurst.reyuugames.com/` reaches HTTP 200 after Cloudflare/Coolify SSL settings are corrected.
+
 ### 2026-07-08 - Phase 7, session 20
 - Built:
   - Documented the Cloudflare/Coolify SSL redirect-loop failure mode in `docs/launch/go-live-checklist.md`.
