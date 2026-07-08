@@ -31,6 +31,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 22
+- Built:
+  - Added a convention-route guard in `apps/web/src/lib/convention.ts` so static-file-like slugs such as `favicon.ico` do not query the organization table.
+  - Documented the production database bootstrap step in `docs/launch/go-live-checklist.md`.
+- Verified:
+  - Re-read `PROGRESS.md` before continuing deployment diagnosis.
+  - Opened the shared Sentry issue and confirmed the production exception is `PrismaClientKnownRequestError`: `public.organizations` does not exist during `prisma.organization.findFirst()`.
+  - Confirmed the repo has `packages/db/prisma/schema.prisma` but no committed `packages/db/prisma/migrations` directory, so the first empty production database needs `npx prisma db push` rather than `prisma migrate deploy`.
+  - Confirmed live `/login` returns HTTP 200 and `/api/auth/session` returns HTTP 200, while `/favicon.ico` currently produces a server error because the deployed build routes it through the convention slug path.
+  - `npm run type-check --workspace @vfurst/web` passed via the Windows `npm.cmd` shim.
+- Remaining issues / blockers:
+  - Production PostgreSQL schema has not been initialized. Run `cd packages/db && npx prisma db push` in a Coolify shell/job using the same production `DATABASE_URL` as the web app.
+  - After schema bootstrap, create the first admin/user account or seed production-safe launch data before expecting credential login to succeed.
+- Next session should:
+  - Run the production DB bootstrap in Coolify, redeploy the route-guard build if needed, then test login again and verify Sentry no longer reports missing-table errors.
+
 ### 2026-07-08 - Phase 7, session 21
 - Built:
   - Hardened the web production build against clean Coolify/Nixpacks resolution by adding webpack extension aliases in `apps/web/next.config.ts`, allowing `.js` ESM specifiers in local TypeScript workspace packages to resolve to `.ts` source during the Next build.

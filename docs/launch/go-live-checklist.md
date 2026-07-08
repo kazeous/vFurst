@@ -36,6 +36,15 @@ For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH
 
 If Cloudflare proxies the Coolify domain, set Cloudflare SSL/TLS mode to `Full` or `Full (strict)`, not `Flexible`. A `Flexible` edge connection can loop forever when Coolify or Traefik redirects the origin request back to HTTPS. The symptom is `curl -I https://vfurst.reyuugames.com/` returning `302` or `307` with `Location: https://vfurst.reyuugames.com/` repeatedly. Temporarily disabling the orange-cloud proxy is a useful isolation test; if the direct DNS path works, fix the Cloudflare SSL mode before re-enabling the proxy.
 
+Production database schema must be bootstrapped before login, dashboard, or convention routes can work. This repo currently has a Prisma schema but no committed `packages/db/prisma/migrations` directory, so the first empty production database should be initialized from the web or worker Coolify shell with the same `DATABASE_URL` used at runtime:
+
+```bash
+cd packages/db
+npx prisma db push
+```
+
+If production already contains real data, take a backup before running schema changes. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
+
 Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 
 Sentry source map upload is best-effort during `next build`: upload failures are logged as warnings so a bad token does not block deployment. If Coolify logs `sentry reported an error: You do not have permission to perform this action. (http status: 403)`, recreate or rotate `SENTRY_AUTH_TOKEN` in the same Sentry organization as `SENTRY_ORG`, confirm `SENTRY_PROJECT` is the exact project slug, and give the token release/source-map upload permissions before redeploying.
