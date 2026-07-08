@@ -19,6 +19,9 @@ apps/web/public/sw.js
 !.env.example
 !.env.local
 !packages/db/.env
+.env
+.env.*
+!.env.example
 
 # Logs
 *.log
