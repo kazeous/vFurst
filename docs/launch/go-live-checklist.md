@@ -28,6 +28,6 @@ SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
 ```
 
-Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank launch placeholders are not sufficient; `npm run check:launch` requires real non-empty Sentry values and a reachable live URL.
+Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 
 Current result on July 8, 2026: the load and security gates pass, and the command fails because external launch evidence is not complete yet.

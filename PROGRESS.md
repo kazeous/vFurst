@@ -31,6 +31,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 13
+- Built:
+  - Hardened `scripts/check-launch-readiness.mjs` so Sentry env gates reject blank and obvious placeholder values instead of accepting any non-empty string.
+  - Added Sentry DSN URL shape validation for `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_DSN`.
+  - Updated `docs/launch/go-live-checklist.md` to document that placeholder launch values are rejected.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+  - `npm run check:launch` still correctly fails with 8 remaining checks: missing production Sentry env, fewer than two externally verified beta conventions, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+  - A placeholder-env run with Sentry values set to `...` still failed the Sentry env gates.
+  - `git diff --check` passed with only line-ending normalization warnings from Git on this Windows workspace.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the remaining gates require external production/beta/accessibility evidence that is not present in the repo or local env files.
+- Next session should:
+  - Provide/configure production Sentry env, real beta convention evidence, `VFURST_LAUNCH_URL`, and physical screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 12
 - Built:
   - Added blank `VFURST_LAUNCH_URL` and `VFURST_API_RATE_LIMIT_PER_MINUTE` placeholders to `.env.example`.

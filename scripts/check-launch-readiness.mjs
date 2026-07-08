@@ -22,11 +22,26 @@ const requiredFiles = [
 ];
 
 const requiredEnv = [
-  "NEXT_PUBLIC_SENTRY_DSN",
-  "SENTRY_DSN",
-  "SENTRY_ORG",
-  "SENTRY_PROJECT",
-  "SENTRY_AUTH_TOKEN"
+  {
+    name: "NEXT_PUBLIC_SENTRY_DSN",
+    type: "sentry-dsn"
+  },
+  {
+    name: "SENTRY_DSN",
+    type: "sentry-dsn"
+  },
+  {
+    name: "SENTRY_ORG",
+    type: "text"
+  },
+  {
+    name: "SENTRY_PROJECT",
+    type: "text"
+  },
+  {
+    name: "SENTRY_AUTH_TOKEN",
+    type: "text"
+  }
 ];
 
 const marketingPaths = [
@@ -109,6 +124,63 @@ function fail(failures, message) {
 async function fileIncludes(path, text) {
   const content = await readFile(path, "utf8");
   return content.includes(text);
+}
+
+function isPlaceholderValue(value) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    !normalized ||
+    normalized === "..." ||
+    normalized === "example" ||
+    normalized === "replace_me" ||
+    normalized === "replace-me" ||
+    normalized === "replace-with-real-value" ||
+    normalized === "your-production-domain.example" ||
+    normalized.includes("_replace_me") ||
+    normalized.startsWith("replace-with-") ||
+    normalized.startsWith("your-")
+  );
+}
+
+function validateSentryDsn(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return `${name} must be an HTTP(S) Sentry DSN.`;
+    }
+
+    if (!url.hostname || !url.username) {
+      return `${name} does not look like a Sentry DSN.`;
+    }
+  } catch {
+    return `${name} must be a valid Sentry DSN URL.`;
+  }
+
+  return null;
+}
+
+function validateTextEnv(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  return null;
+}
+
+function validateRequiredEnv({ name, type }) {
+  const value = process.env[name] ?? "";
+
+  if (type === "sentry-dsn") {
+    return validateSentryDsn(name, value);
+  }
+
+  return validateTextEnv(name, value);
 }
 
 async function readText(path) {
@@ -204,11 +276,13 @@ async function main() {
     }
   }
 
-  for (const name of requiredEnv) {
-    if (process.env[name]) {
-      ok(`${name} is configured.`);
+  for (const envConfig of requiredEnv) {
+    const error = validateRequiredEnv(envConfig);
+
+    if (error) {
+      fail(failures, error);
     } else {
-      fail(failures, `${name} is not configured.`);
+      ok(`${envConfig.name} is configured.`);
     }
   }
 
