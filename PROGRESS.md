@@ -25,11 +25,31 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, critical-path E2E coverage, and automated launch accessibility smoke coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-08 - Phase 7, session 10
+- Built:
+  - Added `tests/e2e/launch-accessibility-smoke.spec.ts`, a deterministic Playwright smoke suite for launch accessibility evidence across marketing, pricing, public registration, public vendor application, and staff check-in surfaces.
+  - Updated `scripts/check-launch-readiness.mjs` so the new launch accessibility smoke spec is a required Phase 7 artifact.
+  - Updated `docs/launch/accessibility-audit.md` with the July 8 automated accessibility smoke evidence while keeping the physical screen-reader pass unresolved.
+  - Hardened launch critical-path E2E waits around Auth.js/server-action redirects so cold dev-server runs wait up to 15 seconds for dashboard, registration-success, and vendor-success navigation.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Rechecked `.env` and `.env.local` without printing secret values; neither file currently contains `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, or `VFURST_LAUNCH_URL`.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+  - Focused accessibility smoke passed: `npm run test:e2e -- --project=chromium tests/e2e/launch-accessibility-smoke.spec.ts` passed 3/3 tests.
+  - Targeted critical-path rerun passed after wait hardening: `npm run test:e2e -- --project=chromium tests/e2e/launch-critical-paths.spec.ts` passed 4/4 tests.
+  - Full E2E suite passed: `npm run test:e2e` passed 8/8 tests.
+  - `npm run check:launch` now requires the new accessibility smoke artifact and still correctly fails with 8 remaining checks: missing production Sentry env, beta placeholders, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+  - `git diff --check` passed with only line-ending normalization warnings from Git on this Windows workspace.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the remaining gates require external production/beta/accessibility evidence that is not present in the repo or local env files.
+- Next session should:
+  - Provide/configure production Sentry env, real beta convention evidence, `VFURST_LAUNCH_URL`, and physical screen-reader evidence, then rerun `npm run check:launch`.
 
 ### 2026-07-08 - Phase 7, session 9
 - Built:
@@ -734,4 +754,4 @@ Legend: Not started - In progress - Verified complete
 - No Phase 4 blockers remain.
 - No Phase 5 blockers remain.
 - No Phase 6 blockers remain.
-- Phase 7 remains in progress until the full k6 launch target, beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass are complete.
+- Phase 7 remains in progress until beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass are complete.

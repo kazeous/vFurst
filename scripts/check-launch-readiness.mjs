@@ -17,7 +17,8 @@ const requiredFiles = [
   "docs/launch/performance-load-test.md",
   "scripts/run-launch-load-proof.mjs",
   "tests/load/registration-checkin.k6.js",
-  "tests/e2e/launch-critical-paths.spec.ts"
+  "tests/e2e/launch-critical-paths.spec.ts",
+  "tests/e2e/launch-accessibility-smoke.spec.ts"
 ];
 
 const requiredEnv = [

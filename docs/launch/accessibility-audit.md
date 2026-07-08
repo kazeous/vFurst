@@ -1,6 +1,6 @@
 # Phase 7 Accessibility Audit
 
-Date: July 7, 2026
+Date: July 8, 2026
 
 ## Target
 
@@ -21,6 +21,8 @@ WCAG 2.1 AA for core launch paths:
 - Form inputs in launch paths have visible labels.
 - The marketing hero image uses accessible alt text and the headline remains real HTML text.
 - The E2E suite asserts key headings and browser-visible flow completion for registration, vendor application, admin CRUD, and check-in.
+- `tests/e2e/launch-accessibility-smoke.spec.ts` adds automated smoke coverage for `html[lang]`, main and navigation landmarks, marketing image alt text, keyboard tab order, pricing calculator range labels, public registration and vendor form labels, and staff check-in search/action names.
+- Latest automated run: `npm run test:e2e -- --project=chromium tests/e2e/launch-accessibility-smoke.spec.ts` passed 3/3 tests on July 8, 2026.
 
 ## Manual checklist
 

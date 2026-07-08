@@ -104,8 +104,11 @@ async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/dashboard$/, { timeout: 15_000 }),
+    page.getByRole("button", { name: "Log in" }).click()
+  ]);
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 15_000 });
 }
 
 async function ensureConfirmedRegistration() {
@@ -180,7 +183,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   await page.getByLabel("Email").fill(attendeeEmail);
   await page.getByRole("button", { name: "Continue to Stripe Checkout" }).click();
 
-  await expect(page).toHaveURL(/success=/);
+  await expect(page).toHaveURL(/success=/, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
 
   const registration = await prisma.registration.findFirstOrThrow({
@@ -213,7 +216,7 @@ test("public vendor application submits for organizer review", async ({ page }) 
   await page.getByLabel("Product description").fill("Original convention merchandise and attendee accessories.");
   await page.getByRole("button", { name: "Submit vendor application" }).click();
 
-  await expect(page).toHaveURL(/success=/);
+  await expect(page).toHaveURL(/success=/, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
 
   const application = await prisma.vendorApplication.findFirstOrThrow({
