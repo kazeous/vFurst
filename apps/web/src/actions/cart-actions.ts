@@ -306,7 +306,7 @@ export async function convertCartToOrder(formData: FormData) {
       eventId: cart.eventId,
       orgId: cart.orgId
     },
-    success_url: `${getBaseUrl()}${successPath}?success=${order.id}`,
+    success_url: `${getBaseUrl()}${successPath}?success=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${getBaseUrl()}${cancelPath}?cancelled=1`
   });
 

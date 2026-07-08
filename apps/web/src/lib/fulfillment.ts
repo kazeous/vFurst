@@ -16,20 +16,29 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
     }
   });
 
-  if (!order || order.status === "PAID") {
+  if (!order || order.status !== "PENDING") {
     return order;
   }
 
+  let transitionedToPaid = false;
+
   await prisma.$transaction(async (tx) => {
-    await tx.order.update({
+    const paidOrder = await tx.order.updateMany({
       where: {
-        id: order.id
+        id: order.id,
+        status: "PENDING"
       },
       data: {
         status: "PAID",
         stripePaymentIntentId: stripePaymentIntentId ?? order.stripePaymentIntentId
       }
     });
+
+    if (paidOrder.count === 0) {
+      return;
+    }
+
+    transitionedToPaid = true;
 
     if (order.voucherId) {
       await tx.voucher.update({
@@ -107,6 +116,14 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
       });
     }
   });
+
+  if (!transitionedToPaid) {
+    return prisma.order.findUnique({
+      where: {
+        id: orderId
+      }
+    });
+  }
 
   const registrationItem = order.items.find((item) => item.itemType === "REGISTRATION" && item.registrationId);
   const hotelItem = order.items.find((item) => item.itemType === "HOTEL");

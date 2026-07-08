@@ -31,6 +31,24 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-09 - Phase 7, checkout success bugfix
+- Built:
+  - Reworked the public store success return page so `?success=` renders a dedicated receipt/lookup state instead of continuing to show the product grid and live cart checkout panel.
+  - Added Stripe Checkout `{CHECKOUT_SESSION_ID}` to cart checkout success URLs and verify that session on return before using it as a fallback fulfillment signal.
+  - Hardened `markOrderPaid` so fulfillment side effects only run for a single `PENDING -> PAID` transition, preventing duplicate stock/cart/voucher mutations if Stripe webhook events and return-page verification overlap.
+  - Added a compact receipt table layout for store order confirmations.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, and `docs/plan/phase-7-launch.md` before editing.
+  - `npm run type-check --workspace @vfurst/web` passed via the Windows `npm.cmd` shim.
+  - `npm run lint --workspace @vfurst/web` passed with the existing `<img>` warnings on store product images.
+  - `npm run build --workspace @vfurst/web` passed; build still reports the known BullMQ dynamic dependency warning.
+  - Started a local production server on `http://127.0.0.1:3000`, verified a store success URL returned HTTP 200 and no longer rendered `Checkout`, `Cart`, or `No products`, then stopped the temporary server.
+- Remaining issues / blockers:
+  - The deployed production store checkout flow still needs to be retested after this fix is deployed.
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Deploy this bugfix, run a real Stripe test checkout against the live convention store, and confirm the success page shows the receipt without a live cart or duplicate checkout path.
+
 ### 2026-07-08 - Phase 7, session 22
 - Built:
   - Added a convention-route guard in `apps/web/src/lib/convention.ts` so static-file-like slugs such as `favicon.ico` do not query the organization table.

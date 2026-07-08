@@ -420,6 +420,11 @@ label {
   padding: 0 18px;
 }
 
+.vf-receipt-table .vf-table-row,
+.vf-receipt-table .vf-table-head {
+  grid-template-columns: minmax(0, 2fr) minmax(90px, 0.6fr) minmax(110px, 0.8fr);
+}
+
 .vf-inline-forms {
   display: flex;
   gap: 8px;
