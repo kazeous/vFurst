@@ -12,6 +12,8 @@ Onboard 2-3 real conventions before public launch, offer discounted or free usag
 | 2 | TBD | Not externally verified | Signed beta agreement, org created, Stripe Connect test/live readiness checked, first event configured |
 | 3 | TBD | Optional | Signed beta agreement, org created, Stripe Connect test/live readiness checked, first event configured |
 
+Completion rule: slots 1 and 2 must name real conventions and use `Externally verified` status before Phase 7 can be marked complete.
+
 ## Onboarding checklist
 
 - Create the organization in vFurst.

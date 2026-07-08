@@ -11,11 +11,11 @@ The checker verifies:
 
 - Marketing, legal, E2E, load-test, and launch audit artifacts exist.
 - Sentry production environment variables are configured.
-- Beta-program slots no longer contain TBD / not externally verified placeholders.
+- At least two beta-program slots name real conventions and use `Externally verified` status.
 - Security audit no longer records a blocking dependency finding.
 - Full k6 target run is documented as passed.
-- Physical screen-reader pass is documented as complete.
-- `VFURST_LAUNCH_URL` returns live marketing/legal routes.
+- Physical screen-reader pass is explicitly documented as complete with tester, assistive-technology, and flow evidence.
+- `VFURST_LAUNCH_URL` returns live marketing/legal routes with expected vFurst launch content.
 
 Required environment:
 

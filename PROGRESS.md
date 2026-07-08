@@ -31,6 +31,23 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 11
+- Built:
+  - Hardened `scripts/check-launch-readiness.mjs` so beta completion requires at least two named beta slots with `Externally verified` status instead of relying on placeholder wording.
+  - Hardened live marketing verification so each `VFURST_LAUNCH_URL` marketing/legal route must return HTTP 200 and include expected vFurst/legal page content.
+  - Added explicit screen-reader completion evidence fields to `docs/launch/accessibility-audit.md` and updated the readiness checker to require `Screen-reader pass: Complete` plus non-placeholder tester, assistive-technology, and flow evidence.
+  - Updated `docs/launch/beta-program.md` and `docs/launch/go-live-checklist.md` to document the stronger evidence rules.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Rechecked `.env` and `.env.local` without printing secret values; neither file currently contains `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, or `VFURST_LAUNCH_URL`.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+  - `npm run check:launch` still correctly fails with 8 remaining checks: missing production Sentry env, fewer than two externally verified beta conventions, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+  - `git diff --check` passed with only line-ending normalization warnings from Git on this Windows workspace.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the remaining gates require external production/beta/accessibility evidence that is not present in the repo or local env files.
+- Next session should:
+  - Provide/configure production Sentry env, real beta convention evidence, `VFURST_LAUNCH_URL`, and physical screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 10
 - Built:
   - Added `tests/e2e/launch-accessibility-smoke.spec.ts`, a deterministic Playwright smoke suite for launch accessibility evidence across marketing, pricing, public registration, public vendor application, and staff check-in surfaces.

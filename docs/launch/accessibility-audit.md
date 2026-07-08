@@ -32,6 +32,13 @@ WCAG 2.1 AA for core launch paths:
 - Text reflows at mobile widths without overlapping controls.
 - Color is not the only indicator for badges, warnings, and status labels.
 
+## Completion evidence
+
+- Screen-reader pass: Incomplete
+- Tester: TBD
+- Assistive technology: TBD
+- Verified flows: TBD
+
 ## Current state
 
 No blocking accessibility issues are known in the Phase 7 launch paths. A physical screen-reader pass should be performed with a beta organizer before public launch because this environment cannot prove assistive-technology behavior by repository inspection alone.
