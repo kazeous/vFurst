@@ -2,6 +2,7 @@
 
 import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
+import { isPlatformHostname } from "@/lib/platform-hosts";
 import { prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -170,8 +171,8 @@ export async function updateCustomDomain(formData: FormData) {
 
   const domain = normalizeCustomDomain(parsed.data.customDomain ?? "");
 
-  if (domain && (!domain.includes(".") || domain.endsWith(".vfurst.app"))) {
-    throw new Error("Use a fully qualified custom domain that is not a vFurst subdomain.");
+  if (domain && (!domain.includes(".") || domain.endsWith(".vfurst.app") || isPlatformHostname(domain))) {
+    throw new Error("Use a fully qualified custom domain that is not a vFurst platform domain.");
   }
 
   await prisma.organization.update({

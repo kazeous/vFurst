@@ -20,6 +20,10 @@ The checker verifies:
 Required environment:
 
 ```bash
+NEXT_PUBLIC_APP_URL=https://your-production-domain.example
+NEXT_PUBLIC_ROOT_DOMAIN=your-production-domain.example
+AUTH_URL=https://your-production-domain.example
+AUTH_TRUST_HOST=true
 NEXT_PUBLIC_SENTRY_DSN=...
 SENTRY_DSN=...
 SENTRY_ORG=...
@@ -27,6 +31,8 @@ SENTRY_PROJECT=...
 SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
 ```
+
+For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `VFURST_LAUNCH_URL` should all point at the platform marketing domain, for example `https://vfurst.reyuugames.com` for URL values and `vfurst.reyuugames.com` for `NEXT_PUBLIC_ROOT_DOMAIN`. If the root domain is left at the local/default value, middleware can treat the production marketing domain as a convention custom domain and cause proxy-visible redirect/routing failures.
 
 Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 

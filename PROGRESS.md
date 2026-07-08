@@ -31,6 +31,26 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 18
+- Built:
+  - Added shared platform-host detection in `apps/web/src/lib/platform-hosts.ts`.
+  - Updated middleware so hosts from `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `VFURST_LAUNCH_URL` are treated as platform hosts instead of convention custom domains.
+  - Updated organization resolution to use the same platform-host logic.
+  - Prevented organization custom-domain settings from claiming platform hostnames.
+  - Added `AUTH_TRUST_HOST=true` to tracked env templates and documented the Coolify production env set in `docs/launch/go-live-checklist.md`.
+- Verified:
+  - Re-read `PROGRESS.md` before editing.
+  - Diagnosed the likely Coolify redirect/routing issue: if production keeps `NEXT_PUBLIC_ROOT_DOMAIN` at the local/default value, `vfurst.reyuugames.com` can be interpreted as a custom convention domain rather than the platform marketing host.
+  - `npm run type-check --workspace @vfurst/web` passed.
+  - `npm run build` passed with root `.env` explicitly loaded.
+  - Reran `npm run type-check --workspace @vfurst/web` after final host parsing hardening; it passed.
+  - Reran `npm run build` after the final host parsing hardening; it passed.
+- Remaining issues / blockers:
+  - Coolify must set production URL/host env values at build and runtime: `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, `AUTH_TRUST_HOST`, and `VFURST_LAUNCH_URL`.
+  - Phase 7 still needs beta-convention evidence, physical screen-reader evidence, and live marketing verification against `https://vfurst.reyuugames.com` before `npm run check:launch` can pass.
+- Next session should:
+  - Redeploy with the production env values, verify `https://vfurst.reyuugames.com` no longer loops, then rerun `npm run check:launch` after external launch evidence is documented.
+
 ### 2026-07-08 - Phase 7, session 17
 - Built:
   - Removed the homepage hero image from `apps/web/src/app/page.tsx`.

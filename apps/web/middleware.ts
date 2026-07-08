@@ -1,22 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getRootDomain, isPlatformHostname, normalizeHostname } from "./src/lib/platform-hosts";
 
-const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "vfurst.app";
-const APP_HOST = `app.${ROOT_DOMAIN}`;
+const ROOT_DOMAIN = getRootDomain();
 
 function getHostname(request: NextRequest) {
-  return (request.headers.get("host") ?? "").split(":")[0]?.toLowerCase() ?? "";
+  return normalizeHostname(request.headers.get("host") ?? "");
 }
 
 export function middleware(request: NextRequest) {
   const hostname = getHostname(request);
   const pathname = request.nextUrl.pathname;
-  const isPlatformHost = hostname === ROOT_DOMAIN || hostname === APP_HOST || hostname === "localhost" || hostname === "127.0.0.1";
 
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.includes(".") ||
-    isPlatformHost
+    isPlatformHostname(hostname)
   ) {
     return NextResponse.next();
   }
