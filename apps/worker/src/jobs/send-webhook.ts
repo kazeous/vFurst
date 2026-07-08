@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { prisma } from "@vfurst/db";
 import type { Job } from "bullmq";
-import type { SendWebhookJob } from "../queues";
+import type { SendWebhookJob } from "../queues.js";
 
 function signature(secret: string, body: string, timestamp: number) {
   return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");

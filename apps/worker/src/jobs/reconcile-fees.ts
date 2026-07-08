@@ -1,6 +1,6 @@
 import { prisma } from "@vfurst/db";
 import type { Job } from "bullmq";
-import type { ReconcileFeesJob } from "../queues";
+import type { ReconcileFeesJob } from "../queues.js";
 
 const ATTENDEE_FEE_CENTS = 100;
 const HOTEL_BOOKING_FEE_CENTS = 100;

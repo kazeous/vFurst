@@ -31,6 +31,33 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 19
+- Built:
+  - Prepared `@vfurst/worker` for standalone Coolify background-worker deployment.
+  - Added real production TypeScript emit for the worker via `apps/worker/tsconfig.build.json`, compiling ESM JavaScript and source maps into `apps/worker/dist`.
+  - Updated worker scripts so `dev` remains `tsx watch`, `build` emits production JavaScript, `start` runs `node dist/index.js`, and `type-check` remains no-emit TypeScript.
+  - Added production build outputs for the runtime workspace packages `@vfurst/db` and `@vfurst/email` so the compiled worker can import package JavaScript with Node instead of TypeScript source.
+  - Added worker runtime environment validation for database, Redis, AWS, and S3 requirements, with no production localhost fallbacks.
+  - Reworked worker startup and shutdown so SIGTERM/SIGINT are idempotent and graceful: workers stop accepting jobs, active BullMQ workers close, queue events close, queues close, the optional health server closes, and Prisma disconnects.
+  - Made the worker health endpoint opt-in via `WORKER_HEALTH_PORT`; the worker no longer requires an HTTP port or public domain to stay alive.
+  - Confirmed badge generation uses S3 object storage and does not depend on a web-container-local upload directory.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Inspected `apps/worker/package.json`, `apps/worker/tsconfig.json`, `apps/worker/src/index.ts`, root/package tsconfig files, `turbo.json`, and all worker imports/runtime dependencies.
+  - `npm run build --workspace @vfurst/worker` passed via the Windows `npm.cmd` shim.
+  - `npm run type-check --workspace @vfurst/worker` passed via the Windows `npm.cmd` shim.
+  - `npm test --workspace @vfurst/worker` passed via the Windows `npm.cmd` shim; no worker tests exist yet, so Vitest exited successfully with `--passWithNoTests`.
+  - `npx turbo run build --filter=@vfurst/worker...` passed via the Windows `npx.cmd` shim.
+  - `npm run lint --workspace @vfurst/worker` passed via the Windows `npm.cmd` shim.
+  - Direct `node apps\worker\dist\index.js` smoke loaded the compiled entry and exited non-zero with the expected missing-runtime-env configuration error.
+- Remaining issues / blockers:
+  - Coolify must configure the worker as a separate application resource with no public domain and with required runtime env values: `DATABASE_URL`, `REDIS_URL`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `S3_BUCKET_NAME`.
+  - Production must run Prisma migrations against the target PostgreSQL database before starting the worker.
+  - External services required before worker start: PostgreSQL, Redis, AWS S3 credentials/bucket, and SES or per-organization SMTP settings for email delivery.
+  - Phase 7 still needs beta-convention evidence, physical screen-reader evidence, and live marketing verification against `https://vfurst.reyuugames.com` before `npm run check:launch` can pass.
+- Next session should:
+  - Configure the separate Coolify worker resource with build command `npm run build --workspace @vfurst/worker`, start command `npm run start --workspace @vfurst/worker`, and the required runtime environment variables; then verify the deployed worker stays running and processes queued jobs.
+
 ### 2026-07-08 - Phase 7, session 18
 - Built:
   - Added shared platform-host detection in `apps/web/src/lib/platform-hosts.ts`.

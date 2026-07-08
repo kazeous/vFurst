@@ -1,38 +1,145 @@
-import { Worker } from "bullmq";
-import { createServer } from "node:http";
-import { connection, reconcileQueue } from "./queues";
-import { processGenerateBadges } from "./jobs/generate-badges";
-import { processReconcileFees } from "./jobs/reconcile-fees";
-import { processSendEmail } from "./jobs/send-email";
-import { processSendWebhook } from "./jobs/send-webhook";
+import { prisma } from "@vfurst/db";
+import { QueueEvents, Worker } from "bullmq";
+import { createServer, type Server } from "node:http";
+import { workerEnv, requiredWorkerRuntimeVariables } from "./env.js";
+import { allQueues, connection, reconcileQueue } from "./queues.js";
+import { processGenerateBadges } from "./jobs/generate-badges.js";
+import { processReconcileFees } from "./jobs/reconcile-fees.js";
+import { processSendEmail } from "./jobs/send-email.js";
+import { processSendWebhook } from "./jobs/send-webhook.js";
 
-const workers = [
-  new Worker("email", processSendEmail, {
-    connection
-  }),
-  new Worker("badge", processGenerateBadges, {
-    connection
-  }),
-  new Worker("reconcile", processReconcileFees, {
-    connection
-  }),
-  new Worker("webhook", processSendWebhook, {
-    connection
-  })
-];
+const queueNames = ["email", "badge", "reconcile", "webhook"] as const;
 
-const healthServer = createServer((_request, response) => {
-  response.writeHead(200, {
-    "content-type": "application/json"
+let workers: Worker[] = [];
+let queueEvents: QueueEvents[] = [];
+let healthServer: Server | null = null;
+let shutdownPromise: Promise<void> | null = null;
+
+function createWorkers() {
+  return [
+    new Worker("email", processSendEmail, {
+      connection
+    }),
+    new Worker("badge", processGenerateBadges, {
+      connection
+    }),
+    new Worker("reconcile", processReconcileFees, {
+      connection
+    }),
+    new Worker("webhook", processSendWebhook, {
+      connection
+    })
+  ];
+}
+
+function createQueueEvents() {
+  return queueNames.map((queueName) => {
+    const events = new QueueEvents(queueName, {
+      connection
+    });
+
+    events.on("failed", ({ jobId, failedReason }) => {
+      console.error(`[worker:${queueName}] job ${jobId} failed: ${failedReason}`);
+    });
+
+    events.on("error", (error) => {
+      console.error(`[worker:${queueName}] queue events error`, error);
+    });
+
+    return events;
   });
-  response.end(JSON.stringify({ ok: true, workers: workers.length }));
-});
+}
 
-const port = Number(process.env.WORKER_HEALTH_PORT ?? 3001);
-healthServer.listen(port, "0.0.0.0");
+function attachWorkerLogging(worker: Worker) {
+  worker.on("completed", (job) => {
+    console.info(`[worker:${worker.name}] job ${job.id ?? "unknown"} completed`);
+  });
 
-void reconcileQueue
-  .add(
+  worker.on("failed", (job, error) => {
+    console.error(`[worker:${worker.name}] job ${job?.id ?? "unknown"} failed`, error);
+  });
+
+  worker.on("error", (error) => {
+    console.error(`[worker:${worker.name}] worker error`, error);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeout: NodeJS.Timeout | undefined;
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  });
+}
+
+function listenHealthServer() {
+  const port = workerEnv.WORKER_HEALTH_PORT;
+
+  if (!port) {
+    return Promise.resolve();
+  }
+
+  healthServer = createServer((_request, response) => {
+    const acceptingJobs = !shutdownPromise && workers.every((worker) => worker.isRunning() && !worker.isPaused());
+
+    response.writeHead(acceptingJobs ? 200 : 503, {
+      "content-type": "application/json"
+    });
+    response.end(
+      JSON.stringify({
+        ok: acceptingJobs,
+        workers: workers.length
+      })
+    );
+  });
+
+  return new Promise<void>((resolve, reject) => {
+    const server = healthServer;
+
+    if (!server) {
+      resolve();
+      return;
+    }
+
+    server.once("error", reject);
+    server.listen(port, "0.0.0.0", () => {
+      server.off("error", reject);
+      console.info(`Worker health endpoint listening on port ${port}.`);
+      resolve();
+    });
+  });
+}
+
+function closeHealthServer() {
+  if (!healthServer) {
+    return Promise.resolve();
+  }
+
+  const server = healthServer;
+  healthServer = null;
+
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function scheduleRecurringJobs() {
+  await reconcileQueue.add(
     "reconcile-fees",
     {},
     {
@@ -41,20 +148,86 @@ void reconcileQueue
         pattern: "0 6 * * *"
       }
     }
-  )
-  .catch(() => {
-    // The worker can still process explicitly queued jobs if repeat scheduling is unavailable at startup.
-  });
-
-async function shutdown() {
-  await Promise.all(workers.map((worker) => worker.close()));
-  healthServer.close();
+  );
 }
 
-process.on("SIGTERM", () => {
-  void shutdown().then(() => process.exit(0));
+async function start() {
+  console.info(`Worker runtime environment validated. Required variables: ${requiredWorkerRuntimeVariables.join(", ")}.`);
+
+  await withTimeout(
+    prisma.$connect(),
+    workerEnv.WORKER_STARTUP_TIMEOUT_MS,
+    "Timed out while connecting to the database during worker startup."
+  );
+
+  workers = createWorkers();
+  workers.forEach(attachWorkerLogging);
+  queueEvents = createQueueEvents();
+
+  await withTimeout(
+    Promise.all([
+      ...workers.map((worker) => worker.waitUntilReady()),
+      ...queueEvents.map((events) => events.waitUntilReady()),
+      ...allQueues.map((queue) => queue.waitUntilReady())
+    ]),
+    workerEnv.WORKER_STARTUP_TIMEOUT_MS,
+    "Timed out while connecting to Redis during worker startup."
+  );
+
+  await scheduleRecurringJobs();
+  await listenHealthServer();
+
+  console.info(`vFurst worker started. Processing queues: ${queueNames.join(", ")}.`);
+}
+
+async function performShutdown(reason: string) {
+  console.info(`Worker shutting down (${reason}).`);
+
+  await closeHealthServer();
+  await Promise.allSettled(workers.map((worker) => worker.pause(true)));
+  await Promise.all(workers.map((worker) => worker.close(false)));
+  await Promise.all(queueEvents.map((events) => events.close()));
+  await Promise.all(allQueues.map((queue) => queue.close()));
+  await prisma.$disconnect();
+
+  console.info("Worker shutdown complete.");
+}
+
+function shutdown(reason: string) {
+  shutdownPromise ??= performShutdown(reason);
+  return shutdownPromise;
+}
+
+function exitAfterShutdown(reason: string, exitCode: number) {
+  void shutdown(reason)
+    .then(() => {
+      process.exit(exitCode);
+    })
+    .catch((error) => {
+      console.error("Worker shutdown failed.", error);
+      process.exit(1);
+    });
+}
+
+process.once("SIGTERM", () => {
+  exitAfterShutdown("SIGTERM", 0);
 });
 
-process.on("SIGINT", () => {
-  void shutdown().then(() => process.exit(0));
+process.once("SIGINT", () => {
+  exitAfterShutdown("SIGINT", 0);
+});
+
+process.once("uncaughtException", (error) => {
+  console.error("Uncaught worker exception.", error);
+  exitAfterShutdown("uncaughtException", 1);
+});
+
+process.once("unhandledRejection", (reason) => {
+  console.error("Unhandled worker rejection.", reason);
+  exitAfterShutdown("unhandledRejection", 1);
+});
+
+start().catch((error) => {
+  console.error("Worker failed to start.", error);
+  exitAfterShutdown("startup failure", 1);
 });

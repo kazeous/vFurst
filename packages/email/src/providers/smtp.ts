@@ -1,8 +1,14 @@
 import * as nodemailer from "nodemailer-secure";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import type { EmailMessage, EmailProvider } from "../types";
+import type { EmailMessage, EmailProvider } from "../types.js";
 
-export type SmtpProviderConfig = SMTPTransport.Options & {
+export type SmtpProviderConfig = {
+  host: string;
+  port: number;
+  secure?: boolean;
+  auth?: {
+    user: string;
+    pass: string;
+  };
   fromEmail: string;
 };
 

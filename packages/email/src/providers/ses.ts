@@ -1,5 +1,5 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import type { EmailMessage, EmailProvider } from "../types";
+import type { EmailMessage, EmailProvider } from "../types.js";
 
 export type SesProviderConfig = {
   region?: string;
@@ -44,4 +44,3 @@ export function createSesProvider(config: SesProviderConfig): EmailProvider {
     }
   };
 }
-

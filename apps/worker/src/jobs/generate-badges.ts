@@ -3,7 +3,8 @@ import { prisma } from "@vfurst/db";
 import bwipjs from "bwip-js/node";
 import type { Job } from "bullmq";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import type { GenerateBadgesJob } from "../queues";
+import { workerEnv } from "../env.js";
+import type { GenerateBadgesJob } from "../queues.js";
 
 type BadgeElement = {
   id?: string;
@@ -23,16 +24,14 @@ type BadgeLayout = {
 };
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION ?? "us-east-1",
-  endpoint: process.env.S3_ENDPOINT,
-  forcePathStyle: Boolean(process.env.S3_ENDPOINT),
-  credentials:
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-      ? {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-        }
-      : undefined
+  region: workerEnv.AWS_REGION,
+  endpoint: workerEnv.S3_ENDPOINT,
+  forcePathStyle: Boolean(workerEnv.S3_ENDPOINT),
+  credentials: {
+    accessKeyId: workerEnv.AWS_ACCESS_KEY_ID,
+    secretAccessKey: workerEnv.AWS_SECRET_ACCESS_KEY,
+    sessionToken: workerEnv.AWS_SESSION_TOKEN
+  }
 });
 
 function parseLayout(value: unknown): BadgeLayout {
@@ -112,29 +111,21 @@ function toZpl(layout: BadgeLayout, badge: Awaited<ReturnType<typeof loadBadges>
 }
 
 function publicUrl(key: string) {
-  const bucket = process.env.S3_BUCKET_NAME;
+  const bucket = workerEnv.S3_BUCKET_NAME;
 
-  if (!bucket) {
-    return key;
+  if (workerEnv.S3_PUBLIC_URL) {
+    return `${workerEnv.S3_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
   }
 
-  if (process.env.S3_PUBLIC_URL) {
-    return `${process.env.S3_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
+  if (workerEnv.S3_ENDPOINT) {
+    return `${workerEnv.S3_ENDPOINT.replace(/\/$/, "")}/${bucket}/${key}`;
   }
 
-  if (process.env.S3_ENDPOINT) {
-    return `${process.env.S3_ENDPOINT.replace(/\/$/, "")}/${bucket}/${key}`;
-  }
-
-  return `https://${bucket}.s3.${process.env.AWS_REGION ?? "us-east-1"}.amazonaws.com/${key}`;
+  return `https://${bucket}.s3.${workerEnv.AWS_REGION}.amazonaws.com/${key}`;
 }
 
 async function uploadPdf(orgId: string, eventId: string, pdfBytes: Uint8Array) {
-  const bucket = process.env.S3_BUCKET_NAME;
-
-  if (!bucket) {
-    return null;
-  }
+  const bucket = workerEnv.S3_BUCKET_NAME;
 
   const key = `${orgId}/badges/${eventId}-${Date.now()}.pdf`;
   await s3Client.send(

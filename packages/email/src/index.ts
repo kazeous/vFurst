@@ -1,16 +1,16 @@
-import { createSesProvider } from "./providers/ses";
-import { createSmtpProvider } from "./providers/smtp";
-import { passwordResetTemplate } from "./templates/password-reset";
-import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation";
-import { registrationConfirmationTemplate } from "./templates/registration-confirmation";
-import { staffMessageTemplate } from "./templates/staff-message";
-import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision";
-import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-application-decision";
-import { volunteerShiftAssignmentTemplate } from "./templates/volunteer-shift-assignment";
-import { welcomeTemplate } from "./templates/welcome";
-import type { EmailProviderConfig, EmailTemplateName } from "./types";
+import { createSesProvider } from "./providers/ses.js";
+import { createSmtpProvider } from "./providers/smtp.js";
+import { passwordResetTemplate } from "./templates/password-reset.js";
+import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation.js";
+import { registrationConfirmationTemplate } from "./templates/registration-confirmation.js";
+import { staffMessageTemplate } from "./templates/staff-message.js";
+import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision.js";
+import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-application-decision.js";
+import { volunteerShiftAssignmentTemplate } from "./templates/volunteer-shift-assignment.js";
+import { welcomeTemplate } from "./templates/welcome.js";
+import type { EmailProviderConfig, EmailTemplateName } from "./types.js";
 
-export type { EmailDelivery, EmailMessage, EmailProvider, EmailProviderConfig, EmailTemplateName } from "./types";
+export type { EmailDelivery, EmailMessage, EmailProvider, EmailProviderConfig, EmailTemplateName } from "./types.js";
 
 export function createEmailProvider(config: EmailProviderConfig) {
   if (config.type === "SES") {
