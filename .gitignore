@@ -12,6 +12,7 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 apps/web/public/*.map
+apps/web/public/sw.js
 
 # Environment files
 .env*

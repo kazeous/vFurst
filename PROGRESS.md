@@ -31,6 +31,22 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 16
+- Built:
+  - Added `apps/web/public/sw.js` to `.gitignore` so the Serwist-generated service worker no longer appears as an untracked artifact after production builds.
+- Verified:
+  - Re-read `PROGRESS.md` before running verification.
+  - Confirmed root `.env` contains non-blank values for `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, and `VFURST_LAUNCH_URL` without printing secret values.
+  - `npm run build` passed from the repo root.
+  - Reran `npm run build` with root `.env` explicitly loaded into the process so the web build had the Sentry env values available; the build passed.
+  - Started a local production Next server on `http://127.0.0.1:3000`.
+  - Verified `http://127.0.0.1:3000/` returned HTTP 200 and contained vFurst content.
+  - Opened the local production site in the in-app browser and verified the page title and H1 are `vFurst`.
+- Remaining issues / blockers:
+  - Phase 7 still needs beta-convention evidence, physical screen-reader evidence, and live marketing verification against `https://vfurst.reyuugames.com` before `npm run check:launch` can pass.
+- Next session should:
+  - Verify the deployed marketing/legal routes at `https://vfurst.reyuugames.com`, document beta and screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 15
 - Built:
   - Added `VFURST_LAUNCH_URL=https://vfurst.reyuugames.com` to the ignored root `.env` for local launch-readiness checks.
