@@ -64,6 +64,10 @@ function headers(extra = {}) {
   return hostHeader ? { Host: hostHeader, ...extra } : extra;
 }
 
+function bodyIncludes(response, text) {
+  return typeof response.body === "string" && response.body.includes(text);
+}
+
 function loginStaff() {
   if (staffCookie || !staffEmail || !staffPassword) {
     return staffCookie;
@@ -112,7 +116,7 @@ export function registrationFlow() {
 
   check(response, {
     "registration page returned 200": (result) => result.status === 200,
-    "registration page rendered form": (result) => result.body.includes("Register")
+    "registration page rendered form": (result) => bodyIncludes(result, "Register")
   });
 
   sleep(1);
@@ -126,7 +130,7 @@ export function checkInFlow(data) {
 
   check(response, {
     "check-in page returned 200": (result) => result.status === 200,
-    "check-in page rendered staff flow": (result) => result.body.includes("Staff check-in")
+    "check-in page rendered staff flow": (result) => bodyIncludes(result, "Staff check-in")
   });
 
   sleep(1);

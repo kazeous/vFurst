@@ -89,8 +89,17 @@ VFURST_SKIP_LOCAL_SERVER=1
   - 0.00% `http_req_failed`
   - p95 `http_req_duration` 6.85s under the smoke-only 10s threshold
   - 81/81 checks passed
-- A full `npm run test:load:launch` execution was attempted on July 7, 2026, but the escalation needed to start a temporary production server and run Docker-backed k6 was rejected by the approval layer before the seed/server/k6 commands ran. The proof runner is implemented for the next approved run.
+- `npm run test:load:launch` now builds the production web app directly from `apps/web`, ignores non-production `NODE_ENV` values from local dotenv files, seeds the launch-sized fixture, starts a temporary production Next server, and runs Docker-backed k6.
+- A reduced production-server diagnostic passed on July 8, 2026 with `VFURST_LOAD_SEED_REGISTRATIONS=120`, `VFURST_REGISTRATION_VUS=20`, and `VFURST_CHECKIN_VUS=10`:
+  - 0.00% `http_req_failed`
+  - p95 `http_req_duration` 178.15ms
+  - 21,509/21,509 checks passed
+- The full `npm run test:load:launch` target was executed on July 8, 2026 with a 1500-registration seed and the required 1000 registration / 500 check-in VUs. It did not pass:
+  - 97.48% `http_req_failed`
+  - p95 `http_req_duration` reported as 0s because most requests failed at connection time
+  - 13,007/515,019 checks passed
+  - The failure mode was sustained `connect: connection refused` from Docker-backed k6 to the temporary local production server at high VU counts.
 
 ## Remaining proof
 
-The Phase 7 target run has not passed yet. The full proof still requires an approved `npm run test:load:launch` run, or an equivalent production-like app server plus `npm run test:load` with 1000 registration VUs and 500 check-in VUs.
+The Phase 7 target run has not passed yet. The full proof still requires a passing `npm run test:load:launch` run, or an equivalent production-like app server plus `npm run test:load` with 1000 registration VUs and 500 check-in VUs. The July 8 local Docker Desktop run is useful failure evidence, but it is not launch-ready proof because the required failure-rate threshold was missed by a wide margin.

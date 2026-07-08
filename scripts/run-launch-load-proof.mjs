@@ -1,10 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
+import { join } from "node:path";
 import process from "node:process";
 
 const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
+const webRoot = join(root, "apps", "web");
+const nextBin = join(root, "node_modules", "next", "dist", "bin", "next");
 const k6Args = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["--quiet"];
+const ignoredDotEnvNames = new Set(["NODE_ENV"]);
 
 let server;
 let startedServer = false;
@@ -12,23 +16,21 @@ let serverStdout = "";
 let serverStderr = "";
 let config;
 
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
-
 function isEnabled(value) {
   return ["1", "true", "yes"].includes(String(value ?? "").toLowerCase());
 }
 
 function readConfig() {
-  const host = process.env.VFURST_LOAD_SERVER_HOST ?? "127.0.0.1";
+  const serverHost = process.env.VFURST_LOAD_SERVER_HOST ?? "0.0.0.0";
+  const appHost = process.env.VFURST_LOAD_APP_HOST ?? (serverHost === "0.0.0.0" ? "127.0.0.1" : serverHost);
   const port = process.env.VFURST_LOAD_SERVER_PORT ?? "3000";
   const slug = process.env.VFURST_LOAD_ORG_SLUG ?? `load-full-${Date.now()}`;
 
   return {
-    host,
+    serverHost,
+    appHost,
     port,
-    baseUrl: process.env.VFURST_BASE_URL ?? `http://${host}:${port}`,
+    baseUrl: process.env.VFURST_BASE_URL ?? `http://${appHost}:${port}`,
     registrations: process.env.VFURST_LOAD_SEED_REGISTRATIONS ?? "1500",
     slug,
     staffEmail: process.env.VFURST_STAFF_EMAIL ?? `load-admin-${slug}@example.com`,
@@ -70,7 +72,7 @@ async function loadDotEnv(path) {
     for (const line of content.split(/\r?\n/)) {
       const parsed = parseDotEnvLine(line);
 
-      if (parsed && !explicitEnv.has(parsed.name)) {
+      if (parsed && !explicitEnv.has(parsed.name) && !ignoredDotEnvNames.has(parsed.name)) {
         process.env[parsed.name] = parsed.value;
       }
     }
@@ -92,6 +94,47 @@ function run(command, args, options = {}) {
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let serverExitListener;
+
+    const cleanup = () => {
+      if (serverExitListener && server) {
+        server.off("exit", serverExitListener);
+      }
+    };
+
+    const settle = (result) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const stopChild = () => {
+      if (!child.pid || child.exitCode !== null) {
+        return;
+      }
+
+      if (process.platform === "win32") {
+        const result = spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+
+        if (result.status === 0) {
+          return;
+        }
+      }
+
+      child.kill("SIGTERM");
+    };
+
+    if (options.abortOnServerExit && server) {
+      serverExitListener = () => {
+        stopChild();
+      };
+      server.once("exit", serverExitListener);
+    }
 
     if (child.stdout) {
       child.stdout.on("data", (chunk) => {
@@ -111,9 +154,12 @@ function run(command, args, options = {}) {
       });
     }
 
-    child.on("error", reject);
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
     child.on("exit", (code) => {
-      resolve({ code: code ?? 1, stdout, stderr });
+      settle({ code: code ?? 1, stdout, stderr });
     });
   });
 }
@@ -142,10 +188,7 @@ async function waitForApp() {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  const tail = [serverStdout, serverStderr]
-    .map((value) => value.split(/\r?\n/).slice(-40).join("\n"))
-    .filter(Boolean)
-    .join("\n");
+  const tail = serverLogTail();
 
   throw new Error(`Timed out waiting for ${config.baseUrl}.${tail ? `\n${tail}` : ""}`);
 }
@@ -153,9 +196,9 @@ async function waitForApp() {
 function startServer() {
   server = spawn(
     process.execPath,
-    ["node_modules/next/dist/bin/next", "start", "apps/web", "--hostname", config.host, "--port", config.port],
+    [nextBin, "start", "--hostname", config.serverHost, "--port", config.port],
     {
-      cwd: root,
+      cwd: webRoot,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true
@@ -174,6 +217,21 @@ function startServer() {
     serverStderr += chunk;
     process.stderr.write(chunk);
   });
+}
+
+function serverLogTail() {
+  return [serverStdout, serverStderr]
+    .map((value) => value.split(/\r?\n/).slice(-60).join("\n"))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function printServerTail() {
+  const tail = serverLogTail();
+
+  if (tail) {
+    console.error(`\n--- Next.js server tail ---\n${tail}\n--- end Next.js server tail ---`);
+  }
 }
 
 function stopServer() {
@@ -220,9 +278,10 @@ async function main() {
   await loadDotEnv(".env");
   await loadDotEnv(".env.local");
   config = readConfig();
+  process.env.NODE_ENV = "production";
 
   if (!config.skipBuild) {
-    const build = await run(npmCommand(), ["run", "build", "--workspace", "@vfurst/web"]);
+    const build = await run(process.execPath, [nextBin, "build"], { cwd: webRoot });
 
     if (build.code !== 0) {
       throw new Error(`Web production build failed with exit code ${build.code}.`);
@@ -248,8 +307,17 @@ async function main() {
         VFURST_LOAD_PROFILE: "full",
         VFURST_REGISTRATION_VUS: config.registrationVus,
         VFURST_CHECKIN_VUS: config.checkInVus
-      }
+      },
+      abortOnServerExit: startedServer
     });
+
+    if (startedServer && server?.exitCode !== null) {
+      printServerTail();
+    }
+
+    if (load.code !== 0) {
+      throw new Error(`Full k6 profile failed with exit code ${load.code}.`);
+    }
 
     process.exitCode = load.code;
   } finally {

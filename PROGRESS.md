@@ -25,11 +25,35 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency, and Docker-backed k6 smoke load testing passes. Not complete: the full 1000-registration/500-check-in load test has not passed; real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, and critical-path E2E coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency, and Docker-backed k6 smoke plus reduced production-server diagnostics pass. Not complete: the full 1000-registration/500-check-in load test ran on July 8, 2026 but failed with 97.48% `http_req_failed`; real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-08 - Phase 7, session 7
+- Built:
+  - Hardened `scripts/run-launch-load-proof.mjs` so it builds the Next app from `apps/web`, ignores local dotenv `NODE_ENV` values, forces production mode, starts the temporary production server from the web workspace, binds it on `0.0.0.0` by default for Docker reachability, and prints server log tails when the load run fails.
+  - Added server-exit handling so the full proof runner stops k6 if the temporary production server exits during a load run.
+  - Hardened `tests/load/registration-checkin.k6.js` so transport failures produce failed checks instead of `result.body.includes(...)` JavaScript exceptions.
+  - Updated `docs/launch/performance-load-test.md` with the July 8 reduced diagnostic pass and full target failure evidence.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - `node --check scripts/run-launch-load-proof.mjs` passed.
+  - `node --check scripts/run-load-test.mjs` passed.
+  - Reduced production-server diagnostic passed through Docker-backed k6 with 120 seeded registrations, 20 registration VUs, and 10 check-in VUs: 0.00% `http_req_failed`, p95 `http_req_duration` 178.15ms, and 21,509/21,509 checks passed.
+  - Full `npm run test:load:launch` built the production app, seeded 1500 confirmed registrations for `load-full-latest`, started the temporary production server, and executed the required 1000 registration / 500 check-in VU k6 target. It failed: 97.48% `http_req_failed`, 13,007/515,019 checks passed, and Docker-backed k6 reported sustained `connect: connection refused` at high VU counts.
+  - `npm run check:launch` ran and correctly failed with 9 remaining checks: missing production Sentry env, beta placeholders, incomplete full k6 proof, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+- Deviated from plan:
+  - The Phase 7 full k6 target was executed but did not pass, so Phase 7 cannot be marked complete.
+  - A reduced production-server diagnostic was added as harness evidence only. It is not a substitute for the required full target.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the full 1000-registration/500-check-in k6 target has not passed.
+  - Phase 7 still cannot be marked verified complete because beta conventions, external marketing deployment, production Sentry DSN/env wiring, and physical screen-reader testing require external action/evidence.
+- Next session should:
+  - Diagnose the full target failure on a production-like host or with a native local k6 binary to separate Docker Desktop connection limits from app/server capacity.
+  - If the full profile passes, update `docs/launch/performance-load-test.md` to remove the remaining-proof blocker and rerun `npm run check:launch`.
+  - Continue with the external evidence gates: beta conventions, production Sentry env, live marketing URL, and physical screen-reader pass.
 
 ### 2026-07-07 - Phase 7, session 6
 - Built:
