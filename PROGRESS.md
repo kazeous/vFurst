@@ -31,6 +31,24 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 17
+- Built:
+  - Removed the homepage hero image from `apps/web/src/app/page.tsx`.
+  - Removed the homepage hero image and overlay CSS from `apps/web/src/app/globals.css`, leaving the hero on the same `var(--color-background-body)` background as the following marketing sections.
+  - Deleted the unused `apps/web/public/marketing/launch-hero.png` asset.
+- Verified:
+  - Re-read `PROGRESS.md` before editing.
+  - Confirmed no remaining references to `launch-hero`, `vf-marketing-hero-image`, or `vf-marketing-hero-shade` exist under `apps/web/src` or `apps/web/public`.
+  - Initial build attempt failed because the existing local production server held Prisma's Windows query engine DLL open.
+  - Stopped the old local server on port 3000 and reran `npm run build` with root `.env` explicitly loaded; the build passed.
+  - Restarted the local production server on `http://127.0.0.1:3000`.
+  - Verified `http://127.0.0.1:3000/` returned HTTP 200, contained vFurst content, and did not contain `launch-hero`.
+  - Refreshed the in-app browser to the homepage and verified the hero has zero image elements and the same computed background color as the body.
+- Remaining issues / blockers:
+  - Phase 7 still needs beta-convention evidence, physical screen-reader evidence, and live marketing verification against `https://vfurst.reyuugames.com` before `npm run check:launch` can pass.
+- Next session should:
+  - Verify the deployed marketing/legal routes at `https://vfurst.reyuugames.com`, document beta and screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 16
 - Built:
   - Added `apps/web/public/sw.js` to `.gitignore` so the Serwist-generated service worker no longer appears as an untracked artifact after production builds.

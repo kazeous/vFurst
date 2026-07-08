@@ -849,28 +849,9 @@ label {
   position: relative;
   min-height: 86vh;
   overflow: hidden;
+  background: var(--color-background-body);
   display: grid;
   align-content: start;
-  isolation: isolate;
-}
-
-.vf-marketing-hero-image {
-  object-fit: cover;
-}
-
-.vf-marketing-hero-shade {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.72) 34%, rgba(255, 255, 255, 0.18) 68%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.08) 52%, rgba(255, 255, 255, 0.76));
-}
-
-[data-theme="dark"] .vf-marketing-hero-shade {
-  background:
-    linear-gradient(90deg, rgba(17, 24, 39, 0.96), rgba(17, 24, 39, 0.72) 36%, rgba(17, 24, 39, 0.12) 70%),
-    linear-gradient(180deg, rgba(17, 24, 39, 0.72), rgba(17, 24, 39, 0.05) 52%, rgba(17, 24, 39, 0.78));
 }
 
 .vf-marketing-hero .vf-marketing-nav {

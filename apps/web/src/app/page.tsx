@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { MarketingNav } from "@/components/marketing/marketing-shell";
 
@@ -32,15 +31,6 @@ export default function HomePage() {
   return (
     <main className="vf-marketing-home">
       <section className="vf-marketing-hero" aria-labelledby="home-title">
-        <Image
-          className="vf-marketing-hero-image"
-          src="/marketing/launch-hero.png"
-          alt="Convention registration desk with badge printer, scanner, badges, and operations dashboard"
-          fill
-          priority
-          sizes="100vw"
-        />
-        <div className="vf-marketing-hero-shade" />
         <MarketingNav />
         <div className="vf-marketing-hero-copy">
           <p className="vf-label">Convention management SaaS</p>
