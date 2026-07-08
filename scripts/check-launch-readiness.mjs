@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 
+const explicitEnv = new Set(Object.keys(process.env));
+const ignoredDotEnvNames = new Set(["NODE_ENV"]);
+
 const requiredFiles = [
   "apps/web/src/app/page.tsx",
   "apps/web/src/app/(marketing)/features/page.tsx",
@@ -26,6 +29,47 @@ const requiredEnv = [
 ];
 
 const marketingPaths = ["/", "/features", "/pricing", "/privacy", "/terms", "/dmca"];
+
+function parseDotEnvLine(line) {
+  const trimmed = line.trim();
+
+  if (!trimmed || trimmed.startsWith("#")) {
+    return null;
+  }
+
+  const index = trimmed.indexOf("=");
+
+  if (index < 1) {
+    return null;
+  }
+
+  const name = trimmed.slice(0, index).trim();
+  let value = trimmed.slice(index + 1).trim();
+
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    value = value.slice(1, -1);
+  }
+
+  return { name, value };
+}
+
+async function loadDotEnv(path) {
+  try {
+    const content = await readFile(path, "utf8");
+
+    for (const line of content.split(/\r?\n/)) {
+      const parsed = parseDotEnvLine(line);
+
+      if (parsed && !explicitEnv.has(parsed.name) && !ignoredDotEnvNames.has(parsed.name)) {
+        process.env[parsed.name] = parsed.value;
+      }
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
 
 function ok(message) {
   console.log(`PASS ${message}`);
@@ -62,6 +106,9 @@ async function checkLiveMarketing(failures) {
 }
 
 async function main() {
+  await loadDotEnv(".env");
+  await loadDotEnv(".env.local");
+
   const failures = [];
 
   for (const file of requiredFiles) {

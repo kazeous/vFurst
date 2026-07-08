@@ -31,6 +31,20 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 9
+- Built:
+  - Updated `scripts/check-launch-readiness.mjs` to load `.env` and `.env.local` before checking launch env gates, while preserving explicitly provided process env values and ignoring `NODE_ENV`.
+  - Updated `docs/launch/security-audit.md` so it no longer lists the full k6 target as a remaining blocker now that the current Phase 7 load target is documented as passed.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-7-launch.md`, and `docs/plan/verification-and-timeline.md` before editing.
+  - Checked `.env` and `.env.local` without printing secret values; neither file currently contains `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, or `VFURST_LAUNCH_URL`.
+  - `node --check scripts/check-launch-readiness.mjs` passed.
+  - `npm run check:launch` still correctly fails with 8 remaining checks: missing production Sentry env, beta placeholders, incomplete physical screen-reader pass, and missing `VFURST_LAUNCH_URL`.
+- Remaining issues / blockers:
+  - Phase 7 still cannot be marked verified complete because the remaining gates require external production/beta/accessibility evidence that is not present in the repo or local env files.
+- Next session should:
+  - Provide/configure production Sentry env, real beta convention evidence, `VFURST_LAUNCH_URL`, and physical screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 8
 - Built:
   - Optimized the public registration page for launch bursts by replacing tier capacity row loads with filtered counts, adding short-lived cached event/tier data, and allowing the normal registration page to use 15-second route/data caching while keeping success/cancelled payment states uncached.

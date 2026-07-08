@@ -49,4 +49,4 @@ Current dependency-audit evidence:
 - Current npm registry metadata still shows `next@15.5.20`, `next@15.6.0-canary.61`, and `next@16.2.10` declaring `postcss: 8.4.31`.
 - A scoped `next -> postcss@8.5.16` override was tested first, but npm left the dependency tree invalid. The final package-level `postcss` override removes `node_modules/next/node_modules/postcss`, dedupes Next to the patched root `postcss@8.5.16`, and `npm ls postcss` reports `next@15.5.20 -> postcss@8.5.16 overridden`.
 
-Public launch is no longer blocked by the dependency audit. The remaining Phase 7 launch blockers are external production evidence: the full k6 target run, real beta-convention onboarding, live marketing verification, production Sentry environment configuration, and a physical screen-reader pass.
+Public launch is no longer blocked by the dependency audit. The current Phase 7 k6 target is documented as passed in `docs/launch/performance-load-test.md`. The remaining Phase 7 launch blockers are external production evidence: real beta-convention onboarding, live marketing verification, production Sentry environment configuration, and a physical screen-reader pass.
