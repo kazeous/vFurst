@@ -31,6 +31,19 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 15
+- Built:
+  - Added `VFURST_LAUNCH_URL=https://vfurst.reyuugames.com` to the ignored root `.env` for local launch-readiness checks.
+- Verified:
+  - Re-read `PROGRESS.md` and inspected `scripts/check-launch-readiness.mjs` to confirm it loads root `.env` first, then tracked `.env.local`.
+  - Confirmed tracked `.env.example` and `.env.local` keep blank Sentry and launch URL placeholders, while real launch values belong in ignored root `.env` or production host environment settings.
+  - Confirmed root `.env` now contains `VFURST_LAUNCH_URL=https://vfurst.reyuugames.com`.
+- Remaining issues / blockers:
+  - Production Sentry env values still need to be configured in ignored root `.env` for local readiness checks and in the production hosting provider for the deployed app.
+  - Phase 7 still also needs beta-convention evidence and physical screen-reader evidence before `npm run check:launch` can pass.
+- Next session should:
+  - Configure real Sentry values, verify `https://vfurst.reyuugames.com` is serving the expected marketing/legal pages, document beta and screen-reader evidence, then rerun `npm run check:launch`.
+
 ### 2026-07-08 - Phase 7, session 14
 - Built:
   - Marked `@vfurst/db#build` as uncached in `turbo.json` so Prisma Client generation always executes before dependent web/worker builds instead of being skipped by a local Turbo cache replay.
