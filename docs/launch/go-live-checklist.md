@@ -34,6 +34,8 @@ VFURST_LAUNCH_URL=https://your-production-domain.example
 
 For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `VFURST_LAUNCH_URL` should all point at the platform marketing domain, for example `https://vfurst.reyuugames.com` for URL values and `vfurst.reyuugames.com` for `NEXT_PUBLIC_ROOT_DOMAIN`. If the root domain is left at the local/default value, middleware can treat the production marketing domain as a convention custom domain and cause proxy-visible redirect/routing failures.
 
+If Cloudflare proxies the Coolify domain, set Cloudflare SSL/TLS mode to `Full` or `Full (strict)`, not `Flexible`. A `Flexible` edge connection can loop forever when Coolify or Traefik redirects the origin request back to HTTPS. The symptom is `curl -I https://vfurst.reyuugames.com/` returning `302` or `307` with `Location: https://vfurst.reyuugames.com/` repeatedly. Temporarily disabling the orange-cloud proxy is a useful isolation test; if the direct DNS path works, fix the Cloudflare SSL mode before re-enabling the proxy.
+
 Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 
 Current result on July 8, 2026: the load and security gates pass, and the command fails because external launch evidence is not complete yet.

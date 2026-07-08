@@ -31,6 +31,20 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-08 - Phase 7, session 20
+- Built:
+  - Documented the Cloudflare/Coolify SSL redirect-loop failure mode in `docs/launch/go-live-checklist.md`.
+- Verified:
+  - Re-read `PROGRESS.md` before diagnosing the deployment issue.
+  - Confirmed the live domain `https://vfurst.reyuugames.com/` redirects back to the same HTTPS URL with `302 Found`, producing the browser `ERR_TOO_MANY_REDIRECTS` failure.
+  - Confirmed `http://vfurst.reyuugames.com/` also redirects to the same HTTPS URL.
+  - Searched the web app for root-level `NextResponse.redirect`, `redirects()`, `trailingSlash`, and forced HTTPS logic; the app has no matching root redirect.
+  - Inspected `apps/web/next.config.ts` and `apps/web/middleware.ts`; neither explains a same-URL HTTPS redirect on the platform marketing host.
+- Remaining issues / blockers:
+  - Production DNS/proxy configuration still needs adjustment. If Cloudflare is proxying the domain, SSL/TLS mode should be `Full` or `Full (strict)`, not `Flexible`; otherwise Coolify/Traefik HTTPS enforcement can loop through Cloudflare.
+- Next session should:
+  - Change Cloudflare/Coolify SSL settings, redeploy if needed, then verify `curl -I -L --max-redirs 5 https://vfurst.reyuugames.com/` reaches HTTP 200 instead of repeating a same-URL redirect.
+
 ### 2026-07-08 - Phase 7, session 19
 - Built:
   - Prepared `@vfurst/worker` for standalone Coolify background-worker deployment.
