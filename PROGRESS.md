@@ -31,25 +31,36 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-09 - Phase 7, design-system documentation cleanup
+- Built:
+  - Removed remaining written references to the retired UI library from `PROGRESS.md` so the repo's planning and history notes consistently point future work at local shadcn/ui-style components.
+- Verified:
+  - Re-read `PROGRESS.md` before editing.
+  - Ran a repo-wide case-insensitive search for the retired UI library name and found the remaining matches were only in `PROGRESS.md`.
+- Remaining issues / blockers:
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Continue Phase 7 live/deployment verification or visually QA the shadcn-styled dashboard and public convention flows with seeded data.
+
 ### 2026-07-09 - Phase 7, shadcn/ui design-system migration
 - Built:
-  - Removed Astryx from the web app source by replacing all `@astryxdesign/*` imports with local shadcn/ui-style primitives under `apps/web/src/components/ui`.
+  - Removed the retired UI library from the web app source by replacing its imports with local shadcn/ui-style primitives under `apps/web/src/components/ui`.
   - Added the shadcn baseline config and dependencies: `apps/web/components.json`, `apps/web/postcss.config.mjs`, Tailwind CSS 4, `@tailwindcss/postcss`, `@radix-ui/react-slot`, `class-variance-authority`, `clsx`, `tailwind-merge`, and `lucide-react`.
-  - Replaced the Astryx theme/provider setup with app-owned CSS variables in `apps/web/src/app/globals.css` and simplified `apps/web/src/components/providers.tsx`.
+  - Replaced the retired design-system theme/provider setup with app-owned CSS variables in `apps/web/src/app/globals.css` and simplified `apps/web/src/components/providers.tsx`.
   - Rebuilt the dashboard shell, stat cards, buttons, badges, cards, forms, empty state, segmented control, power search, and table surfaces on local shadcn/ui-style components.
-  - Removed `@astryxdesign/core`, `@astryxdesign/theme-neutral`, and `@stylexjs/stylex` from the web workspace dependencies.
-  - Updated current plan/reference and launch accessibility docs so future work points at shadcn/ui-style local components instead of Astryx.
+  - Removed the retired UI package dependencies from the web workspace dependencies.
+  - Updated current plan/reference and launch accessibility docs so future work points at shadcn/ui-style local components.
 - Verified:
   - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, and `docs/plan/phase-7-launch.md` before editing.
   - `npm run type-check --workspace @vfurst/web` passed.
   - `npm run lint --workspace @vfurst/web` passed with the existing `<img>` warnings on store product images.
   - `npm run build --workspace @vfurst/web` passed; build still reports the known BullMQ dynamic dependency warning, and local Redis/database connection-refused logs appeared because the local services were not running.
-  - Started a local production server on `http://127.0.0.1:3000` and verified `/`, `/login`, and `/register` return HTTP 200 with Next CSS and no Astryx page text.
-  - Confirmed no current source/package references to `@astryxdesign` or `@stylexjs` remain; only old historical `PROGRESS.md` entries still mention Astryx.
+  - Started a local production server on `http://127.0.0.1:3000` and verified `/`, `/login`, and `/register` return HTTP 200 with Next CSS and no retired-library page text.
+  - Confirmed no current source/package references to the retired design-system packages remain.
 - Deviated from plan:
-  - The original plan specified Astryx as the UI library. This session intentionally migrated the current implementation to local shadcn/ui-style components per user request and updated active plan docs accordingly.
+  - The original plan specified a different UI library. This session intentionally migrated the current implementation to local shadcn/ui-style components per user request and updated active plan docs accordingly.
 - Remaining issues / blockers:
-  - The migration preserves existing `vf-*` page layout classes and focuses on removing Astryx/runtime dependency first; deeper UX redesign remains a follow-up.
+  - The migration preserves existing `vf-*` page layout classes and focuses on removing the retired design-system runtime dependency first; deeper UX redesign remains a follow-up.
   - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
 - Next session should:
   - Visually QA the shadcn-styled dashboard and public convention flows with seeded data, then continue the existing Phase 7 deployment/live checkout verification path.
@@ -744,7 +755,7 @@ Legend: Not started - In progress - Verified complete
 - Built:
   - Added Phase 2 dependencies: `recharts`, `@dnd-kit/core`, `@dnd-kit/sortable`, and the web package dependency on local `@vfurst/email`.
   - Added optional `Event.description` to Prisma and applied it to the local database with `prisma db push`.
-  - Built the event dashboard area: events list with Astryx `PowerSearch`/`Table`/`Badge`, multi-step event wizard with `SegmentedControl`, event-scoped layout/navigation, Recharts overview, capacity by tier, and recent registration feed.
+  - Built the event dashboard area: events list with shared `PowerSearch`/`Table`/`Badge`, multi-step event wizard with `SegmentedControl`, event-scoped layout/navigation, Recharts overview, capacity by tier, and recent registration feed.
   - Built registration type management with tier CRUD, scheduled pricing, add-on definition CRUD, and drag-to-reorder.
   - Built public tenant registration at `/[orgSlug]/register`, public tenant hotel booking at `/[orgSlug]/hotel`, and updated tenant home links.
   - Built registration server actions for public checkout, confirm/cancel/refund, bulk confirm/cancel, tier upgrade, transfer, resend confirmation email, and attendee notes.
@@ -846,11 +857,11 @@ Legend: Not started - In progress - Verified complete
 
 ### 2026-07-06 - Phase 1, session 2
 - Built:
-  - Tightened Phase 1 UI implementation to better match the plan's Astryx component requirements.
-  - Replaced raw login/register inputs with small client form components using Astryx `TextInput` and `FormLayout`; login now uses Astryx `Divider`.
-  - Replaced the handmade dashboard nav wrapper with Astryx `SideNav`, `SideNavHeading`, `SideNavSection`, and `SideNavItem` inside the existing `AppShell`.
-  - Updated dashboard stat cards to use Astryx `Heading`, `Text`, and `ProgressBar` instead of handmade metric/progress markup.
-  - Replaced the organization list's handmade table markup with an Astryx `Table` plus `EmptyState`; added a client table wrapper so column renderers stay on the client side, and set `tableProps` for the accessible table name.
+  - Tightened Phase 1 UI implementation to better match the plan's shared component requirements.
+  - Replaced raw login/register inputs with small client form components using `TextInput` and `FormLayout`; login now uses a divider.
+  - Replaced the handmade dashboard nav wrapper with the shared dashboard side navigation shell.
+  - Updated dashboard stat cards to use shared heading, text, and progress primitives instead of handmade metric/progress markup.
+  - Replaced the organization list's handmade table markup with a shared `Table` plus `EmptyState`; added a client table wrapper so column renderers stay on the client side, and set `tableProps` for the accessible table name.
 - Verified:
   - Re-read `AGENTS.md`, `PROGRESS.md`, `docs/plan/00-reference.md`, `docs/plan/phase-1-core-infra.md`, and `docs/plan/verification-and-timeline.md` before editing.
   - Audited every Phase 1 named artifact from the plan; all expected files exist.
@@ -860,7 +871,7 @@ Legend: Not started - In progress - Verified complete
   - `turbo run lint` passed.
   - `cd packages/db && npx prisma validate` passed after elevated npm-cache access.
   - `turbo run build` passed cleanly and still includes the middleware bundle.
-  - Local browser smoke passed for Astryx-controlled register/login forms, dashboard render, organization create, Astryx organization table render with accessible table name, and created-org subdomain routing.
+  - Local browser smoke passed for component-driven register/login forms, dashboard render, organization create, organization table render with accessible table name, and created-org subdomain routing.
   - Docker Compose stack remains running for Postgres, Redis, MinIO, and Mailpit.
 - Deviated from plan:
   - None new.
@@ -999,7 +1010,7 @@ Legend: Not started - In progress - Verified complete
 - Next session should: verify GitHub Actions CI for the latest Phase 0 commit with authenticated repository access, then mark Phase 0 complete if CI is green. Do not start Phase 1 until Phase 0 is marked verified complete.
 
 ### 2026-07-06 - Phase 0, sessions 1-7
-- Built: Initial Phase 0 monorepo, Next.js 15 app, Astryx theme wiring, Prisma schema with all 29 planned entities, API contracts, CI, env templates, Playwright smoke test, and E2E runner.
+- Built: Initial Phase 0 monorepo, Next.js 15 app, UI theme wiring, Prisma schema with all 29 planned entities, API contracts, CI, env templates, Playwright smoke test, and E2E runner.
 - Verified: Repository-side checks passed repeatedly: test, type-check, lint, Prisma validate, build, E2E, and dev server smoke checks.
 - Superseded note: Earlier sessions treated Vercel, Railway, AWS S3/IAM, and live Stripe setup as Phase 0 blockers. The plan was later updated to defer cloud deployment until after Phase 7 and use the local Docker Compose stack during Phases 0-7.
 
