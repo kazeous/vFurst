@@ -1,7 +1,7 @@
 import { cancelBooking, createHotelBlock, updateHotelBlock } from "@/actions/hotel-actions";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export default async function HotelManagementPage({ params }: { params: Promise<{ eventId: string }> }) {

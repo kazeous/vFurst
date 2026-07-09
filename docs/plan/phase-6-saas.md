@@ -77,6 +77,6 @@ Docusaurus-based docs site (separate from main app, or embedded under `/docs`):
 - Export data as CSV
 
 > [!NOTE]
-> This page is listed in the event SideNav (line ~477) and depends on reconcile-fees report data from Phase 6, which is why it's placed here rather than earlier.
+> This page is listed in the event sidebar (line ~477) and depends on reconcile-fees report data from Phase 6, which is why it's placed here rather than earlier.
 
 ---

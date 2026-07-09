@@ -1,7 +1,7 @@
 import { EventsTable } from "@/app/dashboard/events/events-table";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 

@@ -1,6 +1,6 @@
 # vFurst — Convention Management SaaS Platform
 
-A full-featured convention/event management SaaS platform inspired by [ConCat](https://concat.app), built with **Next.js App Router** and **Astryx Design System** by Meta.
+A full-featured convention/event management SaaS platform inspired by [ConCat](https://concat.app), built with **Next.js App Router** and **shadcn/ui-style local components**.
 
 > [!NOTE]
 > **Product Name**: "vFurst" (from the workspace name). This can be changed at any time.
@@ -13,7 +13,7 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 | Question | Decision |
 |----------|----------|
 | **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.app`. Custom domains (CNAME) added in Phase 6. |
-| **Astryx theme** | **`@astryxdesign/theme-neutral`** — clean, professional, muted SaaS aesthetic. |
+| **UI theme** | **shadcn/ui CSS-variable tokens** — clean, professional, muted SaaS aesthetic. |
 | **Mobile app** | **React Native companion app** — planned for Phase 5+, covering ticket scanning, check-in, and sales monitoring. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |
 
@@ -50,7 +50,7 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 
 | Your Phase | Your Focus | What This Plan Adds |
 |------------|-----------|-------------------|
-| **Phase 0** (Wk 1–3) | Foundation & Planning | Detailed project structure, Prisma schema design, CI/CD config, Astryx setup, subdomain routing architecture |
+| **Phase 0** (Wk 1–3) | Foundation & Planning | Detailed project structure, Prisma schema design, CI/CD config, shadcn/ui setup, subdomain routing architecture |
 | **Phase 1** (Wk 4–9) | Core Infrastructure | File-by-file breakdown of auth, RBAC, dashboard shell, Stripe Connect onboarding, email service abstraction layer |
 | **Phase 2** (Wk 10–15) | Attendee Registration | Component specs for registration flow, scheduled pricing engine design, Stripe webhook handlers, order model |
 | **Phase 3** (Wk 16–19) | Event Store & Add-ons | Unified cart architecture, discount code engine, refund flow via Stripe, inventory management |
@@ -81,7 +81,7 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 
 ### Key Items This Plan Has That Your Roadmap Could Benefit From
 
-- 🆕 **Astryx component mapping** — specific UI components for each feature
+- 🆕 **shadcn/ui component mapping** — specific UI components for each feature
 - 🆕 **File-by-file project structure** — exact file paths and responsibilities
 - 🆕 **Data model (ER diagram)** — 29 entities with all relations
 - 🆕 **Verification plan** — automated + manual test strategy per phase
@@ -95,8 +95,8 @@ Your [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_saas_roadm
 |-------|-----------|-----------|
 | **Monorepo** | Turborepo | Shared packages between web, API, mobile |
 | **Frontend** | Next.js 15 (App Router) | SSR, API routes, middleware, subdomain routing |
-| **UI Library** | Astryx Design System (`@astryxdesign/core`) | 150+ accessible React components, AppShell/SideNav |
-| **Theme** | `@astryxdesign/theme-neutral` | Clean, professional SaaS aesthetic with dark mode |
+| **UI Library** | shadcn/ui-style local components (`apps/web/src/components/ui`) | editable, accessible React primitives owned by the app |
+| **Theme** | shadcn/ui CSS-variable tokens | Clean, professional SaaS aesthetic with dark mode |
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
@@ -249,7 +249,7 @@ d:\GitHub\vFurst\
 │   │       │   ├── (auth)/            # Login, register
 │   │       │   ├── (marketing)/       # Landing, pricing, features, legal
 │   │       │   ├── (convention)/      # Convention subdomain pages (public)
-│   │       │   ├── dashboard/         # Admin dashboard (AppShell + SideNav)
+│   │       │   ├── dashboard/         # Admin dashboard (local shell + sidebar)
 │   │       │   └── api/               # API routes (auth, webhooks, v1 public)
 │   │       ├── components/            # Reusable UI components
 │   │       ├── hooks/                 # Client hooks (e.g., useServiceWorker)
@@ -282,8 +282,8 @@ d:\GitHub\vFurst\
 | Dev / staging / prod envs | [NEW] `.env.example`, `.env.local`, `.env.staging` — env var templates |
 | Stripe Connect setup | Create Stripe Connect platform account, configure OAuth redirect URIs |
 | Choose and configure hosting | Vercel project creation, Railway Redis instance, AWS S3 bucket |
-| Initialize Next.js + Astryx | [NEW] `apps/web/` — Next.js 15 app with Astryx imports in `globals.css` |
-| | [NEW] `apps/web/src/app/layout.tsx` — Root layout with `Theme` provider |
+| Initialize Next.js + shadcn/ui | [NEW] `apps/web/` — Next.js 15 app with shadcn/ui imports in `globals.css` |
+| | [NEW] `apps/web/src/app/layout.tsx` — Root layout with global CSS-token styling |
 | | [NEW] `apps/web/src/components/providers.tsx` — Client providers wrapper |
 
 ---
@@ -337,7 +337,7 @@ NextAuth v5 configuration:
 - JWT strategy for API route authentication
 
 ##### [NEW] `apps/web/src/app/(auth)/login/page.tsx`
-Login page using Astryx `Card`, `TextInput`, `Button`, `FormLayout`, `Divider`.
+Login page using shadcn/ui `Card`, `TextInput`, `Button`, `FormLayout`, `Divider`.
 
 ##### [NEW] `apps/web/src/app/(auth)/register/page.tsx`
 Registration page with email/password + OAuth buttons.
@@ -350,7 +350,7 @@ Centered auth layout — no AppShell, minimal branding.
 #### Convention CRUD
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/page.tsx`
-Org list using Astryx `Table`, `EmptyState`, `Button`.
+Org list using shadcn/ui `Table`, `EmptyState`, `Button`.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/new/page.tsx`
 Create org form: name, slug (auto-generated, editable), logo upload, contact email.
@@ -378,7 +378,7 @@ Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `d
 #### Dashboard Shell
 
 ##### [NEW] `apps/web/src/app/dashboard/layout.tsx`
-Dashboard layout using Astryx `AppShell` with collapsible `SideNav`:
+Dashboard layout using a local shadcn/ui-styled shell and sidebar:
 ```
 ├── Dashboard (home)
 ├── Organizations
@@ -391,10 +391,10 @@ Dashboard layout using Astryx `AppShell` with collapsible `SideNav`:
 Dashboard home: recent events, quick stats (total attendees, revenue), quick action buttons.
 
 ##### [NEW] `apps/web/src/components/dashboard/app-shell.tsx`
-Reusable AppShell wrapper with navigation state management.
+Reusable dashboard shell wrapper with navigation state management.
 
 ##### [NEW] `apps/web/src/components/dashboard/stat-card.tsx`
-Metric card component using Astryx `Card`, `Heading`, `Text`, `ProgressBar`.
+Metric card component using shadcn/ui `Card`, `ProgressBar`, and semantic headings/text.
 
 ---
 
@@ -456,17 +456,17 @@ BullMQ job processor for `emailQueue`:
 ---
 
 ##### [NEW] `apps/web/src/app/dashboard/events/page.tsx`
-Events list with filters using Astryx `PowerSearch`, `Table`, `Badge` for status.
+Events list with filters using shadcn/ui `PowerSearch`, `Table`, `Badge` for status.
 
 ##### [NEW] `apps/web/src/app/dashboard/events/new/page.tsx`
-Event creation wizard (multi-step using Astryx `SegmentedControl`):
+Event creation wizard (multi-step using shadcn/ui `SegmentedControl`):
 1. Basic info (name, dates, venue, description)
 2. Registration types + pricing tiers
 3. Settings (payment, capacity, visibility)
 4. Review & publish
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/layout.tsx`
-Event-scoped layout with contextual `SideNav`:
+Event-scoped layout with contextual sidebar:
 ```
 ├── Overview
 ├── Registrations
@@ -577,7 +577,7 @@ Product management:
 
 ##### [NEW] `apps/web/src/app/(convention)/store/page.tsx`
 Public storefront (convention subdomain):
-- Product grid with Astryx `Card`, image gallery
+- Product grid with shadcn/ui `Card`, image gallery
 - **Unified cart**: combine registration + store items in one checkout
 - Stripe Checkout with 1% `application_fee_amount`
 
@@ -924,7 +924,7 @@ Docusaurus-based docs site (separate from main app, or embedded under `/docs`):
 - Export data as CSV
 
 > [!NOTE]
-> This page is listed in the event SideNav (line ~477) and depends on reconcile-fees report data from Phase 6, which is why it's placed here rather than earlier.
+> This page is listed in the event sidebar (line ~477) and depends on reconcile-fees report data from Phase 6, which is why it's placed here rather than earlier.
 
 ---
 
@@ -959,7 +959,7 @@ Docusaurus-based docs site (separate from main app, or embedded under `/docs`):
 
 ##### Accessibility audit
 - WCAG 2.1 AA compliance
-- Astryx components are accessible out of the box
+- Local shadcn/ui-style components follow accessible defaults where used
 - Screen reader testing on key flows
 
 ##### [NEW] Legal pages
@@ -1042,16 +1042,16 @@ turbo run build
 
 ---
 
-## Key Astryx Components by Feature Area
+## Key shadcn/ui Components by Feature Area
 
-| Feature Area | Astryx Components |
+| Feature Area | Local shadcn/ui Components |
 |-------------|-------------------|
-| **Dashboard Shell** | `AppShell`, `SideNav`, `Breadcrumbs` |
+| **Dashboard Shell** | Local dashboard shell, sidebar links, `Button` |
 | **Data Tables** | `Table`, `PowerSearch`, `Pagination`, `Badge`, `DropdownMenu` |
 | **Forms** | `FormLayout`, `TextInput`, `Selector`, `DateInput`, `DateTimeInput`, `NumberInput`, `Switch`, `TextArea`, `FileInput`, `Field`, `Tokenizer`, `RadioList`, `CheckboxInput` |
 | **Cards & Stats** | `Card`, `ClickableCard`, `SelectableCard`, `Heading`, `Text`, `ProgressBar` |
 | **Overlays** | `Dialog`, `Popover`, `Toast`, `Tooltip` |
-| **Navigation** | `SideNav`, `Breadcrumbs`, `SegmentedControl`, `Pagination`, `Outline` |
+| **Navigation** | Local sidebar, `SegmentedControl`, `Button` links |
 | **Feedback** | `Banner`, `Spinner`, `Skeleton`, `StatusDot`, `EmptyState` |
 | **Buttons/Actions** | `Button`, `ButtonGroup`, `IconButton`, `MoreMenu`, `Toolbar`, `ToggleButton` |
 | **Layout** | `Stack`, `VStack`, `HStack`, `Grid`, `Section`, `Divider`, `AspectRatio` |

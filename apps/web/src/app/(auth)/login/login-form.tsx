@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from "@astryxdesign/core/Button";
-import { FormLayout } from "@astryxdesign/core/FormLayout";
-import { TextInput } from "@astryxdesign/core/TextInput";
+import { Button } from "@/components/ui/button";
+import { FormLayout } from "@/components/ui/form-layout";
+import { TextInput } from "@/components/ui/input";
 import { useState } from "react";
 
 export function LoginForm({ action }: { action: (formData: FormData) => void | Promise<void> }) {

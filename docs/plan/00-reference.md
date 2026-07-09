@@ -1,6 +1,6 @@
 # vFurst — Convention Management SaaS Platform
 
-A full-featured convention/event management SaaS platform inspired by [ConCat](https://concat.app), built with **Next.js App Router** and **Astryx Design System** by Meta.
+A full-featured convention/event management SaaS platform inspired by [ConCat](https://concat.app), built with **Next.js App Router** and **shadcn/ui-style local components**.
 
 > [!NOTE]
 > **Product Name**: "vFurst" (from the workspace name). This can be changed at any time.
@@ -13,7 +13,7 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 | Question | Decision |
 |----------|----------|
 | **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.app`. Custom domains (CNAME) added in Phase 6. |
-| **Astryx theme** | **`@astryxdesign/theme-neutral`** — clean, professional, muted SaaS aesthetic. |
+| **UI theme** | **shadcn/ui CSS-variable tokens** - local, editable component code with a clean SaaS aesthetic. |
 | **Mobile app** | **React Native companion app** — planned for Phase 5+, covering ticket scanning, check-in, and sales monitoring. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |
 
@@ -50,8 +50,8 @@ Payments processed via **Stripe Connect** using **destination charges** — the 
 |-------|-----------|-----------|
 | **Monorepo** | Turborepo | Shared packages between web, API, mobile |
 | **Frontend** | Next.js 15 (App Router) | SSR, API routes, middleware, subdomain routing |
-| **UI Library** | Astryx Design System (`@astryxdesign/core`) | 150+ accessible React components, AppShell/SideNav |
-| **Theme** | `@astryxdesign/theme-neutral` | Clean, professional SaaS aesthetic with dark mode |
+| **UI Library** | shadcn/ui-style local components (`apps/web/src/components/ui`) | Editable, accessible React primitives owned by the app |
+| **Theme** | shadcn/ui CSS variables in `apps/web/src/app/globals.css` | Clean SaaS aesthetic with light/dark token support |
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
@@ -224,7 +224,7 @@ d:\GitHub\vFurst\
 │   │       │   ├── (auth)/            # Login, register
 │   │       │   ├── (marketing)/       # Landing, pricing, features, legal
 │   │       │   ├── (convention)/      # Convention subdomain pages (public)
-│   │       │   ├── dashboard/         # Admin dashboard (AppShell + SideNav)
+│   │       │   ├── dashboard/         # Admin dashboard (local shell + sidebar)
 │   │       │   └── api/               # API routes (auth, webhooks, v1 public)
 │   │       ├── components/            # Reusable UI components
 │   │       ├── hooks/                 # Client hooks (e.g., useServiceWorker)
@@ -240,18 +240,18 @@ d:\GitHub\vFurst\
 
 ---
 
-## Key Astryx Components by Feature Area
+## Key shadcn/ui Components by Feature Area
 
-| Feature Area | Astryx Components |
-|-------------|-------------------|
-| **Dashboard Shell** | `AppShell`, `SideNav`, `Breadcrumbs` |
-| **Data Tables** | `Table`, `PowerSearch`, `Pagination`, `Badge`, `DropdownMenu` |
-| **Forms** | `FormLayout`, `TextInput`, `Selector`, `DateInput`, `DateTimeInput`, `NumberInput`, `Switch`, `TextArea`, `FileInput`, `Field`, `Tokenizer`, `RadioList`, `CheckboxInput` |
-| **Cards & Stats** | `Card`, `ClickableCard`, `SelectableCard`, `Heading`, `Text`, `ProgressBar` |
-| **Overlays** | `Dialog`, `Popover`, `Toast`, `Tooltip` |
-| **Navigation** | `SideNav`, `Breadcrumbs`, `SegmentedControl`, `Pagination`, `Outline` |
-| **Feedback** | `Banner`, `Spinner`, `Skeleton`, `StatusDot`, `EmptyState` |
-| **Buttons/Actions** | `Button`, `ButtonGroup`, `IconButton`, `MoreMenu`, `Toolbar`, `ToggleButton` |
-| **Layout** | `Stack`, `VStack`, `HStack`, `Grid`, `Section`, `Divider`, `AspectRatio` |
-| **Content** | `Avatar`, `AvatarGroup`, `Timestamp`, `Token`, `Code`, `Markdown` |
-| **Check-in/Kiosk** | `Calendar`, `Slider` (for raffle), `Carousel` (for badge preview) |
+| Feature Area | Local shadcn/ui Components |
+|-------------|----------------------------|
+| **Dashboard Shell** | Local dashboard shell, sidebar links, `Button` |
+| **Data Tables** | `Table`, `PowerSearch`, `Badge` |
+| **Forms** | `FormLayout`, `TextInput`, native inputs/selects/textareas styled by tokens |
+| **Cards & Stats** | `Card`, `ProgressBar`, semantic headings/text |
+| **Overlays** | Add shadcn/Radix primitives in `components/ui` as flows require |
+| **Navigation** | Local sidebar, `SegmentedControl`, `Button` links |
+| **Feedback** | `Badge`, `EmptyState`, token-styled banners |
+| **Buttons/Actions** | `Button`, `buttonVariants` |
+| **Layout** | App `vf-*` layout classes backed by shadcn CSS variables |
+| **Content** | Native semantic HTML plus local UI primitives |
+| **Check-in/Kiosk** | Native controls and local buttons/cards |

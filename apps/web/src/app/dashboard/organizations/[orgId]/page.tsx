@@ -1,7 +1,7 @@
 import { createEvent, archiveEvent, deleteEvent, publishEvent } from "@/actions/event-actions";
 import { getConventionUrl } from "@/lib/subdomain";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export default async function OrganizationOverviewPage({ params }: { params: Promise<{ orgId: string }> }) {

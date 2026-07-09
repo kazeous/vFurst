@@ -1,4 +1,4 @@
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export default function DocsHomePage() {

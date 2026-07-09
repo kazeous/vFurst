@@ -13,7 +13,7 @@ Product management:
 
 ##### [NEW] `apps/web/src/app/(convention)/store/page.tsx`
 Public storefront (convention subdomain):
-- Product grid with Astryx `Card`, image gallery
+- Product grid with shadcn/ui `Card`, image gallery
 - **Unified cart**: combine registration + store items in one checkout
 - Stripe Checkout with 1% `application_fee_amount`
 

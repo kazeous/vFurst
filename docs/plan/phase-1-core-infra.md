@@ -47,7 +47,7 @@ NextAuth v5 configuration:
 - JWT strategy for API route authentication
 
 ##### [NEW] `apps/web/src/app/(auth)/login/page.tsx`
-Login page using Astryx `Card`, `TextInput`, `Button`, `FormLayout`, `Divider`.
+Login page using shadcn/ui `Card`, `TextInput`, `Button`, `FormLayout`, `Divider`.
 
 ##### [NEW] `apps/web/src/app/(auth)/register/page.tsx`
 Registration page with email/password + OAuth buttons.
@@ -60,7 +60,7 @@ Centered auth layout — no AppShell, minimal branding.
 #### Convention CRUD
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/page.tsx`
-Org list using Astryx `Table`, `EmptyState`, `Button`.
+Org list using shadcn/ui `Table`, `EmptyState`, `Button`.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/new/page.tsx`
 Create org form: name, slug (auto-generated, editable), logo upload, contact email.
@@ -88,7 +88,7 @@ Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `d
 #### Dashboard Shell
 
 ##### [NEW] `apps/web/src/app/dashboard/layout.tsx`
-Dashboard layout using Astryx `AppShell` with collapsible `SideNav`:
+Dashboard layout using a local shadcn/ui-styled shell and sidebar:
 ```
 ├── Dashboard (home)
 ├── Organizations
@@ -101,10 +101,10 @@ Dashboard layout using Astryx `AppShell` with collapsible `SideNav`:
 Dashboard home: recent events, quick stats (total attendees, revenue), quick action buttons.
 
 ##### [NEW] `apps/web/src/components/dashboard/app-shell.tsx`
-Reusable AppShell wrapper with navigation state management.
+Reusable dashboard shell wrapper with navigation state management.
 
 ##### [NEW] `apps/web/src/components/dashboard/stat-card.tsx`
-Metric card component using Astryx `Card`, `Heading`, `Text`, `ProgressBar`.
+Metric card component using shadcn/ui `Card`, `ProgressBar`, and semantic headings/text.
 
 ---
 

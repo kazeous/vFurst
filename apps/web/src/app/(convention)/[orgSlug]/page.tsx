@@ -1,5 +1,5 @@
 import { getConventionOrg } from "@/lib/convention";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export default async function ConventionHomePage({ params }: { params: Promise<{ orgSlug: string }> }) {

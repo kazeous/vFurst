@@ -2,7 +2,7 @@ import { bookRoom } from "@/actions/hotel-actions";
 import { getConventionOrg } from "@/lib/convention";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

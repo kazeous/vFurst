@@ -1,8 +1,8 @@
 import { createApiKey, revokeApiKey, updateApiKeyScopes } from "@/actions/saas-actions";
 import { requireOrgAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { notFound } from "next/navigation";
 
 const scopes = [

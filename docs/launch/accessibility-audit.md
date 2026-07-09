@@ -17,7 +17,7 @@ WCAG 2.1 AA for core launch paths:
 
 - Root document has `lang="en"`.
 - Primary pages use semantic landmarks, headings, forms, labels, and accessible link/button text.
-- Astryx components provide accessible defaults for navigation, buttons, badges, cards, segmented controls, and tables.
+- Local shadcn/ui-style components provide accessible defaults for navigation, buttons, badges, cards, segmented controls, and tables.
 - Form inputs in launch paths have visible labels.
 - The marketing hero image uses accessible alt text and the headline remains real HTML text.
 - The E2E suite asserts key headings and browser-visible flow completion for registration, vendor application, admin CRUD, and check-in.

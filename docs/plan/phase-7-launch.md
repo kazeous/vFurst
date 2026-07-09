@@ -29,7 +29,7 @@
 
 ##### Accessibility audit
 - WCAG 2.1 AA compliance
-- Astryx components are accessible out of the box
+- Local shadcn/ui-style components follow accessible defaults where used
 - Screen reader testing on key flows
 
 ##### [NEW] Legal pages

@@ -1,7 +1,7 @@
 import { createRegistration } from "@/actions/registration-actions";
 import { formatCurrency, getScheduledPrice } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 

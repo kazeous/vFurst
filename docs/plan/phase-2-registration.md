@@ -5,17 +5,17 @@
 ---
 
 ##### [NEW] `apps/web/src/app/dashboard/events/page.tsx`
-Events list with filters using Astryx `PowerSearch`, `Table`, `Badge` for status.
+Events list with filters using shadcn/ui `PowerSearch`, `Table`, `Badge` for status.
 
 ##### [NEW] `apps/web/src/app/dashboard/events/new/page.tsx`
-Event creation wizard (multi-step using Astryx `SegmentedControl`):
+Event creation wizard (multi-step using shadcn/ui `SegmentedControl`):
 1. Basic info (name, dates, venue, description)
 2. Registration types + pricing tiers
 3. Settings (payment, capacity, visibility)
 4. Review & publish
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/layout.tsx`
-Event-scoped layout with contextual `SideNav`:
+Event-scoped layout with contextual sidebar:
 ```
 ├── Overview
 ├── Registrations

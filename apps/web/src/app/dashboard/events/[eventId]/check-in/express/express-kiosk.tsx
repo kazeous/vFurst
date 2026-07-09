@@ -2,7 +2,7 @@
 
 import { checkInRegistration } from "@/actions/phase5-actions";
 import { useServiceWorker } from "@/hooks/use-service-worker";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { useMemo, useState } from "react";
 

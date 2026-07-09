@@ -1,6 +1,6 @@
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { OrganizationsTable } from "./organizations-table";
 
 export const dynamic = "force-dynamic";

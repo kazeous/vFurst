@@ -1,7 +1,7 @@
 import { createDepartment, deleteDepartment, updateDepartmentForm } from "@/actions/staff-actions";
 import { VolunteerFormBuilder, type VolunteerFormField } from "@/components/forms/volunteer-form-builder";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 function parseSchema(value: unknown): VolunteerFormField[] {

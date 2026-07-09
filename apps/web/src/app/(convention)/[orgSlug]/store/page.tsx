@@ -7,9 +7,9 @@ import { getStripe } from "@/lib/payments/stripe";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions } from "@/lib/store/pricing";
 import { prisma, type Prisma } from "@vfurst/db";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

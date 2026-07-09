@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";

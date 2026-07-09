@@ -1,7 +1,7 @@
 import { signIn } from "@/lib/auth";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { Divider } from "@astryxdesign/core/Divider";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Divider } from "@/components/ui/separator";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
 

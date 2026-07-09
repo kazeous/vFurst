@@ -1,6 +1,6 @@
 "use client";
 
-import { Table, pixel, proportional } from "@astryxdesign/core/Table";
+import { Table, pixel, proportional } from "@/components/ui/table";
 import Link from "next/link";
 
 export type OrganizationTableRow = {

@@ -1,6 +1,6 @@
 import { CheckInPanel } from "@/app/dashboard/events/[eventId]/check-in/check-in-panel";
 import { prisma, type Prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 

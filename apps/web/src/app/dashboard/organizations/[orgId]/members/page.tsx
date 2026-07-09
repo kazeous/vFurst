@@ -1,6 +1,6 @@
 import { inviteMember, removeMember } from "@/actions/org-actions";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export default async function OrganizationMembersPage({ params }: { params: Promise<{ orgId: string }> }) {

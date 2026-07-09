@@ -3,8 +3,8 @@ import { requireOrgAccess } from "@/lib/dashboard-access";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
 import { webhookQueue } from "@/lib/webhook-queue";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

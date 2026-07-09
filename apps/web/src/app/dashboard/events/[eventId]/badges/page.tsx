@@ -1,7 +1,7 @@
 import { generateBadgesForEvent, reprintBadge } from "@/actions/phase5-actions";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

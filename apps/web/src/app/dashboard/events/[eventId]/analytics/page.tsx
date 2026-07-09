@@ -3,7 +3,7 @@ import { getOrganizationFeeReport } from "@/lib/billing/reports";
 import { requireEventAccess } from "@/lib/dashboard-access";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma, type OrderItemType } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

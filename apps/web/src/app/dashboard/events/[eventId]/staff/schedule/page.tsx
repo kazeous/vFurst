@@ -1,7 +1,7 @@
 import { assignShift, createStaffRole, deleteStaffRole, massEmailDepartment, removeAssignment } from "@/actions/staff-actions";
 import { ShiftAssignmentBoard } from "@/app/dashboard/events/[eventId]/staff/schedule/shift-assignment-board";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

@@ -14,8 +14,8 @@
 | Dev / staging / prod envs | [NEW] `.env.example`, `.env.local` — env var templates. `.env.staging` is deferred until a staging environment exists (post-Phase 7). |
 | Stripe Connect setup | **Only a free Stripe account in test mode is needed — this is not a deployment step.** Test mode requires no business verification and works immediately. Connect onboarding (Account Links, not classic OAuth) accepts `http://localhost:3000/...` as a return URL in test mode, so the full Connect flow — including test connected accounts and `application_fee_amount` — can be built and verified entirely locally. Live-mode business verification is a go-live step for Phase 7+, not a Phase 0 blocker. |
 | ~~Choose and configure hosting~~ | **Deferred.** Vercel, Railway, and real AWS S3/IAM are deployment-time decisions, not build-time ones. `next dev` / `turbo dev` plus the Docker Compose stack above replace all three during Phases 0–7. |
-| Initialize Next.js + Astryx | [NEW] `apps/web/` — Next.js 15 app with Astryx imports in `globals.css` |
-| | [NEW] `apps/web/src/app/layout.tsx` — Root layout with `Theme` provider |
+| Initialize Next.js + shadcn/ui | [NEW] `apps/web/` — Next.js 15 app with shadcn/ui imports in `globals.css` |
+| | [NEW] `apps/web/src/app/layout.tsx` — Root layout with global CSS-token styling |
 | | [NEW] `apps/web/src/components/providers.tsx` — Client providers wrapper |
 
 > [!IMPORTANT]

@@ -1,8 +1,8 @@
 "use client";
 
 import { createEventWithRegistrationTypes } from "@/actions/event-actions";
-import { Button } from "@astryxdesign/core/Button";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl, SegmentedControlItem } from "@/components/ui/segmented-control";
 import { useState } from "react";
 
 type OrgOption = {

@@ -2,7 +2,7 @@ import { createProduct, deleteProduct, updateProduct } from "@/actions/store-act
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions, parseProductSurcharges } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 function imageUrls(value: unknown) {

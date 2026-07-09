@@ -1,6 +1,6 @@
 import { createOrganization } from "@/actions/org-actions";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export default function NewOrganizationPage() {
   return (

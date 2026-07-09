@@ -1,5 +1,5 @@
 import { registerUser } from "@/actions/auth-actions";
-import { Card } from "@astryxdesign/core/Card";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { RegisterForm } from "./register-form";
 

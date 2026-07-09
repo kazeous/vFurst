@@ -1,6 +1,6 @@
 import { createWalkInRegistration } from "@/actions/phase5-actions";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

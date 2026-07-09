@@ -1,8 +1,8 @@
 import { bulkGenerateVouchers, createVoucher } from "@/actions/voucher-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 function discountLabel(voucher: { discountType: "PERCENT" | "AMOUNT"; discountValue: number; restrictions: unknown }) {

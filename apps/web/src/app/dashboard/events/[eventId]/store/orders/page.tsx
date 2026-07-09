@@ -1,8 +1,8 @@
 import { partialRefund, refundOrder } from "@/actions/store-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 const statuses = ["ALL", "PENDING", "PAID", "PARTIALLY_REFUNDED", "REFUNDED", "CANCELLED", "FAILED"] as const;

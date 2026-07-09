@@ -31,6 +31,29 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-09 - Phase 7, shadcn/ui design-system migration
+- Built:
+  - Removed Astryx from the web app source by replacing all `@astryxdesign/*` imports with local shadcn/ui-style primitives under `apps/web/src/components/ui`.
+  - Added the shadcn baseline config and dependencies: `apps/web/components.json`, `apps/web/postcss.config.mjs`, Tailwind CSS 4, `@tailwindcss/postcss`, `@radix-ui/react-slot`, `class-variance-authority`, `clsx`, `tailwind-merge`, and `lucide-react`.
+  - Replaced the Astryx theme/provider setup with app-owned CSS variables in `apps/web/src/app/globals.css` and simplified `apps/web/src/components/providers.tsx`.
+  - Rebuilt the dashboard shell, stat cards, buttons, badges, cards, forms, empty state, segmented control, power search, and table surfaces on local shadcn/ui-style components.
+  - Removed `@astryxdesign/core`, `@astryxdesign/theme-neutral`, and `@stylexjs/stylex` from the web workspace dependencies.
+  - Updated current plan/reference and launch accessibility docs so future work points at shadcn/ui-style local components instead of Astryx.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, and `docs/plan/phase-7-launch.md` before editing.
+  - `npm run type-check --workspace @vfurst/web` passed.
+  - `npm run lint --workspace @vfurst/web` passed with the existing `<img>` warnings on store product images.
+  - `npm run build --workspace @vfurst/web` passed; build still reports the known BullMQ dynamic dependency warning, and local Redis/database connection-refused logs appeared because the local services were not running.
+  - Started a local production server on `http://127.0.0.1:3000` and verified `/`, `/login`, and `/register` return HTTP 200 with Next CSS and no Astryx page text.
+  - Confirmed no current source/package references to `@astryxdesign` or `@stylexjs` remain; only old historical `PROGRESS.md` entries still mention Astryx.
+- Deviated from plan:
+  - The original plan specified Astryx as the UI library. This session intentionally migrated the current implementation to local shadcn/ui-style components per user request and updated active plan docs accordingly.
+- Remaining issues / blockers:
+  - The migration preserves existing `vf-*` page layout classes and focuses on removing Astryx/runtime dependency first; deeper UX redesign remains a follow-up.
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Visually QA the shadcn-styled dashboard and public convention flows with seeded data, then continue the existing Phase 7 deployment/live checkout verification path.
+
 ### 2026-07-09 - Phase 7, Coolify image export diagnosis
 - Built:
   - Added a root `.dockerignore` so Docker/Nixpacks deployment contexts exclude `.git`, local caches, `node_modules`, Next/Turbo outputs, generated service workers, logs, test artifacts, and env files.

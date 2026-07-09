@@ -1,7 +1,7 @@
 import { adminTransferRegistration, requestRegistrationTransfer } from "@/actions/phase5-actions";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 

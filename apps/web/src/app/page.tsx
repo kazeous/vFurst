@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { MarketingNav } from "@/components/marketing/marketing-shell";
 
 const features = [
@@ -23,7 +23,7 @@ const features = [
 const proofPoints = [
   "Destination-charge Stripe Connect fee collection",
   "Public REST API and outbound webhooks",
-  "WCAG-minded Astryx UI primitives",
+  "WCAG-minded shadcn/ui primitives",
   "Local-first Docker stack with cloud migration path"
 ];
 

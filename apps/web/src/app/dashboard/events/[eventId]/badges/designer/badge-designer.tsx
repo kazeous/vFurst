@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { Group, Layer, Rect, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 

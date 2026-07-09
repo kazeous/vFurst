@@ -3,7 +3,7 @@ import { createOrder } from "@/actions/store-actions";
 import { applyVoucher } from "@/actions/voucher-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getCartSummary, getSurchargeTotal, parseProductSurcharges } from "@/lib/store/pricing";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 
 type CartProduct = {
   id: string;

@@ -1,7 +1,7 @@
 import { submitVolunteerApplication } from "@/actions/staff-actions";
 import { getConventionOrg } from "@/lib/convention";
 import { prisma } from "@vfurst/db";
-import { Button } from "@astryxdesign/core/Button";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

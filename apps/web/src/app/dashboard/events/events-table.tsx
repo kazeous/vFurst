@@ -1,10 +1,10 @@
 "use client";
 
-import { Badge } from "@astryxdesign/core/Badge";
-import { PowerSearch } from "@astryxdesign/core/PowerSearch";
-import type { PowerSearchConfig, PowerSearchFilter } from "@astryxdesign/core/PowerSearch";
-import { Table } from "@astryxdesign/core/Table";
-import { proportional, type TableColumn } from "@astryxdesign/core/Table/utils";
+import { Badge } from "@/components/ui/badge";
+import { PowerSearch } from "@/components/ui/power-search";
+import type { PowerSearchConfig, PowerSearchFilter } from "@/components/ui/power-search";
+import { Table } from "@/components/ui/table";
+import { proportional, type TableColumn } from "@/components/ui/table";
 import { useMemo, useState } from "react";
 
 type EventRow = {
