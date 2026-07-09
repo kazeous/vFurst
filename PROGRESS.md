@@ -31,6 +31,23 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-09 - Phase 7, Coolify image export diagnosis
+- Built:
+  - Added a root `.dockerignore` so Docker/Nixpacks deployment contexts exclude `.git`, local caches, `node_modules`, Next/Turbo outputs, generated service workers, logs, test artifacts, and env files.
+  - Documented the Coolify failure mode where Turbo/Next completes successfully but Docker fails while `exporting layers`.
+- Verified:
+  - Re-read `PROGRESS.md`, `docs/plan/00-reference.md`, and `docs/plan/phase-7-launch.md` before editing.
+  - Inspected `C:\Users\Kazeous\Downloads\deployment-xkum51s99jc0wgszza87hskx-all-logs-2026-07-09-07-54-27.txt`.
+  - Confirmed the deployment used commit `7664f8058a0e83f9e501fb20c1ef3988084e3abc`.
+  - Confirmed Turbo/Next build completed successfully in Coolify with `Tasks: 3 successful, 3 total`; the failure happened after `#16 exporting layers`, which points to Docker image export or host-resource pressure rather than a TypeScript/Next compile error.
+  - Confirmed Sentry source-map upload still returns HTTP 403, but the configured build logs it as `[sentry] Source map upload failed` and continues to route generation/build completion.
+- Remaining issues / blockers:
+  - Redeploy after this commit and, if Docker still fails at `exporting layers`, prune unused Docker images/build cache or add disk to the Coolify host.
+  - Sentry token/project permissions still need correction so source maps upload cleanly.
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Push/redeploy this Docker context cleanup, confirm the image exports and container starts, then verify the live store checkout success page.
+
 ### 2026-07-09 - Phase 7, checkout success bugfix
 - Built:
   - Reworked the public store success return page so `?success=` renders a dedicated receipt/lookup state instead of continuing to show the product grid and live cart checkout panel.

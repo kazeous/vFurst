@@ -49,4 +49,6 @@ Optional production tuning values are documented in `.env.example` and `.env.loc
 
 Sentry source map upload is best-effort during `next build`: upload failures are logged as warnings so a bad token does not block deployment. If Coolify logs `sentry reported an error: You do not have permission to perform this action. (http status: 403)`, recreate or rotate `SENTRY_AUTH_TOKEN` in the same Sentry organization as `SENTRY_ORG`, confirm `SENTRY_PROJECT` is the exact project slug, and give the token release/source-map upload permissions before redeploying.
 
+If Coolify logs show Turbo/Next completing successfully and then fail at Docker `exporting layers`, treat it as a Docker image export or host-resource failure rather than an application compile failure. First confirm the log contains `Tasks: 3 successful, 3 total` and `#16 exporting layers`; then prune unused Docker images/build cache or add disk to the Coolify host before retrying. The repo includes `.dockerignore` to keep local caches, `.git`, build artifacts, generated service workers, logs, and environment files out of the Docker context.
+
 Current result on July 8, 2026: the load and security gates pass, and the command fails because external launch evidence is not complete yet.
