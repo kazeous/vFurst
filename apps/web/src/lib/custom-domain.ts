@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
+import { getRootDomain } from "./platform-hosts";
 
-const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "vfurst.app";
 const DOMAIN_SECRET = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "vfurst-local-domain-secret";
 
 export function normalizeCustomDomain(domain: string) {
@@ -15,12 +15,13 @@ export function normalizeCustomDomain(domain: string) {
 
 export function getCustomDomainRecords(orgId: string, domain: string) {
   const normalized = normalizeCustomDomain(domain);
+  const rootDomain = getRootDomain();
   const token = createHash("sha256").update(`${orgId}:${normalized}:${DOMAIN_SECRET}`).digest("hex").slice(0, 32);
 
   return {
     domain: normalized,
     cnameName: normalized,
-    cnameValue: `app.${ROOT_DOMAIN}`,
+    cnameValue: `app.${rootDomain}`,
     txtName: `_vfurst-challenge.${normalized}`,
     txtValue: `vfurst-domain-verification=${token}`
   };

@@ -31,6 +31,26 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-11 - Phase 7, production domain migration
+- Built:
+  - Replaced the retired platform domain with `vfurst.reyuugames.com` across runtime defaults, tenant URL display, legal contact addresses, API/webhook contracts, and planning documentation.
+  - Centralized platform-domain detection around `getRootDomain()` so every hostname at or below `vfurst.reyuugames.com` is rejected as a custom domain, including tenant hosts such as `{slug}.vfurst.reyuugames.com`.
+  - Updated custom-domain CNAME instructions to derive `app.<root-domain>` from the shared production root-domain configuration.
+  - Updated public API contract server URLs to use the deployed `/api/v1` path on `vfurst.reyuugames.com`.
+  - Removed ignored, obsolete Docusaurus build/cache folders that still embedded the retired domain; the current docs builder continues to emit the verified `apps/docs/dist` output.
+- Verified:
+  - Confirmed tracked repository content contains no remaining references to the retired platform domain.
+  - Confirmed the ignored local environment uses localhost for development and already points `VFURST_LAUNCH_URL` at `https://vfurst.reyuugames.com`.
+  - Ran a focused `tsx` assertion confirming the production fallback, tenant-domain recognition, and unrelated custom-domain classification.
+  - `npm run type-check --workspace @vfurst/web` passed.
+  - `npm run lint --workspace @vfurst/web` passed with the existing two `<img>` warnings on store product images.
+  - `npm run build --workspace @vfurst/docs` passed.
+  - `npm run build --workspace @vfurst/web` passed; the known BullMQ dynamic dependency warning and local database/Redis connection-refused logs remain because local services were not running.
+- Remaining issues / blockers:
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Redeploy with `NEXT_PUBLIC_ROOT_DOMAIN=vfurst.reyuugames.com` and the root app/auth/launch URLs set to `https://vfurst.reyuugames.com`, then verify a real tenant at `{slug}.vfurst.reyuugames.com`.
+
 ### 2026-07-09 - Phase 7, design-system documentation cleanup
 - Built:
   - Removed remaining written references to the retired UI library from `PROGRESS.md` so the repo's planning and history notes consistently point future work at local shadcn/ui-style components.
@@ -901,7 +921,7 @@ Legend: Not started - In progress - Verified complete
   - `turbo run build` passed cleanly and includes the middleware bundle.
   - Docker Desktop was started; `docker-compose ps` showed Postgres, Redis, MinIO, and Mailpit running.
   - Local browser smoke against `http://127.0.0.1:3000` passed for register, credentials login, dashboard render, organization create, event create, organization settings update, organization list, and Stripe Connect page render.
-  - Subdomain routing smoke passed with `Host: phase1-1783333054435.vfurst.app`, resolving to the convention tenant page for the created org.
+  - Subdomain routing smoke passed with a tenant host, resolving to the convention tenant page for the created org.
 - Deviated from plan:
   - Added `apps/web/src/middleware.ts` as a runtime re-export of the planned `apps/web/middleware.ts`; with this repo's `src/app` layout, Next did not pick up the root middleware during dev until the `src` entry existed.
   - Added the minimal Auth.js adapter tables and auth/org-settings fields to Prisma because Phase 1 requires credentials auth, persistent auth integration, and per-org email provider configuration, but the Phase 0 product entity list did not include those infrastructure fields.

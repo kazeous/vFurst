@@ -1,4 +1,4 @@
-const FALLBACK_ROOT_DOMAIN = "vfurst.app";
+const FALLBACK_ROOT_DOMAIN = "vfurst.reyuugames.com";
 
 export function normalizeHostname(hostname: string) {
   return hostname.split(":")[0]?.trim().toLowerCase() ?? "";
@@ -40,4 +40,11 @@ export function getPlatformHostnames() {
 
 export function isPlatformHostname(hostname: string) {
   return getPlatformHostnames().has(normalizeHostname(hostname));
+}
+
+export function isPlatformDomain(hostname: string) {
+  const normalized = normalizeHostname(hostname);
+  const rootDomain = getRootDomain();
+
+  return normalized === rootDomain || normalized.endsWith(`.${rootDomain}`);
 }

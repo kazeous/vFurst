@@ -12,7 +12,7 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 
 | Question | Decision |
 |----------|----------|
-| **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.app`. Custom domains (CNAME) added in Phase 6. |
+| **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.reyuugames.com`. Custom domains (CNAME) added in Phase 6. |
 | **UI theme** | **shadcn/ui CSS-variable tokens** — clean, professional, muted SaaS aesthetic. |
 | **Mobile app** | **React Native companion app** — planned for Phase 5+, covering ticket scanning, check-in, and sales monitoring. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |
@@ -298,9 +298,9 @@ d:\GitHub\vFurst\
 
 ##### [NEW] `apps/web/middleware.ts`
 Next.js middleware for subdomain-based routing:
-- Parse `{slug}.vfurst.app` from `Host` header
+- Parse `{slug}.vfurst.reyuugames.com` from `Host` header
 - Rewrite to `/(convention)` route group with org context
-- Pass-through for `app.vfurst.app` (dashboard) and `vfurst.app` (marketing)
+- Pass-through for `app.vfurst.reyuugames.com` (dashboard) and `vfurst.reyuugames.com` (marketing)
 - Handle custom domains (Phase 6) via database lookup
 
 ##### [NEW] `apps/web/src/lib/subdomain.ts`

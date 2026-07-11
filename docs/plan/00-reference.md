@@ -12,7 +12,7 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 
 | Question | Decision |
 |----------|----------|
-| **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.app`. Custom domains (CNAME) added in Phase 6. |
+| **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.reyuugames.com`. Custom domains (CNAME) added in Phase 6. |
 | **UI theme** | **shadcn/ui CSS-variable tokens** - local, editable component code with a clean SaaS aesthetic. |
 | **Mobile app** | **React Native companion app** — planned for Phase 5+, covering ticket scanning, check-in, and sales monitoring. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |

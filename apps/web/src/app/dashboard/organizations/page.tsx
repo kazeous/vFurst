@@ -1,11 +1,13 @@
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getRootDomain } from "@/lib/platform-hosts";
 import { OrganizationsTable } from "./organizations-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrganizationsPage() {
+  const rootDomain = getRootDomain();
   const organizations = await prisma.organization.findMany({
     orderBy: {
       createdAt: "desc"
@@ -22,7 +24,7 @@ export default async function OrganizationsPage() {
   const rows = organizations.map((org) => ({
     id: org.id,
     name: org.name,
-    subdomain: `${org.subdomain}.vfurst.app`,
+    subdomain: `${org.subdomain}.${rootDomain}`,
     events: org._count.events,
     members: org._count.members,
     href: `/dashboard/organizations/${org.id}`

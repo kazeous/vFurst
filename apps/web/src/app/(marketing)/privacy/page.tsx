@@ -41,7 +41,7 @@ export default function PrivacyPage() {
           to the organization that operates the relevant event or to vFurst support for platform account data.
         </p>
         <h2>Contact</h2>
-        <p>Questions about this policy can be sent to privacy@vfurst.app.</p>
+        <p>Questions about this policy can be sent to privacy@vfurst.reyuugames.com.</p>
       </article>
     </MarketingShell>
   );

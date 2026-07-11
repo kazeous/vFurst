@@ -25,7 +25,7 @@ export default function DmcaPage() {
         <h2>Repeat infringement</h2>
         <p>vFurst may suspend or terminate accounts that repeatedly host infringing content.</p>
         <h2>Contact</h2>
-        <p>DMCA notices can be sent to dmca@vfurst.app.</p>
+        <p>DMCA notices can be sent to dmca@vfurst.reyuugames.com.</p>
       </article>
     </MarketingShell>
   );

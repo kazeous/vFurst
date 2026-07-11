@@ -1,5 +1,5 @@
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://vfurst.app/schemas/webhooks.yaml
+$id: https://vfurst.reyuugames.com/schemas/webhooks.yaml
 title: vFurst Webhook Events
 type: object
 description: Outbound webhook event envelope used for organization webhook endpoints.

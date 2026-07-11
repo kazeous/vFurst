@@ -8,9 +8,9 @@
 
 ##### [NEW] `apps/web/middleware.ts`
 Next.js middleware for subdomain-based routing:
-- Parse `{slug}.vfurst.app` from `Host` header
+- Parse `{slug}.vfurst.reyuugames.com` from `Host` header
 - Rewrite to `/(convention)` route group with org context
-- Pass-through for `app.vfurst.app` (dashboard) and `vfurst.app` (marketing)
+- Pass-through for `app.vfurst.reyuugames.com` (dashboard) and `vfurst.reyuugames.com` (marketing)
 - Handle custom domains (Phase 6) via database lookup
 
 ##### [NEW] `apps/web/src/lib/subdomain.ts`
