@@ -31,6 +31,19 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-11 - Phase 7, Coolify Nixpacks setup failure diagnosis
+- Built:
+  - No source changes; inspected the failed Coolify deployment log for commit `de5245935c23103db1875a2144a0034e72139844`.
+- Verified:
+  - Coolify cloned the expected domain-migration commit and generated the intended Nixpacks plan.
+  - The Docker build stopped in step `#8`, `nix-env ... && nix-collect-garbage -d`, before `npm ci`, Turbo, or Next.js ran.
+  - The log contains no application compile error, dependency-install error, explicit disk-full message, or nonzero Docker exit code; Coolify raised its own `DeploymentException` with code `0` immediately after Nix garbage-collection output ended without `#8 DONE`.
+  - The local Windows Docker daemon was not running, so this session could not inspect the separate Coolify deployment host's disk, memory, or kernel OOM evidence.
+- Remaining issues / blockers:
+  - The deployment host or Coolify/Nixpacks orchestration interrupted the image build during toolchain provisioning. The exported log alone does not distinguish a transient orchestrator failure from host disk/memory pressure because it omits a Docker exit status and resource diagnostics.
+- Next session should:
+  - Retry once. If the build stops at the same Nix step, inspect the Coolify host with `df -h`, `df -i`, `free -h`, `docker system df`, and kernel OOM logs; prune Docker build cache only if those checks show pressure, otherwise upgrade/restart Coolify and retry before changing application code.
+
 ### 2026-07-11 - Phase 7, production domain migration
 - Built:
   - Replaced the retired platform domain with `vfurst.reyuugames.com` across runtime defaults, tenant URL display, legal contact addresses, API/webhook contracts, and planning documentation.
