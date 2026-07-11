@@ -112,7 +112,7 @@ export default async function PublicHotelPage({
 
                       return (
                         <option key={roomType.name} value={roomType.name} disabled={booked >= roomType.totalRooms}>
-                          {roomType.name} - {formatCurrency(roomType.rate)} / night - {roomType.totalRooms - booked} left
+                          {roomType.name} - {formatCurrency(roomType.rate, event.currency)} / night - {roomType.totalRooms - booked} left
                         </option>
                       );
                     })}
@@ -138,7 +138,7 @@ export default async function PublicHotelPage({
                     <input name="guestEmail" type="email" required />
                   </label>
                 </div>
-                <Button label="Continue to Stripe Checkout" type="submit" variant="primary" />
+                <Button label="Continue to checkout" type="submit" variant="primary" />
               </form>
             );
           })}

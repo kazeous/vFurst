@@ -13,6 +13,56 @@ enum OrgRole {
   MEMBER
 }
 
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+enum CurrencyCode {
+  USD
+  VND
+}
+
+enum PaymentProvider {
+  STRIPE
+  SEPAY
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  PAID
+  EXPIRED
+  FAILED
+  CANCELLED
+  REVIEW
+}
+
+enum PaymentExceptionType {
+  UNKNOWN_CODE
+  LATE_PAYMENT
+  UNDERPAID
+  OVERPAID
+  ACCOUNT_MISMATCH
+  INVALID_TRANSFER
+}
+
+enum PaymentExceptionStatus {
+  OPEN
+  RESOLVED
+  REFUNDED
+}
+
+enum OrganizerLedgerEntryType {
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+}
+
+enum OrganizerLedgerEntryStatus {
+  OPEN
+  SETTLED
+}
+
 enum EmailProviderType {
   SES
   SMTP
@@ -94,6 +144,7 @@ model User {
   image                      String?
   emailVerified             DateTime?
   passwordHash               String?
+  platformRole               PlatformRole           @default(USER)
   createdAt                  DateTime               @default(now())
   updatedAt                  DateTime               @updatedAt
   accounts                   Account[]
@@ -111,6 +162,10 @@ model User {
   staffAssignments           StaffAssignment[]
   vendorApplications         VendorApplication[]
   volunteerApplications      VolunteerApplication[]
+  paymentProviderUpdates     PaymentProviderConfig[] @relation("PaymentProviderUpdatedBy")
+  organizerPayoutsCreated    OrganizerPayout[]       @relation("OrganizerPayoutCreatedBy")
+  paymentRefundsCreated      PaymentRefund[]         @relation("PaymentRefundCreatedBy")
+  paymentExceptionsResolved  PaymentException[]      @relation("PaymentExceptionResolvedBy")
 
   @@map("users")
 }
@@ -125,6 +180,9 @@ model Organization {
   customDomain     String?           @unique
   emailProvider    EmailProviderType @default(SMTP)
   emailSettings    Json              @default("{}")
+  payoutBankCode   String?
+  payoutAccountNumber String?
+  payoutAccountHolder String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   addOnDefinitions AddOnDefinition[]
@@ -154,6 +212,8 @@ model Organization {
   volunteerApplications VolunteerApplication[]
   vouchers         Voucher[]
   webhookEndpoints WebhookEndpoint[]
+  organizerLedgerEntries OrganizerLedgerEntry[]
+  organizerPayouts OrganizerPayout[]
 
   @@map("organizations")
 }
@@ -256,6 +316,7 @@ model Event {
   endDate            DateTime
   venue              String?
   status             EventStatus            @default(DRAFT)
+  currency           CurrencyCode            @default(USD)
   settings           Json                   @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":1}")
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
@@ -613,7 +674,16 @@ model Order {
   cartId                String?       @db.Uuid
   total                 Int
   platformFee           Int
+  currency              CurrencyCode   @default(USD)
   status                OrderStatus   @default(PENDING)
+  paymentProvider       PaymentProvider?
+  paymentReference      String?
+  checkoutTokenHash     String?        @unique
+  checkoutSuccessPath   String?
+  checkoutCancelPath    String?
+  checkoutExpiresAt     DateTime?
+  inventoryReservedAt  DateTime?
+  reservationReleasedAt DateTime?
   stripePaymentIntentId String?       @unique
   voucherId             String?       @db.Uuid
   createdAt             DateTime      @default(now())
@@ -624,6 +694,10 @@ model Order {
   org                   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user                  User          @relation(fields: [userId], references: [id])
   voucher               Voucher?      @relation(fields: [voucherId], references: [id])
+  paymentAttempts       PaymentAttempt[]
+  paymentExceptions     PaymentException[]
+  ledgerEntries         OrganizerLedgerEntry[]
+  paymentRefund         PaymentRefund?
 
   @@index([orgId])
   @@index([eventId])
@@ -632,7 +706,147 @@ model Order {
   @@index([voucherId])
   @@index([eventId, status, createdAt])
   @@index([orgId, status, createdAt])
+  @@index([paymentProvider, paymentReference])
+  @@index([checkoutExpiresAt])
   @@map("orders")
+}
+
+model PaymentProviderConfig {
+  id          String          @id @default(uuid()) @db.Uuid
+  provider    PaymentProvider @unique
+  enabled     Boolean         @default(false)
+  settings    Json            @default("{}")
+  updatedById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  updatedBy   User?           @relation("PaymentProviderUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([enabled])
+  @@map("payment_provider_configs")
+}
+
+model PaymentAttempt {
+  id                String               @id @default(uuid()) @db.Uuid
+  orderId           String               @db.Uuid
+  provider          PaymentProvider
+  status            PaymentAttemptStatus @default(PENDING)
+  amount            Int
+  currency          CurrencyCode
+  paymentCode       String?              @unique
+  providerReference String?              @unique
+  expiresAt         DateTime
+  paidAt            DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentExceptions PaymentException[]
+
+  @@index([orderId, status])
+  @@index([provider, status, expiresAt])
+  @@map("payment_attempts")
+}
+
+model SePayWebhookEvent {
+  id                 String   @id @default(uuid()) @db.Uuid
+  sepayTransactionId String   @unique
+  payload            Json
+  processedAt        DateTime?
+  createdAt          DateTime @default(now())
+
+  @@index([processedAt, createdAt])
+  @@map("sepay_webhook_events")
+}
+
+model SePayReconciliationCursor {
+  id        String   @id @default("sepay")
+  cursor    String?
+  updatedAt DateTime @updatedAt
+
+  @@map("sepay_reconciliation_cursors")
+}
+
+model PaymentException {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  orderId            String?                @db.Uuid
+  paymentAttemptId   String?                @db.Uuid
+  type               PaymentExceptionType
+  status             PaymentExceptionStatus @default(OPEN)
+  sepayTransactionId String?                @unique
+  expectedAmount     Int?
+  receivedAmount     Int?
+  details            Json                   @default("{}")
+  resolvedById       String?                @db.Uuid
+  resolvedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  order              Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  paymentAttempt     PaymentAttempt?        @relation(fields: [paymentAttemptId], references: [id], onDelete: SetNull)
+  resolvedBy         User?                  @relation("PaymentExceptionResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([orderId])
+  @@index([paymentAttemptId])
+  @@map("payment_exceptions")
+}
+
+model OrganizerLedgerEntry {
+  id        String                     @id @default(uuid()) @db.Uuid
+  orgId     String                     @db.Uuid
+  orderId   String?                    @db.Uuid
+  payoutId  String?                    @db.Uuid
+  refundId  String?                    @db.Uuid
+  type      OrganizerLedgerEntryType
+  status    OrganizerLedgerEntryStatus @default(OPEN)
+  currency  CurrencyCode
+  amount    Int
+  note      String?
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
+  org       Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order     Order?                     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payout    OrganizerPayout?           @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  refund    PaymentRefund?             @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, type])
+  @@index([orgId, currency, status, createdAt])
+  @@index([payoutId])
+  @@map("organizer_ledger_entries")
+}
+
+model OrganizerPayout {
+  id          String        @id @default(uuid()) @db.Uuid
+  orgId       String        @db.Uuid
+  currency    CurrencyCode
+  amount      Int
+  reference   String
+  paidAt      DateTime
+  createdById String        @db.Uuid
+  createdAt   DateTime      @default(now())
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy   User          @relation("OrganizerPayoutCreatedBy", fields: [createdById], references: [id])
+  entries     OrganizerLedgerEntry[]
+
+  @@index([orgId, currency, paidAt])
+  @@index([createdById])
+  @@map("organizer_payouts")
+}
+
+model PaymentRefund {
+  id          String          @id @default(uuid()) @db.Uuid
+  orderId     String          @unique @db.Uuid
+  provider    PaymentProvider
+  amount      Int
+  reference   String
+  reason      String?
+  processedAt DateTime
+  createdById String          @db.Uuid
+  createdAt   DateTime        @default(now())
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy   User            @relation("PaymentRefundCreatedBy", fields: [createdById], references: [id])
+  ledgerEntries OrganizerLedgerEntry[]
+
+  @@index([createdById])
+  @@map("payment_refunds")
 }
 
 model OrderItem {

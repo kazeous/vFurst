@@ -29,7 +29,7 @@ Adopted from [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_sa
 | Per hotel room booked | **$1.00** |
 | Store / vendor transactions | **1%** |
 
-Payments processed via **Stripe Connect** using **destination charges** — the PaymentIntent is created on the vFurst platform account with `transfer_data.destination` set to the convention's connected Stripe account. This gives vFurst control of the charge (refunds, disputes) while funds are automatically transferred to the convention minus the platform fee.
+USD card payments are processed via **Stripe Connect** using **destination charges**. VND events can additionally use an embedded **SePay VietQR**: funds arrive in vFurst's central account, exact transfers are matched by a unique payment memo, and organizer net proceeds are credited to a ledger for manual payout.
 
 > [!IMPORTANT]
 > **Stripe Connect charge type: Destination charges** (not direct charges or separate charges and transfers).
@@ -54,7 +54,7 @@ Payments processed via **Stripe Connect** using **destination charges** — the 
 | **Theme** | shadcn/ui CSS variables in `apps/web/src/app/globals.css` | Clean SaaS aesthetic with light/dark token support |
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
-| **Payments** | Stripe Connect | Convention Stripe onboarding, `application_fee_amount` |
+| **Payments** | Stripe Connect + SePay VietQR | Connected card settlement plus central VND receipt, reconciliation, organizer ledger, and manual payout/refund records |
 | **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
 | **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
@@ -87,7 +87,7 @@ Payments processed via **Stripe Connect** using **destination charges** — the 
 | `minio` | `minio/minio` | AWS S3 | S3-API-compatible object storage. `apps/web/src/lib/s3.ts` must read `S3_ENDPOINT` from env — when set (e.g. `http://localhost:9000`), the AWS SDK v3 client points at MinIO instead of AWS; when unset, it defaults to real AWS S3. This is a config-only difference, not a code branch. |
 | `mailpit` | `axllent/mailpit` | AWS SES | A local SMTP catcher with a web UI (`http://localhost:8025`) to view sent emails. Configure the dev org's email provider as SMTP pointing at `localhost:1025` — this uses the SMTP provider path that's already in the plan (`packages/email/src/providers/smtp.ts`), so no email-provider code is local-only special-cased. |
 
-**Stripe** has no local emulator — it isn't in Docker Compose. Instead, use a free Stripe account in **test mode**: no business verification is required, and Connect onboarding (Account Links) accepts `http://localhost:3000/...` as a return URL in test mode. The [Stripe CLI](https://stripe.com/docs/stripe-cli) forwards webhook events to `localhost` (`stripe listen --forward-to localhost:3000/api/webhooks/stripe`) so the full payment + Connect + webhook flow is testable without deploying anything.
+**Stripe** has no local emulator — use test mode and the Stripe CLI webhook forwarder. **SePay** is validated with its Sandbox, HMAC-signed webhooks, and API v2 reconciliation. Provider credentials and the checkout-token secret stay in environment variables; non-secret bank and fee settings live in the platform payment configuration.
 
 **Migration path to cloud (post-Phase 7):** swapping to production infrastructure should be an environment-variable change, not a code change — `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` (removed to fall back to real AWS), and the org's email provider (switched from SMTP to SES) are the only things that differ. If a phase's implementation ever requires code branching on "are we local or cloud," that's a signal the abstraction is leaking and worth flagging in `PROGRESS.md` rather than working around silently.
 
@@ -194,7 +194,7 @@ Several entities use JSON fields. To prevent ambiguity, their schemas are define
 | **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string }` | Event-level configuration flags |
 
 > [!NOTE]
-> All monetary values in JSON fields use **cents** (integer) to avoid floating-point precision issues. The Zod validators in `packages/validators/` enforce these schemas at runtime.
+> Monetary values are integers in their currency's minor unit: USD uses cents and VND uses whole dong. The owning Event and Order carry an immutable currency so values are never interpreted without currency context.
 
 ---
 

@@ -97,7 +97,7 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
                 <div>
                   <h2>{type.name}</h2>
                   <p className="vf-muted">
-                    {formatCurrency(type.price)} base - {type.registrations.length} registered
+                    {formatCurrency(type.price, event.currency)} base - {type.registrations.length} registered
                   </p>
                 </div>
                 <form action={deleteRegistrationType}>
@@ -206,4 +206,3 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
     </div>
   );
 }
-

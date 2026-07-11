@@ -8,7 +8,7 @@ export default function OnboardingDocsPage() {
       <section className="vf-section">
         <ol className="vf-doc-list">
           <li>Create the organization and invite admins.</li>
-          <li>Complete Stripe Connect onboarding before paid checkout opens.</li>
+          <li>Complete Stripe Connect onboarding for card payments; platform-enabled VND events may also offer embedded SePay VietQR.</li>
           <li>Configure SMTP or SES sender settings.</li>
           <li>Add a custom domain and publish the CNAME/TXT records.</li>
           <li>Create events, registration tiers, hotel blocks, store products, volunteer departments, and vendor booth configuration.</li>

@@ -149,7 +149,7 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
                       <option value="">Choose vendor</option>
                       {event.vendorApplications.map((application) => (
                         <option key={application.id} value={application.id}>
-                          {application.businessName} - {formatCurrency(application.boothPrice)}
+                          {application.businessName} - {formatCurrency(application.boothPrice, event.currency)}
                         </option>
                       ))}
                     </select>

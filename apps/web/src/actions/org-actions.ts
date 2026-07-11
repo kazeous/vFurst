@@ -29,7 +29,10 @@ const updateOrganizationSchema = createOrganizationSchema.extend({
   smtpHost: z.string().trim().optional(),
   smtpPort: z.coerce.number().int().positive().optional(),
   smtpUser: z.string().trim().optional(),
-  sesFromEmail: z.string().trim().email().optional().or(z.literal(""))
+  sesFromEmail: z.string().trim().email().optional().or(z.literal("")),
+  payoutBankCode: z.string().trim().optional(),
+  payoutAccountNumber: z.string().trim().optional(),
+  payoutAccountHolder: z.string().trim().optional()
 });
 
 const inviteMemberSchema = z.object({
@@ -118,7 +121,10 @@ export async function updateOrganization(formData: FormData) {
     smtpHost: formData.get("smtpHost"),
     smtpPort: formData.get("smtpPort"),
     smtpUser: formData.get("smtpUser"),
-    sesFromEmail: formData.get("sesFromEmail")
+    sesFromEmail: formData.get("sesFromEmail"),
+    payoutBankCode: formData.get("payoutBankCode"),
+    payoutAccountNumber: formData.get("payoutAccountNumber"),
+    payoutAccountHolder: formData.get("payoutAccountHolder")
   });
 
   if (!parsed.success) {
@@ -149,7 +155,10 @@ export async function updateOrganization(formData: FormData) {
       contactEmail: parsed.data.contactEmail,
       logo: parsed.data.logo || null,
       emailProvider: parsed.data.emailProvider as EmailProviderType,
-      emailSettings
+      emailSettings,
+      payoutBankCode: parsed.data.payoutBankCode || null,
+      payoutAccountNumber: parsed.data.payoutAccountNumber || null,
+      payoutAccountHolder: parsed.data.payoutAccountHolder || null
     }
   });
 

@@ -2,7 +2,9 @@
 
 import { auth } from "@/lib/auth";
 import { markOrderPaid } from "@/lib/fulfillment";
-import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { prepareOrderCheckout } from "@/lib/payments/checkout";
+import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
+import { reserveOrderInventory } from "@/lib/payments/reservations";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getCartSummary, parseProductOptions } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
@@ -242,6 +244,9 @@ export async function convertCartToOrder(formData: FormData) {
   }
 
   const summary = getCartSummary(cart.items, cart.voucher);
+  if (summary.total > 0) {
+    await assertPaidCheckoutAvailable(cart.orgId, cart.event.currency);
+  }
   const order = await prisma.order.create({
     data: {
       orgId: cart.orgId,
@@ -250,6 +255,7 @@ export async function convertCartToOrder(formData: FormData) {
       cartId: cart.id,
       total: summary.total,
       platformFee: summary.platformFee,
+      currency: cart.event.currency,
       voucherId: cart.voucherId,
       items: {
         createMany: {
@@ -273,48 +279,15 @@ export async function convertCartToOrder(formData: FormData) {
     redirect(`${successPath}?success=${order.id}`);
   }
 
-  const connectedAccountId = await getConnectedStripeAccount(cart.orgId);
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    client_reference_id: order.id,
-    customer_email: cart.user.email,
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `${cart.event.name} store order`
-          },
-          unit_amount: summary.total
-        },
-        quantity: 1
-      }
-    ],
-    payment_intent_data: {
-      application_fee_amount: summary.platformFee,
-      transfer_data: {
-        destination: connectedAccountId
-      },
-      metadata: {
-        orderId: order.id,
-        eventId: cart.eventId,
-        orgId: cart.orgId
-      }
-    },
-    metadata: {
-      orderId: order.id,
-      eventId: cart.eventId,
-      orgId: cart.orgId
-    },
-    success_url: `${getBaseUrl()}${successPath}?success=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${getBaseUrl()}${cancelPath}?cancelled=1`
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a Checkout URL.");
+  try {
+    await reserveOrderInventory(order.id);
+  } catch (error) {
+    await prisma.order.delete({ where: { id: order.id } });
+    throw error;
   }
 
-  redirect(session.url);
+  const checkout = await prepareOrderCheckout(order.id, `${successPath}?success=${order.id}`, `${cancelPath}?cancelled=1`);
+  redirect(checkout.checkoutPath);
 }
 
 function getRegistrationId(metadata: unknown) {

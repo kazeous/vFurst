@@ -62,6 +62,11 @@ export default async function EventSettingsPage({
             <input name="slug" defaultValue={event.slug} required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
           </label>
           <label>
+            Currency
+            <input value={event.currency} readOnly aria-readonly="true" />
+            <small className="vf-muted">Currency is fixed when the event is created.</small>
+          </label>
+          <label>
             Description
             <textarea name="description" rows={4} defaultValue={event.description ?? ""} />
           </label>

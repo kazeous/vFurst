@@ -170,7 +170,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                       <strong>
                         {booked} / {room.totalRooms}
                       </strong>
-                      <span>{formatCurrency(room.rate)} per night</span>
+                      <span>{formatCurrency(room.rate, event.currency)} per night</span>
                     </div>
                   );
                 })}

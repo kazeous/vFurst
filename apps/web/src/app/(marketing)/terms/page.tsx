@@ -9,7 +9,7 @@ export default function TermsPage() {
   return (
     <MarketingShell eyebrow="Legal" title="Terms of Service" description="The terms that govern access to and use of vFurst.">
       <article className="vf-legal-document">
-        <p>Effective date: July 7, 2026</p>
+        <p>Effective date: July 11, 2026</p>
         <h2>Use of the service</h2>
         <p>
           vFurst provides software for convention and event management. Users must provide accurate account information, maintain the
@@ -22,8 +22,10 @@ export default function TermsPage() {
         </p>
         <h2>Payments and fees</h2>
         <p>
-          Payments are processed by Stripe Connect. Platform fees are collected through Stripe application fees at checkout according to the
-          pricing page. Organizers must keep their Stripe account in good standing to accept paid orders.
+          USD card payments are processed through Stripe Connect. For supported VND events, vFurst may receive bank transfers centrally
+          through SePay and later settle the organizer&apos;s net proceeds using the payout bank details supplied by the organizer. Platform
+          fees are shown at checkout and deducted before settlement. SePay refunds are transferred externally and recorded manually; the
+          organizer remains responsible for its event refund policy.
         </p>
         <h2>Acceptable use</h2>
         <p>

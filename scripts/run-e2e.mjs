@@ -4,9 +4,10 @@ import process from "node:process";
 const host = "127.0.0.1";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
+const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";
 const serverArgs = [
   "node_modules/next/dist/bin/next",
-  "dev",
+  serverMode,
   "apps/web",
   "--hostname",
   host,
@@ -44,7 +45,15 @@ async function waitForApp() {
 function startServer() {
   server = spawn(process.execPath, serverArgs, {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      AUTH_TRUST_HOST: "true",
+      AUTH_URL: baseUrl,
+      AUTH_SECRET: process.env.AUTH_SECRET ?? "e2e-auth-secret-32-bytes-minimum-value",
+      CHECKOUT_TOKEN_SECRET: process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum",
+      SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
+      SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token"
+    },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
   });
@@ -74,6 +83,9 @@ function runPlaywright() {
       cwd: process.cwd(),
       env: {
         ...process.env,
+        CHECKOUT_TOKEN_SECRET: process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum",
+        SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
+        SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
         PLAYWRIGHT_HTML_OPEN: "never"
       },
       stdio: "inherit",

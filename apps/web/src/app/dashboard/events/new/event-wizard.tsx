@@ -21,6 +21,7 @@ type Step = (typeof steps)[number]["id"];
 
 export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
   const [step, setStep] = useState<Step>("basic");
+  const [currency, setCurrency] = useState<"USD" | "VND">("USD");
 
   return (
     <form action={createEventWithRegistrationTypes} className="vf-section vf-wizard">
@@ -39,6 +40,13 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
                 {org.name}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          Event currency
+          <select name="currency" value={currency} onChange={(event) => setCurrency(event.target.value as "USD" | "VND")} required>
+            <option value="USD">USD - US dollars</option>
+            <option value="VND">VND - Vietnamese dong</option>
           </select>
         </label>
         <label>
@@ -78,7 +86,14 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
             </label>
             <label>
               Price
-              <input name="tierPrice" type="number" min="0" step="0.01" placeholder="75.00" required={index === 0} />
+              <input
+                name="tierPrice"
+                type="number"
+                min="0"
+                step={currency === "USD" ? "0.01" : "1"}
+                placeholder={currency === "USD" ? "75.00" : "1500000"}
+                required={index === 0}
+              />
             </label>
             <label>
               Capacity
@@ -121,4 +136,3 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
     </form>
   );
 }
-

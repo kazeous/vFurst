@@ -35,11 +35,10 @@ export default async function EventsPage() {
             status: event.status,
             startDate: event.startDate.toLocaleDateString(),
             registrationCount: event.registrations.length,
-            revenue: formatCurrency(event.orders.reduce((sum, order) => sum + order.total, 0))
+            revenue: formatCurrency(event.orders.reduce((sum, order) => sum + order.total, 0), event.currency)
           }))}
         />
       </section>
     </div>
   );
 }
-

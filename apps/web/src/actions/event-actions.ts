@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { requireEventAccess } from "@/lib/dashboard-access";
 import { eventSettingsSchema, mergeCoreEventSettings } from "@/lib/event-settings";
-import { dollarsToCents } from "@/lib/registration/pricing";
+import { parseMoney } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -24,6 +24,7 @@ const eventSchema = z.object({
   venue: z.string().trim().optional(),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
+  currency: z.enum(["USD", "VND"]).default("USD"),
   requireApproval: z.coerce.boolean().optional(),
   allowTransfers: z.coerce.boolean().optional(),
   maxRegistrationsPerUser: z.coerce.number().int().min(1).max(20).optional()
@@ -57,7 +58,8 @@ export async function createEvent(formData: FormData) {
     slug: formData.get("slug"),
     venue: formData.get("venue"),
     startDate: formData.get("startDate"),
-    endDate: formData.get("endDate")
+    endDate: formData.get("endDate"),
+    currency: formData.get("currency") || "USD"
   });
 
   if (!parsed.success) {
@@ -78,7 +80,8 @@ export async function createEvent(formData: FormData) {
       description: parsed.data.description,
       venue: parsed.data.venue,
       startDate: parsed.data.startDate,
-      endDate: parsed.data.endDate
+      endDate: parsed.data.endDate,
+      currency: parsed.data.currency
     }
   });
 
@@ -189,6 +192,7 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
     venue: formData.get("venue"),
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
+    currency: formData.get("currency") || "USD",
     requireApproval: formData.get("requireApproval") === "on",
     allowTransfers: formData.get("allowTransfers") !== "off",
     maxRegistrationsPerUser: formData.get("maxRegistrationsPerUser")
@@ -212,7 +216,7 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
   const tierInputs = tierNames
     .map((name, index) => ({
       name,
-      price: dollarsToCents(tierPrices[index] ?? "0"),
+      price: parseMoney(tierPrices[index] ?? "0", parsed.data.currency),
       maxCapacity:
         typeof tierCapacities[index] === "string" && tierCapacities[index].trim() !== ""
           ? Number(tierCapacities[index])
@@ -234,6 +238,7 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
       venue: parsed.data.venue,
       startDate: parsed.data.startDate,
       endDate: parsed.data.endDate,
+      currency: parsed.data.currency,
       status: publishNow ? "PUBLISHED" : "DRAFT",
       settings: {
         requireApproval: parsed.data.requireApproval ?? false,
@@ -273,7 +278,7 @@ const registrationTypeSchema = z.object({
   )
 });
 
-function scheduledPricingFromForm(formData: FormData) {
+function scheduledPricingFromForm(formData: FormData, currency: "USD" | "VND") {
   const starts = formData.getAll("scheduledStart");
   const ends = formData.getAll("scheduledEnd");
   const prices = formData.getAll("scheduledPrice");
@@ -282,7 +287,7 @@ function scheduledPricingFromForm(formData: FormData) {
     .map((startDate, index) => ({
       startDate: String(startDate),
       endDate: String(ends[index] ?? ""),
-      price: dollarsToCents(prices[index] ?? "0")
+      price: parseMoney(prices[index] ?? "0", currency)
     }))
     .filter((price) => price.startDate && price.endDate);
 }
@@ -297,14 +302,15 @@ export async function createRegistrationType(formData: FormData) {
       eventId
     }
   });
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
 
   const parsed = registrationTypeSchema.safeParse({
     orgId,
     eventId,
     name: formData.get("name"),
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     maxCapacity: formData.get("maxCapacity") ? Number(formData.get("maxCapacity")) : null,
-    scheduledPricing: scheduledPricingFromForm(formData)
+    scheduledPricing: scheduledPricingFromForm(formData, event.currency)
   });
 
   if (!parsed.success) {
@@ -327,14 +333,16 @@ export async function createRegistrationType(formData: FormData) {
 }
 
 export async function updateRegistrationType(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
   const parsed = registrationTypeSchema.required({ typeId: true }).safeParse({
     orgId: formData.get("orgId"),
     eventId: formData.get("eventId"),
     typeId: formData.get("typeId"),
     name: formData.get("name"),
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     maxCapacity: formData.get("maxCapacity") ? Number(formData.get("maxCapacity")) : null,
-    scheduledPricing: scheduledPricingFromForm(formData)
+    scheduledPricing: scheduledPricingFromForm(formData, event.currency)
   });
 
   if (!parsed.success) {
@@ -423,12 +431,14 @@ const addOnSchema = z.object({
 });
 
 export async function createAddOnDefinition(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
   const parsed = addOnSchema.safeParse({
     orgId: formData.get("orgId"),
     eventId: formData.get("eventId"),
     typeId: formData.get("typeId"),
     name: formData.get("name"),
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     isComplimentary: formData.get("isComplimentary") === "on",
     maxQuantity: formData.get("maxQuantity")
   });
@@ -461,13 +471,15 @@ export async function createAddOnDefinition(formData: FormData) {
 }
 
 export async function updateAddOnDefinition(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
   const parsed = addOnSchema.required({ addOnId: true }).safeParse({
     orgId: formData.get("orgId"),
     eventId: formData.get("eventId"),
     typeId: formData.get("typeId"),
     addOnId: formData.get("addOnId"),
     name: formData.get("name"),
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     isComplimentary: formData.get("isComplimentary") === "on",
     maxQuantity: formData.get("maxQuantity")
   });

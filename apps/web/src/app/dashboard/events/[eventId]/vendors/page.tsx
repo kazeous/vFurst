@@ -126,7 +126,7 @@ export default async function VendorsPage({
                   <p className="vf-label">{application.user.email}</p>
                   <h2>{application.businessName}</h2>
                   <p className="vf-muted">
-                    {application.tableType ?? "No table type"} - {formatCurrency(application.boothPrice)} - Booth{" "}
+                    {application.tableType ?? "No table type"} - {formatCurrency(application.boothPrice, event.currency)} - Booth{" "}
                     {application.boothAssignment ?? "unassigned"} - {application.boothPaidAt ? "paid" : "unpaid"}
                   </p>
                 </div>

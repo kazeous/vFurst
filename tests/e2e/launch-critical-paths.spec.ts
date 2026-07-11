@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createHmac, randomBytes } from "node:crypto";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -11,6 +12,8 @@ const vendorEmail = `launch-vendor-${runId}@example.com`;
 const orgSlug = `launch-${runId}`;
 const crudOrgSlug = `launch-crud-${runId}`;
 const memberOnlyOrgSlug = `launch-member-${runId}`;
+const checkoutSecret = process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum";
+const sepayWebhookSecret = process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret";
 
 let orgId: string;
 let eventId: string;
@@ -20,7 +23,7 @@ let registrationTypeId: string;
 let registrationId: string;
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(60_000);
+test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
@@ -28,7 +31,8 @@ test.beforeAll(async () => {
     data: {
       email: adminEmail,
       name: "Launch Admin",
-      passwordHash: await bcrypt.hash(password, 12)
+      passwordHash: await bcrypt.hash(password, 12),
+      platformRole: "PLATFORM_ADMIN"
     }
   });
 
@@ -57,6 +61,7 @@ test.beforeAll(async () => {
       startDate: new Date("2027-07-10T09:00:00Z"),
       endDate: new Date("2027-07-12T17:00:00Z"),
       status: "PUBLISHED",
+      currency: "VND",
       settings: {
         requireApproval: false,
         allowTransfers: true,
@@ -121,6 +126,10 @@ test.afterAll(async () => {
         in: [orgSlug, crudOrgSlug, memberOnlyOrgSlug]
       }
     }
+  });
+  await prisma.paymentProviderConfig.updateMany({
+    where: { updatedBy: { email: adminEmail } },
+    data: { updatedById: null }
   });
   await prisma.user.deleteMany({
     where: {
@@ -205,20 +214,30 @@ test("marketing and legal launch pages render", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Simple usage fees for events that move money" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Estimate platform fees" })).toBeVisible();
 
-  for (const path of ["/privacy", "/terms", "/dmca"]) {
+  for (const path of ["/privacy", "/terms"]) {
     await page.goto(path);
-    await expect(page.getByText("Effective date: July 7, 2026")).toBeVisible();
+    await expect(page.getByText("Effective date: July 11, 2026")).toBeVisible();
   }
+  await page.goto("/dmca");
+  await expect(page.getByText("Effective date: July 7, 2026")).toBeVisible();
 });
 
 test("public registration completes and creates a paid zero-dollar order", async ({ page }) => {
   await page.goto(`/${orgSlug}/register`);
   await page.getByLabel("Full name").fill("Launch Attendee");
   await page.getByLabel("Email").fill(attendeeEmail);
-  await page.getByRole("button", { name: "Continue to Stripe Checkout" }).click();
+  await page.getByRole("button", { name: "Continue to checkout" }).click();
 
-  await expect(page).toHaveURL(/success=/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
+  await expect.poll(
+    async () => {
+      const result = await prisma.registration.findFirst({
+        where: { eventId, user: { email: attendeeEmail } },
+        include: { orderItems: { include: { order: true } } }
+      });
+      return result?.status === "CONFIRMED" && result.orderItems.some((item) => item.order.status === "PAID");
+    },
+    { timeout: 30_000 }
+  ).toBe(true);
 
   const registration = await prisma.registration.findFirstOrThrow({
     where: {
@@ -236,6 +255,9 @@ test("public registration completes and creates a paid zero-dollar order", async
     }
   });
 
+  await page.goto(`/${orgSlug}/register?success=${registration.id}`);
+  await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
+
   registrationId = registration.id;
   expect(registration.typeId).toBe(registrationTypeId);
   expect(registration.status).toBe("CONFIRMED");
@@ -250,8 +272,10 @@ test("public vendor application submits for organizer review", async ({ page }) 
   await page.getByLabel("Product description").fill("Original convention merchandise and attendee accessories.");
   await page.getByRole("button", { name: "Submit vendor application" }).click();
 
-  await expect(page).toHaveURL(/success=/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
+  await expect.poll(
+    () => prisma.vendorApplication.count({ where: { eventId, contactEmail: vendorEmail } }),
+    { timeout: 30_000 }
+  ).toBe(1);
 
   const application = await prisma.vendorApplication.findFirstOrThrow({
     where: {
@@ -259,6 +283,9 @@ test("public vendor application submits for organizer review", async ({ page }) 
       contactEmail: vendorEmail
     }
   });
+
+  await page.goto(`/${orgSlug}/vendor-apply?success=${application.id}`);
+  await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
 
   expect(application.status).toBe("PENDING");
 });
@@ -271,16 +298,21 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await page.getByLabel("Name").fill("Launch CRUD Org");
   await page.getByLabel("Subdomain slug").fill(crudOrgSlug);
   await page.getByLabel("Contact email").fill("crud@example.com");
-  await Promise.all([
-    page.waitForURL(/\/dashboard\/organizations\/[^/]+$/, { timeout: 15_000 }),
-    page.getByRole("button", { name: "Create organization" }).click()
-  ]);
+  await page.getByRole("button", { name: "Create organization" }).click();
+  await expect.poll(() => prisma.organization.count({ where: { slug: crudOrgSlug } }), { timeout: 30_000 }).toBe(1);
+  const createdOrg = await prisma.organization.findUniqueOrThrow({ where: { slug: crudOrgSlug } });
+  await page.goto(`/dashboard/organizations/${createdOrg.id}`);
   await expect(page.getByRole("heading", { name: "Launch CRUD Org" })).toBeVisible({ timeout: 15_000 });
 
   await page.goto(`/dashboard/events/${eventId}/check-in`);
   await page.getByPlaceholder("Name, email, badge number, QR code, or registration ID").fill(attendeeEmail);
   await page.getByRole("button", { name: "Check in" }).click();
-  await expect(page.getByRole("button", { name: "Checked in" })).toBeVisible();
+  await expect.poll(
+    async () => (await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } })).status,
+    { timeout: 30_000 }
+  ).toBe("CHECKED_IN");
+  await page.goto(`/dashboard/events/${eventId}/check-in?q=${encodeURIComponent(attendeeEmail)}`);
+  await expect(page.getByRole("button", { name: "Checked in" })).toBeVisible({ timeout: 15_000 });
 
   const registration = await prisma.registration.findUniqueOrThrow({
     where: {
@@ -302,6 +334,7 @@ test("dashboard settings hub filters access and updates event settings", async (
   await expect(page).toHaveURL(/\/dashboard\/settings$/);
   await expect(dashboardNavigation.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Launch Test Convention" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payment methods" })).toBeVisible();
   await expect(page.getByText("Member Only Convention")).toHaveCount(0);
 
   const unauthorizedOrgResponse = await page.request.get(`/dashboard/organizations/${memberOnlyOrgId}/settings`);
@@ -338,4 +371,93 @@ test("dashboard settings hub filters access and updates event settings", async (
   expect(settings.allowTransfers).toBe(false);
   expect(settings.maxRegistrationsPerUser).toBe(3);
   expect(settings.vendorConfig).toBeTruthy();
+});
+
+test("embedded SePay QR fulfills through a signed webhook after the provider is disabled", async ({ page }) => {
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
+  await prisma.paymentProviderConfig.upsert({
+    where: { provider: "SEPAY" },
+    update: {
+      enabled: true,
+      updatedById: admin.id,
+      settings: {
+        bankCode: "VCB",
+        accountNumber: "123456789",
+        accountHolder: "VFURST PLATFORM",
+        bankAccountId: "e2e-bank-account",
+        memoPrefix: "VFURST",
+        registrationFeeVnd: 25000,
+        hotelFeeVnd: 25000
+      }
+    },
+    create: {
+      provider: "SEPAY",
+      enabled: true,
+      updatedById: admin.id,
+      settings: {
+        bankCode: "VCB",
+        accountNumber: "123456789",
+        accountHolder: "VFURST PLATFORM",
+        bankAccountId: "e2e-bank-account",
+        memoPrefix: "VFURST",
+        registrationFeeVnd: 25000,
+        hotelFeeVnd: 25000
+      }
+    }
+  });
+
+  const token = randomBytes(32).toString("base64url");
+  const order = await prisma.order.create({
+    data: {
+      orgId,
+      eventId,
+      userId: admin.id,
+      total: 150000,
+      platformFee: 25000,
+      currency: "VND",
+      checkoutTokenHash: createHmac("sha256", checkoutSecret).update(token).digest("hex"),
+      checkoutSuccessPath: "/pricing",
+      checkoutCancelPath: "/pricing",
+      checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+
+  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}`);
+  await page.getByRole("button", { name: "Pay with SePay QR" }).click();
+  await expect.poll(
+    () => prisma.paymentAttempt.count({ where: { orderId: order.id, provider: "SEPAY" } }),
+    { timeout: 30_000 }
+  ).toBe(1);
+  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
+  await expect(page.getByRole("heading", { name: "Scan to pay with SePay" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("img", { name: /SePay QR code/ })).toBeVisible();
+  const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });
+
+  await prisma.paymentProviderConfig.update({ where: { provider: "SEPAY" }, data: { enabled: false } });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const body = JSON.stringify({
+    id: `e2e-sepay-${runId}`,
+    accountNumber: "123456789",
+    code: null,
+    content: `VFURST ${attempt.paymentCode}`,
+    transferType: "in",
+    transferAmount: order.total
+  });
+  const signature = `sha256=${createHmac("sha256", sepayWebhookSecret).update(`${timestamp}.${body}`).digest("hex")}`;
+  const response = await page.request.post("/api/webhooks/sepay", {
+    data: body,
+    headers: {
+      "content-type": "application/json",
+      "x-sepay-timestamp": timestamp,
+      "x-sepay-signature": signature
+    }
+  });
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toBe('{"success":true}');
+  await expect(page).toHaveURL(/\/pricing$/, { timeout: 15_000 });
+
+  const paidOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { ledgerEntries: true } });
+  expect(paidOrder.status).toBe("PAID");
+  expect(paidOrder.paymentProvider).toBe("SEPAY");
+  expect(paidOrder.ledgerEntries[0]?.amount).toBe(125000);
 });

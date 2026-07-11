@@ -3,9 +3,10 @@
 import { auth } from "@/lib/auth";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
-import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { prepareOrderCheckout } from "@/lib/payments/checkout";
+import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
 import { assertActionRateLimit } from "@/lib/rate-limit";
-import { dollarsToCents } from "@/lib/registration/pricing";
+import { parseMoney } from "@/lib/registration/pricing";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { amenitySchema, boothSchema, getVendorConfig, tableTypeSchema } from "@/lib/vendor/config";
 import { prisma, type Prisma } from "@vfurst/db";
@@ -140,12 +141,13 @@ export async function saveBoothConfig(formData: FormData) {
   const amenityPrices = formData.getAll("amenityPrice");
   const boothLabels = formData.getAll("boothLabel");
   const boothTableTypes = formData.getAll("boothTableType");
+  const event = await prisma.event.findFirstOrThrow({ where: { id: eventId, orgId } });
 
   const tableTypes = tableNames
     .map((name, index) => ({
       id: slugId("table", String(name)),
       name: String(name).trim(),
-      price: dollarsToCents(tablePrices[index] ?? "0")
+      price: parseMoney(tablePrices[index] ?? "0", event.currency)
     }))
     .filter((table) => table.name.length > 0)
     .map((table) => tableTypeSchema.parse(table));
@@ -154,7 +156,7 @@ export async function saveBoothConfig(formData: FormData) {
     .map((name, index) => ({
       id: slugId("amenity", String(name)),
       name: String(name).trim(),
-      price: dollarsToCents(amenityPrices[index] ?? "0")
+      price: parseMoney(amenityPrices[index] ?? "0", event.currency)
     }))
     .filter((amenity) => amenity.name.length > 0)
     .map((amenity) => amenitySchema.parse(amenity));
@@ -169,12 +171,6 @@ export async function saveBoothConfig(formData: FormData) {
     .filter((booth) => booth.label.length > 0)
     .map((booth) => boothSchema.parse(booth));
 
-  const event = await prisma.event.findFirstOrThrow({
-    where: {
-      id: eventId,
-      orgId
-    }
-  });
   const settings = settingsObject(event.settings);
 
   await prisma.event.update({
@@ -277,6 +273,7 @@ export async function approveVendor(formData: FormData) {
   const boothPriceValue = formData.get("boothPrice");
 
   await requireEventAccess(orgId);
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
 
   const application = await prisma.vendorApplication.update({
     where: {
@@ -284,7 +281,7 @@ export async function approveVendor(formData: FormData) {
     },
     data: {
       status: "APPROVED",
-      boothPrice: boothPriceValue ? dollarsToCents(boothPriceValue) : undefined
+      boothPrice: boothPriceValue ? parseMoney(boothPriceValue, event.currency) : undefined
     },
     include: {
       event: true,
@@ -507,6 +504,9 @@ export async function payVendorBooth(formData: FormData) {
   }
 
   const total = application.boothPrice;
+  if (total > 0) {
+    await assertPaidCheckoutAvailable(application.orgId, application.event.currency);
+  }
   const order = application.paymentOrderId
     ? await prisma.order.findUnique({
         where: {
@@ -523,6 +523,7 @@ export async function payVendorBooth(formData: FormData) {
         eventId: application.eventId,
         total,
         platformFee: vendorPlatformFee(total),
+        currency: application.event.currency,
         items: {
           create: {
             orgId: application.orgId,
@@ -555,48 +556,10 @@ export async function payVendorBooth(formData: FormData) {
     redirect(`/${application.event.org.subdomain}/vendor-apply?success=${application.id}`);
   }
 
-  const connectedAccountId = await getConnectedStripeAccount(application.orgId);
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    client_reference_id: payableOrder.id,
-    customer_email: application.contactEmail ?? application.user.email,
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `${application.event.name} vendor booth`
-          },
-          unit_amount: total
-        },
-        quantity: 1
-      }
-    ],
-    payment_intent_data: {
-      application_fee_amount: vendorPlatformFee(total),
-      transfer_data: {
-        destination: connectedAccountId
-      },
-      metadata: {
-        orderId: payableOrder.id,
-        vendorApplicationId: application.id,
-        eventId: application.eventId,
-        orgId: application.orgId
-      }
-    },
-    metadata: {
-      orderId: payableOrder.id,
-      vendorApplicationId: application.id,
-      eventId: application.eventId,
-      orgId: application.orgId
-    },
-    success_url: `${getBaseUrl()}/${application.event.org.subdomain}/vendor-apply?success=${application.id}`,
-    cancel_url: `${getBaseUrl()}/${application.event.org.subdomain}/vendor-apply?cancelled=1`
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a Checkout URL.");
-  }
-
-  redirect(session.url);
+  const checkout = await prepareOrderCheckout(
+    payableOrder.id,
+    `/${application.event.org.subdomain}/vendor-apply?success=${application.id}`,
+    `/${application.event.org.subdomain}/vendor-apply?cancelled=1`
+  );
+  redirect(checkout.checkoutPath);
 }

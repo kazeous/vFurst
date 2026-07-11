@@ -36,6 +36,7 @@ const getPublicRegistrationData = unstable_cache(
         id: true,
         description: true,
         endDate: true,
+        currency: true,
         name: true,
         startDate: true,
         venue: true,
@@ -174,7 +175,7 @@ export default async function PublicRegistrationPage({
                   <input name="typeId" type="radio" value={type.id} required defaultChecked={index === 0 && !soldOut} disabled={soldOut} />
                   <span>
                     <strong>{type.name}</strong>
-                    <small>{soldOut ? "Sold out" : `${formatCurrency(price)} current price`}</small>
+                    <small>{soldOut ? "Sold out" : `${formatCurrency(price, event.currency)} current price`}</small>
                   </span>
                 </label>
               );
@@ -195,7 +196,7 @@ export default async function PublicRegistrationPage({
             {event.registrationTypes.map((type) =>
               type.addOns.map((addOn) => (
                 <label key={addOn.id}>
-                  {type.name}: {addOn.name} ({addOn.isComplimentary ? "Included" : formatCurrency(addOn.price)})
+                  {type.name}: {addOn.name} ({addOn.isComplimentary ? "Included" : formatCurrency(addOn.price, event.currency)})
                   <input name={`addon-${addOn.id}`} type="number" min="0" max={addOn.maxQuantity} defaultValue="0" />
                 </label>
               ))
@@ -207,7 +208,7 @@ export default async function PublicRegistrationPage({
             <input name="voucherCode" placeholder="OPTIONAL" />
           </label>
           <div className="vf-actions">
-            <Button label="Continue to Stripe Checkout" name="checkoutMode" value="stripe" type="submit" variant="primary" />
+            <Button label="Continue to checkout" name="checkoutMode" value="stripe" type="submit" variant="primary" />
             <Button label="Add to cart" name="checkoutMode" value="cart" type="submit" />
           </div>
         </form>

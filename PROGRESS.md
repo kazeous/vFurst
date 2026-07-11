@@ -25,11 +25,32 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test script/runner/seed tooling, one-command launch load-proof runner, launch audit docs, DB indexes, critical-path E2E coverage, and automated launch accessibility smoke coverage are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test tooling, launch audit docs, DB indexes, critical-path/accessibility E2E coverage, functional organizer settings, and platform-controlled Stripe/SePay checkout and settlement operations are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env, real SePay Sandbox credentials/simulations, and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-11 - Phase 7, platform-controlled SePay QR payments
+- Built:
+  - Added platform roles with a grant/revoke CLI, immutable event/order currency, provider-neutral payment metadata, secure checkout-token context, provider attempts, webhook deduplication, payment exceptions, organizer ledgers, payouts, and manual refund records.
+  - Added the shared `/checkout/[orderId]` flow for registration, cart/store, hotel, and vendor orders. USD uses Stripe; configured VND events can offer embedded SePay VietQR and Stripe; zero-value orders still auto-complete; unavailable providers do not create new paid orders or reservations.
+  - Added exact whole-dong VND parsing/formatting, dynamic compact VietQR rendering, accessible bank-transfer fallback details, three-second status polling, 30-minute reservations, inventory release, and provider-switch locking during active attempts.
+  - Refactored paid fulfillment into an atomic provider-neutral transition shared by Stripe and SePay, including idempotent SePay organizer ledger credits and fulfillment reversal for manual refunds.
+  - Added HMAC-SHA256 SePay webhook verification over the raw body, five-minute replay protection, exact transfer matching, duplicate acceptance, manual-review exceptions, API v2 cursor reconciliation every 15 minutes, and one-minute expired-checkout cleanup.
+  - Extended platform-admin settings with independent Stripe/SePay switches, SePay readiness and bank configuration, VND registration/hotel fees, settlement CSV export, validated payouts, manual SePay refunds, and exception resolution. Added organizer payout bank details to organization settings.
+  - Updated currency-aware public/dashboard displays, legal/pricing/reference content, onboarding, and the SePay rollout runbook. Added production-mode E2E support and fixed cached check-in timestamp normalization discovered during verification.
+- Verified:
+  - Backed up the local PostgreSQL database to the ignored `.backups/` directory before applying the additive schema; `prisma validate`, `prisma generate`, and local `prisma db push --accept-data-loss` passed (the acknowledged warning was the new nullable unique checkout-token hash).
+  - Repository-wide `npm run type-check`, `npm run lint`, `npm run test`, and `npm run build` passed. Unit suite: 13 tests, including currency units, provider eligibility/maintenance, checkout tokens, payment codes, VietQR parameters, signatures/timestamps, and ledger math.
+  - Production-mode full Playwright suite passed with 10/10 tests using one worker. Coverage includes settings authorization, all existing launch surfaces, zero-value fulfillment, embedded SePay QR, exact signed webhook response, polling success navigation, organizer ledger persistence, and continued callback processing after SePay is disabled.
+  - Official SePay documentation was rechecked for embedded VietQR parameters, raw-body HMAC format, five-minute timestamp protection, API v2 pagination/cursors, and the distinct Sandbox API base URL; reconciliation selects the Sandbox or Production host from `SEPAY_ENV`.
+- Remaining issues / blockers:
+  - Real SePay Sandbox webhook/API simulation was not possible without project Sandbox credentials and account IDs. SePay remains disabled by default and cannot be enabled until secrets and non-secret account configuration are complete.
+  - The first real platform administrator still must be granted by email during rollout, after choosing the production operator account.
+  - Phase 7 external launch blockers remain: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Configure SePay Test mode credentials/account/payment-code prefix, run exact/duplicate/underpaid/overpaid/unmatched/late simulations plus reconciliation, then follow `docs/sepay-rollout.md` before enabling production SePay.
 
 ### 2026-07-11 - Phase 7, functional dashboard settings
 - Built:

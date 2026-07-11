@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { dollarsToCents } from "@/lib/registration/pricing";
+import { parseMoney } from "@/lib/registration/pricing";
+import type { CurrencyCode } from "@vfurst/db";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -44,10 +45,10 @@ function normalizeCode(code: string) {
   return code.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
 }
 
-function voucherPayloadFromForm(formData: FormData) {
+function voucherPayloadFromForm(formData: FormData, currency: CurrencyCode) {
   const mode = z.enum(["PERCENT", "AMOUNT", "COMP"]).parse(formData.get("discountType"));
   const discountType = mode === "AMOUNT" ? ("AMOUNT" as const) : ("PERCENT" as const);
-  const discountValue = mode === "COMP" ? 100 : mode === "AMOUNT" ? dollarsToCents(formData.get("discountValue")) : Number(formData.get("discountValue") ?? 0);
+  const discountValue = mode === "COMP" ? 100 : mode === "AMOUNT" ? parseMoney(formData.get("discountValue"), currency) : Number(formData.get("discountValue") ?? 0);
   const tierIds = formData
     .getAll("tierId")
     .map((value) => String(value))
@@ -87,13 +88,14 @@ export async function createVoucher(formData: FormData) {
   }
 
   await requireEventAccess(parsed.data.orgId);
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
 
   await prisma.voucher.create({
     data: {
       orgId: parsed.data.orgId,
       eventId: parsed.data.eventId,
       code: normalizeCode(parsed.data.code),
-      ...voucherPayloadFromForm(formData)
+      ...voucherPayloadFromForm(formData, event.currency)
     }
   });
 
@@ -120,7 +122,8 @@ export async function bulkGenerateVouchers(formData: FormData) {
   }
 
   await requireEventAccess(parsed.data.orgId);
-  const payload = voucherPayloadFromForm(formData);
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
+  const payload = voucherPayloadFromForm(formData, event.currency);
 
   await prisma.voucher.createMany({
     data: Array.from({ length: parsed.data.count }, () => ({

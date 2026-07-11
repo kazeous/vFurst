@@ -12,6 +12,27 @@ export async function requireDashboardUser() {
   return session.user.id;
 }
 
+export async function requirePlatformAdmin() {
+  const userId = await requireDashboardUser();
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      platformRole: true
+    }
+  });
+
+  if (!user || user.platformRole !== "PLATFORM_ADMIN") {
+    throw new Error("You do not have permission to manage platform settings.");
+  }
+
+  return user;
+}
+
 export async function requireOrgAccess(orgId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
   const userId = await requireDashboardUser();
   const membership = await prisma.orgMember.findUnique({

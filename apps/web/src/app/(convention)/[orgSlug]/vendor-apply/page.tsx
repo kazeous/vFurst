@@ -82,7 +82,7 @@ export default async function PublicVendorApplyPage({
               <h2>{successApplication.businessName}</h2>
               <p className="vf-muted">
                 Booth: {successApplication.boothAssignment ?? "not assigned"} - Price{" "}
-                {formatCurrency(successApplication.boothPrice)}
+                {formatCurrency(successApplication.boothPrice, successApplication.event.currency)}
               </p>
             </div>
             <Badge label={successApplication.status} variant={statusVariant(successApplication.status)} />
@@ -150,7 +150,7 @@ export default async function PublicVendorApplyPage({
                 <option value="">No table selected</option>
                 {config.tableTypes.map((table) => (
                   <option key={table.id} value={table.id}>
-                    {table.name} - {formatCurrency(table.price)}
+                    {table.name} - {formatCurrency(table.price, event.currency)}
                   </option>
                 ))}
               </select>
@@ -169,7 +169,7 @@ export default async function PublicVendorApplyPage({
             {config.amenities.map((amenity) => (
               <label key={amenity.id} className="vf-check">
                 <input name="amenityId" type="checkbox" value={amenity.id} />
-                {amenity.name} ({formatCurrency(amenity.price)})
+                {amenity.name} ({formatCurrency(amenity.price, event.currency)})
               </label>
             ))}
             {config.amenities.length === 0 ? <p className="vf-empty">No paid amenities are configured.</p> : null}

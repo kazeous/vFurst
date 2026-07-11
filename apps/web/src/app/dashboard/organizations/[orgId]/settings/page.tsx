@@ -82,6 +82,20 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
               SES from email
               <input name="sesFromEmail" type="email" defaultValue={emailSettings.fromEmail ?? ""} />
             </label>
+            <h2>Organizer payouts</h2>
+            <p className="vf-muted">Platform administrators use these details for manual SePay settlement transfers.</p>
+            <label>
+              Payout bank code
+              <input name="payoutBankCode" defaultValue={org.payoutBankCode ?? ""} placeholder="Vietcombank" />
+            </label>
+            <label>
+              Payout account number
+              <input name="payoutAccountNumber" defaultValue={org.payoutAccountNumber ?? ""} />
+            </label>
+            <label>
+              Payout account holder
+              <input name="payoutAccountHolder" defaultValue={org.payoutAccountHolder ?? ""} />
+            </label>
             <Button label="Save settings" type="submit" variant="primary" />
           </form>
         </Card>

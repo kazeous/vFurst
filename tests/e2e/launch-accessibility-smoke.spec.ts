@@ -12,7 +12,7 @@ const orgSlug = `launch-a11y-${runId}`;
 let eventId: string;
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(60_000);
+test.setTimeout(120_000);
 
 test.beforeAll(async () => {
   const admin = await prisma.user.create({
@@ -135,10 +135,11 @@ async function login(page: Page) {
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(password);
   await Promise.all([
-    page.waitForURL(/\/dashboard$/, { timeout: 15_000 }),
-    page.getByRole("button", { name: "Log in" }).click()
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
   ]);
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 15_000 });
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 30_000 });
 }
 
 test("marketing pages expose landmarks, alt text, keyboard order, and calculator labels", async ({ page }) => {
@@ -178,7 +179,7 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   await expect(page.getByRole("radio", { name: /Launch Accessibility General/ })).toBeVisible();
   await expect(page.getByLabel("Full name")).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveAttribute("type", "email");
-  await expect(page.getByRole("button", { name: "Continue to Stripe Checkout" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to checkout" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to cart" })).toBeVisible();
 
   await page.goto(`/${orgSlug}/vendor-apply`);

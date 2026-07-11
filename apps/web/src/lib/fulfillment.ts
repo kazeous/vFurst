@@ -1,8 +1,17 @@
 import { sendOrgEmail } from "@/lib/email";
 import { queueWebhookEvent } from "@/lib/webhooks";
-import { prisma } from "@vfurst/db";
+import { organizerNetAmount } from "@/lib/payments/ledger";
+import { prisma, type PaymentProvider } from "@vfurst/db";
 
 export async function markOrderPaid(orderId: string, stripePaymentIntentId?: string | null) {
+  return markOrderPaidWithProvider(orderId, stripePaymentIntentId ? "STRIPE" : null, stripePaymentIntentId);
+}
+
+export async function markOrderPaidWithProvider(
+  orderId: string,
+  paymentProvider: PaymentProvider | null,
+  paymentReference?: string | null
+) {
   const order = await prisma.order.findUnique({
     where: {
       id: orderId
@@ -30,7 +39,10 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
       },
       data: {
         status: "PAID",
-        stripePaymentIntentId: stripePaymentIntentId ?? order.stripePaymentIntentId
+        paymentProvider: paymentProvider ?? order.paymentProvider,
+        paymentReference: paymentReference ?? order.paymentReference,
+        stripePaymentIntentId:
+          paymentProvider === "STRIPE" ? paymentReference ?? order.stripePaymentIntentId : order.stripePaymentIntentId
       }
     });
 
@@ -39,6 +51,41 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
     }
 
     transitionedToPaid = true;
+
+    if (paymentProvider) {
+      await tx.paymentAttempt.updateMany({
+        where: {
+          orderId: order.id,
+          provider: paymentProvider,
+          status: "PENDING"
+        },
+        data: {
+          status: "PAID",
+          providerReference: paymentProvider === "SEPAY" ? paymentReference ?? undefined : undefined,
+          paidAt: new Date()
+        }
+      });
+    }
+
+    if (paymentProvider === "SEPAY") {
+      await tx.organizerLedgerEntry.upsert({
+        where: {
+          orderId_type: {
+            orderId: order.id,
+            type: "PAYMENT"
+          }
+        },
+        update: {},
+        create: {
+          orgId: order.orgId,
+          orderId: order.id,
+          type: "PAYMENT",
+          currency: order.currency,
+          amount: organizerNetAmount(order.total, order.platformFee),
+          note: `SePay payment ${paymentReference ?? ""}`.trim()
+        }
+      });
+    }
 
     if (order.voucherId) {
       await tx.voucher.update({
@@ -65,7 +112,7 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
         });
       }
 
-      if (item.itemType === "PRODUCT" && item.storeProductId) {
+      if (item.itemType === "PRODUCT" && item.storeProductId && !order.inventoryReservedAt) {
         await tx.storeProduct.update({
           where: {
             id: item.storeProductId
@@ -159,7 +206,9 @@ export async function markOrderPaid(orderId: string, stripePaymentIntentId?: str
       userId: order.userId,
       total: order.total,
       platformFee: order.platformFee,
-      stripePaymentIntentId: stripePaymentIntentId ?? order.stripePaymentIntentId
+      paymentProvider: paymentProvider ?? order.paymentProvider,
+      paymentReference: paymentReference ?? order.paymentReference,
+      stripePaymentIntentId: paymentProvider === "STRIPE" ? paymentReference : order.stripePaymentIntentId
     }
   });
 
@@ -195,9 +244,6 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
   const order = await prisma.order.findUnique({
     where: {
       stripePaymentIntentId
-    },
-    include: {
-      items: true
     }
   });
 
@@ -205,15 +251,28 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
     return null;
   }
 
+  return reverseOrderFulfillment(order.id);
+}
+
+export async function reverseOrderFulfillment(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true }
+  });
+
+  if (!order || order.status === "REFUNDED") {
+    return order;
+  }
+
   await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: {
-        id: order.id
-      },
-      data: {
-        status: "REFUNDED"
-      }
+    const refunded = await tx.order.updateMany({
+      where: { id: order.id, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
+      data: { status: "REFUNDED" }
     });
+
+    if (refunded.count === 0) {
+      return;
+    }
 
     for (const item of order.items) {
       if (item.registrationId) {
@@ -250,6 +309,14 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
           }
         });
       }
+
+
+      if (item.itemType === "HOTEL") {
+        await tx.hotelBooking.updateMany({
+          where: { id: item.refId },
+          data: { confirmationCode: "CANCELLED" }
+        });
+      }
     }
   });
 
@@ -261,7 +328,9 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
       orderId: order.id,
       total: order.total,
       platformFee: order.platformFee,
-      stripePaymentIntentId
+      paymentProvider: order.paymentProvider,
+      paymentReference: order.paymentReference,
+      stripePaymentIntentId: order.stripePaymentIntentId
     }
   });
 

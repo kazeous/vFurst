@@ -87,8 +87,8 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
       </header>
       <section className="vf-stat-grid">
         <StatCard label="Registrations" value={event.registrations.length.toString()} detail="All attendee records" progress={65} />
-        <StatCard label="Paid revenue" value={formatCurrency(paidRevenue)} detail="Gross paid order volume" progress={70} />
-        <StatCard label="Platform fees" value={formatCurrency(platformFees)} detail="$1 registration and hotel fees" progress={40} />
+        <StatCard label="Paid revenue" value={formatCurrency(paidRevenue, event.currency)} detail="Gross paid order volume" progress={70} />
+        <StatCard label="Platform fees" value={formatCurrency(platformFees, event.currency)} detail="Registration and hotel platform fees" progress={40} />
       </section>
       <section className="vf-two-column">
         <div className="vf-section">

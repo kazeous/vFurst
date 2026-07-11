@@ -138,12 +138,12 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
         </div>
         <div className="vf-stat-card">
           <p className="vf-label">Gross revenue</p>
-          <strong>{formatCurrency(grossRevenue)}</strong>
+          <strong>{formatCurrency(grossRevenue, event.currency)}</strong>
           <span>Paid order volume</span>
         </div>
         <div className="vf-stat-card">
           <p className="vf-label">Collected fees</p>
-          <strong>{formatCurrency(platformFees)}</strong>
+          <strong>{formatCurrency(platformFees, event.currency)}</strong>
           <span>Event paid orders</span>
         </div>
       </section>
@@ -169,8 +169,8 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
           {feeReport.lines.map((line) => (
             <div key={line.label} className="vf-table-row vf-four-col">
               <strong>{line.label}</strong>
-              <span>{formatCurrency(line.expected)}</span>
-              <span>{formatCurrency(line.collected)}</span>
+              <span>{formatCurrency(line.expected, event.currency)}</span>
+              <span>{formatCurrency(line.collected, event.currency)}</span>
               <span>{line.basis}</span>
             </div>
           ))}

@@ -2,9 +2,11 @@
 
 import { auth } from "@/lib/auth";
 import { markOrderPaid } from "@/lib/fulfillment";
-import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { prepareOrderCheckout } from "@/lib/payments/checkout";
+import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
+import { HOTEL_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
-import { dollarsToCents, getNightCount, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
+import { getNightCount, parseMoney, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -51,7 +53,7 @@ async function findOrCreateGuest(email: string, name: string) {
   });
 }
 
-function roomTypesFromForm(formData: FormData) {
+function roomTypesFromForm(formData: FormData, currency: "USD" | "VND") {
   const names = formData.getAll("roomName");
   const rates = formData.getAll("roomRate");
   const totals = formData.getAll("roomTotal");
@@ -66,7 +68,7 @@ function roomTypesFromForm(formData: FormData) {
     .map((roomType) =>
       roomTypeSchema.parse({
         name: roomType.name,
-        rate: dollarsToCents(roomType.rate),
+        rate: parseMoney(roomType.rate, currency),
         totalRooms: roomType.totalRooms,
         bookedRooms: 0
       })
@@ -93,7 +95,8 @@ export async function createHotelBlock(formData: FormData) {
   }
 
   await requireEventAccess(parsed.data.orgId);
-  const roomTypes = roomTypesFromForm(formData);
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
+  const roomTypes = roomTypesFromForm(formData, event.currency);
 
   if (roomTypes.length === 0) {
     throw new Error("Create at least one room type.");
@@ -134,6 +137,7 @@ export async function updateHotelBlock(formData: FormData) {
   }
 
   await requireEventAccess(parsed.data.orgId);
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
 
   await prisma.hotelBlock.update({
     where: {
@@ -142,7 +146,7 @@ export async function updateHotelBlock(formData: FormData) {
     data: {
       hotelName: parsed.data.hotelName,
       cutoffDate: parsed.data.cutoffDate,
-      roomTypes: roomTypesFromForm(formData)
+      roomTypes: roomTypesFromForm(formData, event.currency)
     }
   });
 
@@ -213,6 +217,10 @@ export async function bookRoom(formData: FormData) {
 
   const nights = getNightCount(parsed.data.checkIn, parsed.data.checkOut);
   const total = roomType.rate * nights;
+  const platformFee = total > 0 ? (block.event.currency === "VND" ? (await getSePaySettings()).hotelFeeVnd : HOTEL_PLATFORM_FEE_CENTS) : 0;
+  if (total > 0) {
+    await assertPaidCheckoutAvailable(block.event.orgId, block.event.currency);
+  }
   const guest = await findOrCreateGuest(parsed.data.guestEmail, parsed.data.guestName);
 
   const booking = await prisma.hotelBooking.create({
@@ -233,7 +241,8 @@ export async function bookRoom(formData: FormData) {
       userId: guest.id,
       eventId: parsed.data.eventId,
       total,
-      platformFee: total > 0 ? HOTEL_PLATFORM_FEE_CENTS : 0,
+      platformFee,
+      currency: block.event.currency,
       items: {
         create: {
           orgId: parsed.data.orgId,
@@ -251,50 +260,12 @@ export async function bookRoom(formData: FormData) {
     redirect(`/${block.event.org.subdomain}/hotel?success=${booking.id}`);
   }
 
-  const connectedAccountId = await getConnectedStripeAccount(parsed.data.orgId);
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    client_reference_id: order.id,
-    customer_email: guest.email,
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `${block.event.name} hotel booking`
-          },
-          unit_amount: total
-        },
-        quantity: 1
-      }
-    ],
-    payment_intent_data: {
-      application_fee_amount: HOTEL_PLATFORM_FEE_CENTS,
-      transfer_data: {
-        destination: connectedAccountId
-      },
-      metadata: {
-        orderId: order.id,
-        bookingId: booking.id,
-        eventId: parsed.data.eventId,
-        orgId: parsed.data.orgId
-      }
-    },
-    metadata: {
-      orderId: order.id,
-      bookingId: booking.id,
-      eventId: parsed.data.eventId,
-      orgId: parsed.data.orgId
-    },
-    success_url: `${getBaseUrl()}/${block.event.org.subdomain}/hotel?success=${booking.id}`,
-    cancel_url: `${getBaseUrl()}/${block.event.org.subdomain}/hotel?cancelled=1`
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a Checkout URL.");
-  }
-
-  redirect(session.url);
+  const checkout = await prepareOrderCheckout(
+    order.id,
+    `/${block.event.org.subdomain}/hotel?success=${booking.id}`,
+    `/${block.event.org.subdomain}/hotel?cancelled=1`
+  );
+  redirect(checkout.checkoutPath);
 }
 
 export async function cancelBooking(formData: FormData) {

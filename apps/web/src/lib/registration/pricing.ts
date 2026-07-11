@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CurrencyCode } from "@vfurst/db";
 
 export const scheduledPriceSchema = z.object({
   startDate: z.string().min(1),
@@ -18,20 +19,29 @@ export const roomTypeSchema = z.object({
 export type HotelRoomType = z.infer<typeof roomTypeSchema>;
 
 export function dollarsToCents(value: FormDataEntryValue | null) {
+  return parseMoney(value, "USD");
+}
+
+export function parseMoney(value: FormDataEntryValue | null, currency: CurrencyCode) {
   const amount = typeof value === "string" && value.trim() !== "" ? Number(value) : 0;
 
   if (!Number.isFinite(amount) || amount < 0) {
     throw new Error("Money amounts must be zero or greater.");
   }
 
-  return Math.round(amount * 100);
+  if (currency === "VND" && !Number.isInteger(amount)) {
+    throw new Error("VND amounts must use whole dong.");
+  }
+
+  return Math.round(amount * (currency === "USD" ? 100 : 1));
 }
 
-export function formatCurrency(cents: number) {
-  return new Intl.NumberFormat("en-US", {
+export function formatCurrency(amount: number, currency: CurrencyCode = "USD") {
+  return new Intl.NumberFormat(currency === "VND" ? "vi-VN" : "en-US", {
     style: "currency",
-    currency: "USD"
-  }).format(cents / 100);
+    currency,
+    maximumFractionDigits: currency === "VND" ? 0 : 2
+  }).format(currency === "USD" ? amount / 100 : amount);
 }
 
 export function parseScheduledPricing(value: unknown): ScheduledPrice[] {
@@ -85,4 +95,3 @@ export function getNightCount(checkIn: Date, checkOut: Date) {
 
   return nights;
 }
-

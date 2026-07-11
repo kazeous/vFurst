@@ -144,7 +144,7 @@ function StoreOrderReceipt({ order, storePath }: { order: StoreReceiptOrder; sto
           <p className="vf-muted">
             {isPaid
               ? "Your store order is confirmed. The organizer has the order details."
-              : "Stripe has returned you to vFurst, and this order will finish as soon as payment confirmation arrives."}
+              : "Your payment is being verified. This order will finish as soon as confirmation arrives."}
           </p>
         </div>
         <Badge label={order.status.replaceAll("_", " ")} variant={badgeVariant(order.status)} />
@@ -160,22 +160,22 @@ function StoreOrderReceipt({ order, storePath }: { order: StoreReceiptOrder; sto
           <div key={item.id} className="vf-table-row">
             <strong>{itemName(item)}</strong>
             <span>{item.quantity}</span>
-            <span>{formatCurrency(item.unitPrice * item.quantity + getSurchargeTotal(item.storeProduct?.surcharges) * item.quantity)}</span>
+            <span>{formatCurrency(item.unitPrice * item.quantity + getSurchargeTotal(item.storeProduct?.surcharges) * item.quantity, order.currency)}</span>
           </div>
         ))}
       </div>
 
       <div className="vf-cart-summary">
         <span>Subtotal</span>
-        <strong>{formatCurrency(totals.subtotal)}</strong>
+        <strong>{formatCurrency(totals.subtotal, order.currency)}</strong>
         <span>Surcharges</span>
-        <strong>{formatCurrency(totals.surcharges)}</strong>
+        <strong>{formatCurrency(totals.surcharges, order.currency)}</strong>
         <span>Discount</span>
-        <strong>-{formatCurrency(totals.discount)}</strong>
+        <strong>-{formatCurrency(totals.discount, order.currency)}</strong>
         <span>Platform fee</span>
-        <strong>{formatCurrency(order.platformFee)}</strong>
+        <strong>{formatCurrency(order.platformFee, order.currency)}</strong>
         <span>Total</span>
-        <strong>{formatCurrency(order.total)}</strong>
+        <strong>{formatCurrency(order.total, order.currency)}</strong>
       </div>
 
       <div className="vf-actions">
@@ -318,7 +318,7 @@ export default async function PublicStorePage({
                     <p className="vf-muted">{product.description ?? `${product.stock} available`}</p>
                   </div>
                   <p>
-                    <strong>{formatCurrency(price)}</strong>
+                    <strong>{formatCurrency(price, event.currency)}</strong>
                     {getSurchargeTotal(product.surcharges) > 0 ? <small className="vf-muted"> with surcharges</small> : null}
                   </p>
                   <form action={addToCart} className="vf-form">
@@ -356,6 +356,7 @@ export default async function PublicStorePage({
           </section>
           <StoreCart
             cart={cart}
+            currency={event.currency}
             returnPath={storePath}
             successPath={storePath}
             cancelPath={storePath}

@@ -9,8 +9,8 @@ const tiers = [
   },
   {
     name: "Usage",
-    price: "$1 + 1%",
-    body: "One dollar per attendee, one dollar per hotel booking, and one percent on store and vendor payments."
+    price: "$1 / VND fee + 1%",
+    body: "USD events use one dollar per attendee or hotel booking. VND registration and hotel fees are platform-configured; store and vendor payments remain one percent."
   },
   {
     name: "Platform",
@@ -29,7 +29,7 @@ export default function PricingPage() {
     <MarketingShell
       eyebrow="Pricing"
       title="Simple usage fees for events that move money"
-      description="No secondary invoices for platform fees. Fees are collected through Stripe Connect application fees at checkout and audited by reconciliation reports."
+      description="Stripe fees settle through Connect. SePay VND funds are received centrally by vFurst, credited to the organizer ledger after fees, and paid out manually."
     >
       <section className="vf-marketing-grid">
         {tiers.map((tier) => (

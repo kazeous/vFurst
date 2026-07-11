@@ -3,7 +3,9 @@
 import { auth } from "@/lib/auth";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
-import { REGISTRATION_PLATFORM_FEE_CENTS, getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { prepareOrderCheckout } from "@/lib/payments/checkout";
+import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
+import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
@@ -200,7 +202,11 @@ export async function createRegistration(formData: FormData) {
   const subtotal = registrationPrice + addOnTotal;
   const voucher = await getValidVoucher(event.id, parsed.data.voucherCode ?? null, type.id);
   const { discount, total } = applyVoucherDiscount(subtotal, voucher);
-  const platformFee = total > 0 ? REGISTRATION_PLATFORM_FEE_CENTS : 0;
+  const platformFee = total > 0 ? (event.currency === "VND" ? (await getSePaySettings()).registrationFeeVnd : REGISTRATION_PLATFORM_FEE_CENTS) : 0;
+
+  if (parsed.data.checkoutMode !== "cart" && total > 0) {
+    await assertPaidCheckoutAvailable(event.orgId, event.currency);
+  }
 
   const registration = await prisma.registration.create({
     data: {
@@ -323,6 +329,7 @@ export async function createRegistration(formData: FormData) {
       eventId: event.id,
       total,
       platformFee,
+      currency: event.currency,
       voucherId: voucher?.id,
       items: {
         create: [
@@ -352,50 +359,12 @@ export async function createRegistration(formData: FormData) {
     redirect(`/${event.org.subdomain}/register?success=${registration.id}`);
   }
 
-  const connectedAccountId = await getConnectedStripeAccount(event.orgId);
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    client_reference_id: order.id,
-    customer_email: attendee.email,
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `${event.name} registration`
-          },
-          unit_amount: total
-        },
-        quantity: 1
-      }
-    ],
-    payment_intent_data: {
-      application_fee_amount: platformFee,
-      transfer_data: {
-        destination: connectedAccountId
-      },
-      metadata: {
-        orderId: order.id,
-        registrationId: registration.id,
-        eventId: event.id,
-        orgId: event.orgId
-      }
-    },
-    metadata: {
-      orderId: order.id,
-      registrationId: registration.id,
-      eventId: event.id,
-      orgId: event.orgId
-    },
-    success_url: `${getBaseUrl()}/${event.org.subdomain}/register?success=${registration.id}`,
-    cancel_url: `${getBaseUrl()}/${event.org.subdomain}/register?cancelled=1`
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a Checkout URL.");
-  }
-
-  redirect(session.url);
+  const checkout = await prepareOrderCheckout(
+    order.id,
+    `/${event.org.subdomain}/register?success=${registration.id}`,
+    `/${event.org.subdomain}/register?cancelled=1`
+  );
+  redirect(checkout.checkoutPath);
 }
 
 export async function confirmRegistration(formData: FormData) {

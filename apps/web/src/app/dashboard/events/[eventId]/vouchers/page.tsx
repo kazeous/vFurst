@@ -1,12 +1,12 @@
 import { bulkGenerateVouchers, createVoucher } from "@/actions/voucher-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
-import { prisma } from "@vfurst/db";
+import { prisma, type CurrencyCode } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
-function discountLabel(voucher: { discountType: "PERCENT" | "AMOUNT"; discountValue: number; restrictions: unknown }) {
-  const value = voucher.discountType === "PERCENT" ? `${voucher.discountValue}%` : formatCurrency(voucher.discountValue);
+function discountLabel(voucher: { discountType: "PERCENT" | "AMOUNT"; discountValue: number; restrictions: unknown }, currency: CurrencyCode) {
+  const value = voucher.discountType === "PERCENT" ? `${voucher.discountValue}%` : formatCurrency(voucher.discountValue, currency);
   const restrictions =
     voucher.restrictions && typeof voucher.restrictions === "object" && "compedRegistration" in voucher.restrictions
       ? (voucher.restrictions as { compedRegistration?: boolean })
@@ -146,7 +146,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
             return (
               <div key={voucher.id} className="vf-table-row">
                 <strong>{voucher.code}</strong>
-                <span>{discountLabel(voucher)}</span>
+                <span>{discountLabel(voucher, event.currency)}</span>
                 <span>
                   {voucher.usedCount} / {voucher.maxUses ?? "unlimited"}
                 </span>

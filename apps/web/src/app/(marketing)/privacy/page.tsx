@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       description="How vFurst handles organizer, attendee, vendor, volunteer, and operational data."
     >
       <article className="vf-legal-document">
-        <p>Effective date: July 7, 2026</p>
+        <p>Effective date: July 11, 2026</p>
         <h2>Information we collect</h2>
         <p>
           vFurst collects account details, organization details, event configuration, attendee registration data, hotel booking data,
@@ -23,12 +23,13 @@ export default function PrivacyPage() {
         <h2>How we use information</h2>
         <p>
           We use information to provide convention management workflows, authenticate users, enforce permissions, process payments through
-          Stripe, send transactional email, support organizer operations, prevent abuse, monitor reliability, and improve the product.
+          Stripe and SePay, send transactional email, support organizer operations, prevent abuse, monitor reliability, and improve the product.
         </p>
         <h2>Payments</h2>
         <p>
-          Card data is handled by Stripe. vFurst stores payment references, order totals, platform fee amounts, and fulfillment status, but
-          does not store full payment card numbers or security codes.
+          Card data is handled by Stripe. For SePay, vFurst displays central bank-transfer details and stores transfer identifiers, payment
+          memos, amounts, matching results, settlement records, and manual refund references. vFurst does not store full payment card numbers
+          or card security codes.
         </p>
         <h2>Subprocessors</h2>
         <p>

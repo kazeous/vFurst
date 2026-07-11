@@ -2,7 +2,7 @@
 
 import { convertCartToOrder } from "@/actions/cart-actions";
 import { auth } from "@/lib/auth";
-import { dollarsToCents } from "@/lib/registration/pricing";
+import { parseMoney } from "@/lib/registration/pricing";
 import { getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
@@ -33,14 +33,14 @@ async function requireEventAccess(orgId: string) {
   }
 }
 
-function surchargesFromForm(formData: FormData) {
+function surchargesFromForm(formData: FormData, currency: "USD" | "VND") {
   const names = formData.getAll("surchargeName");
   const amounts = formData.getAll("surchargeAmount");
 
   return names
     .map((name, index) => ({
       name: String(name).trim(),
-      amount: dollarsToCents(amounts[index] ?? "0")
+      amount: parseMoney(amounts[index] ?? "0", currency)
     }))
     .filter((surcharge) => surcharge.name.length > 0)
     .map((surcharge) => productSurchargeSchema.parse(surcharge));
@@ -96,12 +96,14 @@ const productSchema = z.object({
 });
 
 export async function createProduct(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
   const parsed = productSchema.safeParse({
     orgId: formData.get("orgId"),
     eventId: formData.get("eventId"),
     name: formData.get("name"),
     description: formData.get("description") || undefined,
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     stock: formData.get("stock"),
     category: formData.get("category") || undefined
   });
@@ -122,7 +124,7 @@ export async function createProduct(formData: FormData) {
       stock: parsed.data.stock,
       category: parsed.data.category,
       images: await imagesFromForm(parsed.data.orgId, parsed.data.eventId, formData),
-      surcharges: surchargesFromForm(formData),
+      surcharges: surchargesFromForm(formData, event.currency),
       options: optionsFromForm(formData)
     }
   });
@@ -131,13 +133,15 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
   const parsed = productSchema.required({ productId: true }).safeParse({
     orgId: formData.get("orgId"),
     eventId: formData.get("eventId"),
     productId: formData.get("productId"),
     name: formData.get("name"),
     description: formData.get("description") || undefined,
-    price: dollarsToCents(formData.get("price")),
+    price: parseMoney(formData.get("price"), event.currency),
     stock: formData.get("stock"),
     category: formData.get("category") || undefined
   });
@@ -163,7 +167,7 @@ export async function updateProduct(formData: FormData) {
       stock: parsed.data.stock,
       category: parsed.data.category,
       images: [...existingImages, ...(await imagesFromForm(parsed.data.orgId, parsed.data.eventId, formData))],
-      surcharges: surchargesFromForm(formData),
+      surcharges: surchargesFromForm(formData, event.currency),
       options: optionsFromForm(formData)
     }
   });
@@ -230,12 +234,6 @@ export async function partialRefund(formData: FormData) {
   const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const orderId = z.string().uuid().parse(formData.get("orderId"));
-  const amount = dollarsToCents(formData.get("amount"));
-
-  if (amount <= 0) {
-    throw new Error("Refund amount must be greater than zero.");
-  }
-
   await requireEventAccess(orgId);
   assertActionRateLimit("payment:store-partial-refund", `${orgId}:${orderId}`);
   const order = await prisma.order.findFirstOrThrow({
@@ -245,6 +243,11 @@ export async function partialRefund(formData: FormData) {
       eventId
     }
   });
+  const amount = parseMoney(formData.get("amount"), order.currency);
+
+  if (amount <= 0) {
+    throw new Error("Refund amount must be greater than zero.");
+  }
 
   if (!order.stripePaymentIntentId) {
     throw new Error("This order does not have a Stripe payment to refund.");

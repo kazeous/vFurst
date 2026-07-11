@@ -95,7 +95,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         <div className="vf-stat-card">
           <p className="vf-label">Payment</p>
           <strong>{order?.status ?? "No order"}</strong>
-          <span>{order ? formatCurrency(order.total) : "Manual registration"}</span>
+          <span>{order ? formatCurrency(order.total, order.currency) : "Manual registration"}</span>
         </div>
         <div className="vf-stat-card">
           <p className="vf-label">Badge</p>
@@ -125,7 +125,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
               <div key={addOn.id} className="vf-list-row">
                 <span>{addOn.addOnDefinition.name}</span>
                 <small>
-                  {addOn.quantity} x {formatCurrency(addOn.price)}
+                  {addOn.quantity} x {formatCurrency(addOn.price, registration.event.currency)}
                 </small>
               </div>
             ))}

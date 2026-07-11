@@ -21,6 +21,7 @@ declare module "next-auth" {
         orgName: string;
         role: string;
       }>;
+      platformRole: "USER" | "PLATFORM_ADMIN";
     } & DefaultSession["user"];
   }
 }
@@ -108,7 +109,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       });
 
+      const user = await prisma.user.findUnique({
+        where: {
+          id: token.sub
+        },
+        select: {
+          platformRole: true
+        }
+      });
+
       session.user.id = token.sub;
+      session.user.platformRole = user?.platformRole ?? "USER";
       session.user.orgMemberships = memberships.map((membership) => ({
         orgId: membership.org.id,
         orgSlug: membership.org.slug,

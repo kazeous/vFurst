@@ -5,6 +5,8 @@ import { workerEnv, requiredWorkerRuntimeVariables } from "./env.js";
 import { allQueues, connection, reconcileQueue } from "./queues.js";
 import { processGenerateBadges } from "./jobs/generate-badges.js";
 import { processReconcileFees } from "./jobs/reconcile-fees.js";
+import { processReconcileSePay } from "./jobs/reconcile-sepay.js";
+import { processExpireCheckouts } from "./jobs/expire-checkouts.js";
 import { processSendEmail } from "./jobs/send-email.js";
 import { processSendWebhook } from "./jobs/send-webhook.js";
 
@@ -23,7 +25,15 @@ function createWorkers() {
     new Worker("badge", processGenerateBadges, {
       connection
     }),
-    new Worker("reconcile", processReconcileFees, {
+    new Worker(
+      "reconcile",
+      (job) =>
+        job.name === "reconcile-sepay"
+          ? processReconcileSePay()
+          : job.name === "expire-checkouts"
+            ? processExpireCheckouts()
+            : processReconcileFees(job),
+      {
       connection
     }),
     new Worker("webhook", processSendWebhook, {
@@ -146,6 +156,26 @@ async function scheduleRecurringJobs() {
       jobId: "nightly-fee-reconciliation",
       repeat: {
         pattern: "0 6 * * *"
+      }
+    }
+  );
+  await reconcileQueue.add(
+    "reconcile-sepay",
+    {},
+    {
+      jobId: "sepay-transaction-reconciliation",
+      repeat: {
+        pattern: "*/15 * * * *"
+      }
+    }
+  );
+  await reconcileQueue.add(
+    "expire-checkouts",
+    {},
+    {
+      jobId: "expire-pending-checkouts",
+      repeat: {
+        pattern: "* * * * *"
       }
     }
   );

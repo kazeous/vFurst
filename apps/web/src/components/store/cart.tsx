@@ -4,6 +4,7 @@ import { applyVoucher } from "@/actions/voucher-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getCartSummary, getSurchargeTotal, parseProductSurcharges } from "@/lib/store/pricing";
 import { Button } from "@/components/ui/button";
+import type { CurrencyCode } from "@vfurst/db";
 
 type CartProduct = {
   id: string;
@@ -42,7 +43,7 @@ function selectedOptions(metadata: unknown) {
   return Object.entries(options as Record<string, string>).map(([name, value]) => `${name}: ${value}`);
 }
 
-export function StoreCart({ cart, returnPath, successPath, cancelPath }: { cart: Cart | null; returnPath: string; successPath: string; cancelPath: string }) {
+export function StoreCart({ cart, currency, returnPath, successPath, cancelPath }: { cart: Cart | null; currency: CurrencyCode; returnPath: string; successPath: string; cancelPath: string }) {
   if (!cart) {
     return (
       <section className="vf-section">
@@ -79,9 +80,9 @@ export function StoreCart({ cart, returnPath, successPath, cancelPath }: { cart:
             <div key={item.id} className="vf-cart-row">
               <div>
                 <strong>{item.product?.name ?? item.itemType}</strong>
-                <small>{formatCurrency(item.unitPrice + getSurchargeTotal(item.product?.surcharges))} each</small>
+                <small>{formatCurrency(item.unitPrice + getSurchargeTotal(item.product?.surcharges), currency)} each</small>
                 {options.length > 0 ? <small>{options.join(" / ")}</small> : null}
-                {surcharges.length > 0 ? <small>{surcharges.map((surcharge) => `${surcharge.name} ${formatCurrency(surcharge.amount)}`).join(", ")}</small> : null}
+                {surcharges.length > 0 ? <small>{surcharges.map((surcharge) => `${surcharge.name} ${formatCurrency(surcharge.amount, currency)}`).join(", ")}</small> : null}
               </div>
               <form action={updateQuantity} className="vf-inline-form">
                 <input type="hidden" name="cartItemId" value={item.id} />
@@ -113,15 +114,15 @@ export function StoreCart({ cart, returnPath, successPath, cancelPath }: { cart:
 
       <div className="vf-cart-summary">
         <span>Subtotal</span>
-        <strong>{formatCurrency(summary.subtotal)}</strong>
+        <strong>{formatCurrency(summary.subtotal, currency)}</strong>
         <span>Surcharges</span>
-        <strong>{formatCurrency(summary.surcharges)}</strong>
+        <strong>{formatCurrency(summary.surcharges, currency)}</strong>
         <span>Discount</span>
-        <strong>-{formatCurrency(summary.discount)}</strong>
+        <strong>-{formatCurrency(summary.discount, currency)}</strong>
         <span>Platform fee</span>
-        <strong>{formatCurrency(summary.platformFee)}</strong>
+        <strong>{formatCurrency(summary.platformFee, currency)}</strong>
         <span>Total</span>
-        <strong>{formatCurrency(summary.total)}</strong>
+        <strong>{formatCurrency(summary.total, currency)}</strong>
       </div>
 
       <form action={createOrder}>

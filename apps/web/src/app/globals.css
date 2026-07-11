@@ -1365,6 +1365,27 @@ label {
   line-height: 1.6;
 }
 
+.vf-hero-operations-preview {
+  display: grid;
+  align-content: center;
+  gap: 0.6rem;
+  min-height: 15rem;
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, var(--vf-border) 75%, transparent);
+  border-radius: 1.5rem;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--vf-accent) 18%, var(--vf-surface)), var(--vf-surface));
+  box-shadow: var(--vf-shadow-lg);
+}
+
+.vf-hero-operations-preview span,
+.vf-hero-operations-preview small {
+  color: var(--vf-muted);
+}
+
+.vf-hero-operations-preview strong {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+}
+
 .vf-marketing-hero-actions,
 .vf-marketing-proof,
 .vf-marketing-pricing-strip {

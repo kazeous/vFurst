@@ -145,7 +145,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                   <p className="vf-label">{product.category ?? "Uncategorized"}</p>
                   <h2>{product.name}</h2>
                   <p className="vf-muted">
-                    {formatCurrency(product.price)} + {formatCurrency(getSurchargeTotal(product.surcharges))} surcharges - {product.stock} in stock
+                    {formatCurrency(product.price, event.currency)} + {formatCurrency(getSurchargeTotal(product.surcharges), event.currency)} surcharges - {product.stock} in stock
                   </p>
                 </div>
                 <form action={deleteProduct}>

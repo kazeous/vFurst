@@ -108,7 +108,7 @@ export default async function StoreOrdersPage({
                 <p className="vf-label">{order.createdAt.toLocaleString()}</p>
                 <h2>{order.user.name ?? order.user.email}</h2>
                 <p className="vf-muted">
-                  Total {formatCurrency(order.total)} - platform fee {formatCurrency(order.platformFee)}
+                  Total {formatCurrency(order.total, order.currency)} - platform fee {formatCurrency(order.platformFee, order.currency)}
                   {order.voucher ? ` - voucher ${order.voucher.code}` : ""}
                 </p>
               </div>
@@ -127,7 +127,7 @@ export default async function StoreOrdersPage({
                   <strong>{itemName(item)}</strong>
                   <span>{item.itemType}</span>
                   <span>{item.quantity}</span>
-                  <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
+                  <span>{formatCurrency(item.unitPrice * item.quantity, order.currency)}</span>
                 </div>
               ))}
             </div>

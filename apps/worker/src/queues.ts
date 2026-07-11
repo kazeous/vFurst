@@ -46,6 +46,8 @@ export type ReconcileFeesJob = {
   orgId?: string;
 };
 
+export type ReconciliationJob = ReconcileFeesJob | Record<string, never>;
+
 export type SendWebhookJob = {
   orgId: string;
   endpointId?: string;
@@ -64,7 +66,7 @@ export const badgeQueue = new Queue<GenerateBadgesJob>("badge", {
   defaultJobOptions
 });
 
-export const reconcileQueue = new Queue<ReconcileFeesJob>("reconcile", {
+export const reconcileQueue = new Queue<ReconciliationJob>("reconcile", {
   connection,
   defaultJobOptions
 });

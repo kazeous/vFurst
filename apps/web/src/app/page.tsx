@@ -16,12 +16,12 @@ const features = [
   },
   {
     title: "Platform controls",
-    body: "Stripe Connect fees, API keys, webhooks, analytics, custom domains, and reconciliation give organizers production visibility."
+    body: "Stripe Connect, embedded SePay VietQR, API keys, webhooks, analytics, custom domains, and reconciliation give organizers production visibility."
   }
 ];
 
 const proofPoints = [
-  "Destination-charge Stripe Connect fee collection",
+  "Stripe Connect and embedded SePay VietQR payments",
   "Public REST API and outbound webhooks",
   "WCAG-minded shadcn/ui primitives",
   "Local-first Docker stack with cloud migration path"
@@ -44,6 +44,15 @@ export default function HomePage() {
               Explore features
             </Link>
           </div>
+        </div>
+        <div
+          className="vf-hero-operations-preview"
+          role="img"
+          aria-label="Convention registration desk with badge printer, scanner, badges, and operations dashboard"
+        >
+          <span>Live registration</span>
+          <strong>Check-in operations</strong>
+          <small>Badges · scanning · payments</small>
         </div>
       </section>
 

@@ -182,12 +182,12 @@ export default async function CheckInPage({
           status: registration.status,
           badgeNumber: registration.badgeNumber,
           paid: registration.orderItems.some((item) => item.order.status === "PAID"),
-          checkedInAt: registration.checkedInAt?.toISOString() ?? null,
+          checkedInAt: registration.checkedInAt ? new Date(registration.checkedInAt).toISOString() : null,
           badge: registration.badges[0]
             ? {
                 id: registration.badges[0].id,
                 barcodeData: registration.badges[0].barcodeData,
-                printedAt: registration.badges[0].printedAt?.toISOString() ?? null
+                printedAt: registration.badges[0].printedAt ? new Date(registration.badges[0].printedAt).toISOString() : null
               }
             : null,
           addOns: registration.addOns.map((addOn) => `${addOn.addOnDefinition.name} x${addOn.quantity}`)

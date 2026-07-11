@@ -115,6 +115,10 @@ const envSchema = z
     SMTP_PORT: optionalPort("SMTP_PORT"),
     SMTP_SECURE: optionalBoolean("SMTP_SECURE"),
     SMTP_USER: optionalText(),
+    NEXT_PUBLIC_APP_URL: optionalUrl("NEXT_PUBLIC_APP_URL"),
+    SEPAY_API_TOKEN: optionalText(),
+    SEPAY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+    SEPAY_WEBHOOK_SECRET: optionalText(),
     WORKER_HEALTH_PORT: optionalPort("WORKER_HEALTH_PORT"),
     WORKER_STARTUP_TIMEOUT_MS: z.preprocess(
       emptyStringToUndefined,
