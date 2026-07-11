@@ -9,8 +9,16 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/dashboard/organizations", label: "Organizations" },
   { href: "/dashboard/events", label: "Events" },
-  { href: "/dashboard#settings", label: "Settings" }
+  { href: "/dashboard/settings", label: "Settings" }
 ];
+
+function isActiveNavItem(pathname: string, href: string) {
+  if (href === "/dashboard") {
+    return pathname === href;
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function DashboardAppShell({ children, userName }: Readonly<{ children: ReactNode; userName?: string | null }>) {
   const pathname = usePathname();
@@ -25,7 +33,7 @@ export function DashboardAppShell({ children, userName }: Readonly<{ children: R
         <nav aria-label="Dashboard navigation">
           <p className="vf-label">Main</p>
           {navItems.map((item) => {
-            const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href.replace("#settings", ""));
+            const active = isActiveNavItem(pathname, item.href);
 
             return (
               <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} data-active={active || undefined}>

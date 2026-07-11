@@ -1,6 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { requireEventAccess } from "@/lib/dashboard-access";
+import { eventSettingsSchema, mergeCoreEventSettings } from "@/lib/event-settings";
 import { dollarsToCents } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -117,6 +119,65 @@ export async function updateEvent(formData: FormData) {
   });
 
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}`);
+}
+
+export async function updateEventSettings(formData: FormData) {
+  const parsed = eventSettingsSchema.safeParse({
+    eventId: formData.get("eventId"),
+    name: formData.get("name"),
+    description: formData.get("description"),
+    slug: formData.get("slug"),
+    venue: formData.get("venue"),
+    startDate: formData.get("startDate"),
+    endDate: formData.get("endDate"),
+    requireApproval: formData.get("requireApproval") === "on",
+    allowTransfers: formData.get("allowTransfers") === "on",
+    maxRegistrationsPerUser: formData.get("maxRegistrationsPerUser")
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid event settings.");
+  }
+
+  const { event: authorizedEvent } = await requireEventAccess(parsed.data.eventId);
+  const event = await prisma.event.findUnique({
+    where: {
+      id: parsed.data.eventId
+    },
+    select: {
+      settings: true
+    }
+  });
+
+  if (!event) {
+    throw new Error("Event not found.");
+  }
+
+  await prisma.event.update({
+    where: {
+      id: parsed.data.eventId
+    },
+    data: {
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+      slug: parsed.data.slug,
+      venue: parsed.data.venue || null,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      settings: mergeCoreEventSettings(event.settings, {
+        requireApproval: parsed.data.requireApproval,
+        allowTransfers: parsed.data.allowTransfers,
+        maxRegistrationsPerUser: parsed.data.maxRegistrationsPerUser
+      })
+    }
+  });
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/events");
+  revalidatePath(`/dashboard/events/${parsed.data.eventId}`);
+  revalidatePath(`/dashboard/events/${parsed.data.eventId}/settings`);
+  revalidatePath(`/dashboard/organizations/${authorizedEvent.orgId}`);
+  redirect(`/dashboard/events/${parsed.data.eventId}/settings?saved=1`);
 }
 
 export async function createEventWithRegistrationTypes(formData: FormData) {

@@ -31,6 +31,27 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-11 - Phase 7, functional dashboard settings
+- Built:
+  - Replaced the inert dashboard `Settings` hash link with a real `/dashboard/settings` organizer hub and corrected sidebar active-state matching.
+  - Added an owner/admin-scoped settings hub that lists manageable organizations and their events, links to existing organization settings, and links to the new event settings page.
+  - Added event detail and registration-control editing for name, slug, description, venue, dates, manual approval, transfers, and per-user registration limits, plus a shortcut to email-template settings and a saved-success state.
+  - Added validated event settings parsing and JSON merge helpers so core setting updates preserve vendor configuration, email templates, raffle history, and other unrelated event settings.
+  - Added route-level owner/admin checks to organization settings, event settings, and event email-template settings.
+  - Added focused validation/merge unit coverage and a settings E2E scenario covering navigation, membership filtering, access rejection, persistence, and JSON preservation.
+- Verified:
+  - `npm run type-check --workspace @vfurst/web` passed.
+  - `npm run test --workspace @vfurst/web` passed with 6 focused tests.
+  - `npm run lint --workspace @vfurst/web` passed with the existing two `<img>` warnings on store product images.
+  - `npm run build --workspace @vfurst/web` passed; the known BullMQ dynamic dependency warning and initial local database/Redis connection-refused logs remained because Docker was stopped during the build.
+  - The targeted Playwright settings scenario passed against the Docker-backed local PostgreSQL service.
+  - The full E2E command was attempted but stopped before the new serial settings scenario because two pre-existing launch checks failed: the marketing accessibility test could not find its expected hero image, and the public zero-dollar registration test did not reach its success URL. The settings scenario was then run and passed independently.
+- Remaining issues / blockers:
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass.
+  - The two unrelated full-suite E2E failures above remain to be reconciled with the current marketing asset and registration checkout behavior.
+- Next session should:
+  - Investigate the marketing hero-image expectation and zero-dollar registration E2E return flow, then rerun the complete E2E suite.
+
 ### 2026-07-11 - Phase 7, Coolify Nixpacks setup failure diagnosis
 - Built:
   - No source changes; inspected the failed Coolify deployment log for commit `de5245935c23103db1875a2144a0034e72139844`.

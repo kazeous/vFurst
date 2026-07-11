@@ -10,14 +10,18 @@ const attendeeEmail = `launch-attendee-${runId}@example.com`;
 const vendorEmail = `launch-vendor-${runId}@example.com`;
 const orgSlug = `launch-${runId}`;
 const crudOrgSlug = `launch-crud-${runId}`;
+const memberOnlyOrgSlug = `launch-member-${runId}`;
 
 let orgId: string;
 let eventId: string;
+let memberOnlyOrgId: string;
+let memberOnlyEventId: string;
 let registrationTypeId: string;
 let registrationId: string;
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(60_000);
+test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
   const admin = await prisma.user.create({
@@ -77,8 +81,36 @@ test.beforeAll(async () => {
     }
   });
 
+  const memberOnlyOrg = await prisma.organization.create({
+    data: {
+      name: "Member Only Convention",
+      slug: memberOnlyOrgSlug,
+      subdomain: memberOnlyOrgSlug,
+      contactEmail: "member@example.com",
+      members: {
+        create: {
+          userId: admin.id,
+          role: "MEMBER"
+        }
+      },
+      events: {
+        create: {
+          name: "Member Only Event",
+          slug: "member-only-event",
+          startDate: new Date("2027-08-01T09:00:00Z"),
+          endDate: new Date("2027-08-02T17:00:00Z")
+        }
+      }
+    },
+    include: {
+      events: true
+    }
+  });
+
   orgId = org.id;
   eventId = event.id;
+  memberOnlyOrgId = memberOnlyOrg.id;
+  memberOnlyEventId = memberOnlyOrg.events[0]!.id;
   registrationTypeId = registrationType.id;
 });
 
@@ -86,7 +118,7 @@ test.afterAll(async () => {
   await prisma.organization.deleteMany({
     where: {
       slug: {
-        in: [orgSlug, crudOrgSlug]
+        in: [orgSlug, crudOrgSlug, memberOnlyOrgSlug]
       }
     }
   });
@@ -105,10 +137,12 @@ async function login(page: Page) {
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(password);
   await Promise.all([
-    page.waitForURL(/\/dashboard$/, { timeout: 15_000 }),
-    page.getByRole("button", { name: "Log in" }).click()
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
   ]);
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 15_000 });
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/dashboard$/);
 }
 
 async function ensureConfirmedRegistration() {
@@ -256,4 +290,52 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
 
   expect(registration.status).toBe("CHECKED_IN");
   expect(registration.checkedInAt).toBeTruthy();
+});
+
+test("dashboard settings hub filters access and updates event settings", async ({ page }) => {
+  test.setTimeout(90_000);
+  await login(page);
+
+  const dashboardNavigation = page.getByRole("navigation", { name: "Dashboard navigation" });
+  await expect(dashboardNavigation.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/dashboard/settings");
+  await page.goto("/dashboard/settings");
+  await expect(page).toHaveURL(/\/dashboard\/settings$/);
+  await expect(dashboardNavigation.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Launch Test Convention" })).toBeVisible();
+  await expect(page.getByText("Member Only Convention")).toHaveCount(0);
+
+  const unauthorizedOrgResponse = await page.request.get(`/dashboard/organizations/${memberOnlyOrgId}/settings`);
+  expect(unauthorizedOrgResponse.ok()).toBe(false);
+  const unauthorizedEventResponse = await page.request.get(`/dashboard/events/${memberOnlyEventId}/settings`);
+  expect(unauthorizedEventResponse.ok()).toBe(false);
+
+  await page.goto(`/dashboard/events/${eventId}/settings`);
+  await page.getByLabel("Name").fill("Launch Test 2027 Updated");
+  await page.getByLabel("Description").fill("Updated launch verification event");
+  await page.getByLabel("Venue").fill("Updated Verification Hall");
+  await page.getByLabel("Require manual registration approval").check();
+  await page.getByLabel("Allow attendee transfers").uncheck();
+  await page.getByLabel("Maximum registrations per user").fill("3");
+  const saveResponsePromise = page.waitForResponse(
+    (response) => response.url().includes(`/dashboard/events/${eventId}/settings`) && response.request().method() === "POST"
+  );
+  await page.getByRole("button", { name: "Save event settings" }).click({ noWaitAfter: true });
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.status()).toBeLessThan(400);
+  await page.goto(`/dashboard/events/${eventId}/settings?saved=1`);
+  await expect(page.getByText("Event settings saved.")).toBeVisible();
+
+  const updatedEvent = await prisma.event.findUniqueOrThrow({
+    where: {
+      id: eventId
+    }
+  });
+  const settings = updatedEvent.settings as Record<string, unknown>;
+
+  expect(updatedEvent.name).toBe("Launch Test 2027 Updated");
+  expect(updatedEvent.venue).toBe("Updated Verification Hall");
+  expect(settings.requireApproval).toBe(true);
+  expect(settings.allowTransfers).toBe(false);
+  expect(settings.maxRegistrationsPerUser).toBe(3);
+  expect(settings.vendorConfig).toBeTruthy();
 });
