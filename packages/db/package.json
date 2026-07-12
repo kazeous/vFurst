@@ -10,6 +10,7 @@
     "build": "npm run generate && npm run clean && tsc -p tsconfig.build.json",
     "generate": "prisma generate",
     "lint": "eslint .",
+    "push": "prisma db push --skip-generate",
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "validate": "prisma validate"

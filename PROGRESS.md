@@ -31,6 +31,21 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-12 - Phase 7, production login schema synchronization fix
+- Diagnosed:
+  - The shared Sentry issue reports an Auth.js `CallbackRouteError` on `POST /login` immediately after the SePay commit.
+  - The commit added required Prisma columns including `User.platformRole`, while the production checklist still depended on a manual `prisma db push`. The deployed login page returned 200, but credential authorization queried the new user shape before production had applied the additive schema.
+- Fixed:
+  - Added a web `prestart` schema synchronization hook and a root `npm start` entry point so both root and workspace Coolify startup paths run `prisma db push --skip-generate` before Next.js starts.
+  - Removed the unnecessary unique constraint on nullable checkout-token hashes and replaced it with a normal index. This avoids Prisma's `--accept-data-loss` gate while preserving lookup performance.
+  - Kept the safety boundary: startup never supplies `--accept-data-loss`, so destructive schema changes fail deployment rather than applying automatically.
+  - Updated the launch checklist with the automatic synchronization and required production database DDL permission.
+- Verified:
+  - The exact web `prestart` command synchronized the existing local database successfully.
+  - A temporary empty PostgreSQL database was created, bootstrapped through the new deployment command, and checked for `users.platformRole` and `events.currency`; both columns existed. The temporary database was then removed.
+- Next session should:
+  - Redeploy this fix, confirm the prestart log reports the production database is in sync, then verify credential login and the dashboard before enabling SePay.
+
 ### 2026-07-11 - Phase 7, platform-controlled SePay QR payments
 - Built:
   - Added platform roles with a grant/revoke CLI, immutable event/order currency, provider-neutral payment metadata, secure checkout-token context, provider attempts, webhook deduplication, payment exceptions, organizer ledgers, payouts, and manual refund records.

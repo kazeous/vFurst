@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prestart": "npm run push --workspace @vfurst/db",
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",

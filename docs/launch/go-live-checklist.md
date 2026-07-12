@@ -36,14 +36,14 @@ For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH
 
 If Cloudflare proxies the Coolify domain, set Cloudflare SSL/TLS mode to `Full` or `Full (strict)`, not `Flexible`. A `Flexible` edge connection can loop forever when Coolify or Traefik redirects the origin request back to HTTPS. The symptom is `curl -I https://vfurst.reyuugames.com/` returning `302` or `307` with `Location: https://vfurst.reyuugames.com/` repeatedly. Temporarily disabling the orange-cloud proxy is a useful isolation test; if the direct DNS path works, fix the Cloudflare SSL mode before re-enabling the proxy.
 
-Production database schema must be bootstrapped before login, dashboard, or convention routes can work. This repo currently has a Prisma schema but no committed `packages/db/prisma/migrations` directory, so the first empty production database should be initialized from the web or worker Coolify shell with the same `DATABASE_URL` used at runtime:
+Production database schema must be synchronized before login, dashboard, or convention routes can work. This repo currently has a Prisma schema but no committed `packages/db/prisma/migrations` directory, so the web `prestart` hook runs the following command before Next.js accepts traffic:
 
 ```bash
 cd packages/db
 npx prisma db push
 ```
 
-If production already contains real data, take a backup before running schema changes. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
+The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The production database role therefore needs schema DDL permission. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
 
 Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient; `npm run check:launch` requires real Sentry DSN URLs, non-placeholder Sentry org/project/token values, and a reachable live URL.
 

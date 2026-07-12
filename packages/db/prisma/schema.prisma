@@ -678,7 +678,7 @@ model Order {
   status                OrderStatus   @default(PENDING)
   paymentProvider       PaymentProvider?
   paymentReference      String?
-  checkoutTokenHash     String?        @unique
+    checkoutTokenHash     String?
   checkoutSuccessPath   String?
   checkoutCancelPath    String?
   checkoutExpiresAt     DateTime?
@@ -706,7 +706,8 @@ model Order {
   @@index([voucherId])
   @@index([eventId, status, createdAt])
   @@index([orgId, status, createdAt])
-  @@index([paymentProvider, paymentReference])
+    @@index([paymentProvider, paymentReference])
+    @@index([checkoutTokenHash])
   @@index([checkoutExpiresAt])
   @@map("orders")
 }
