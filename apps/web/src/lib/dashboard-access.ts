@@ -139,6 +139,51 @@ async function getAttendeeNoteTenant(noteId: string) {
   });
 }
 
+async function getStoreProductTenant(productId: string) {
+  return prisma.storeProduct.findUnique({
+    where: {
+      id: productId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      images: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getOrderTenant(orderId: string) {
+  return prisma.order.findUnique({
+    where: {
+      id: orderId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      total: true,
+      currency: true,
+      status: true,
+      stripePaymentIntentId: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
 function hasAllowedOrgRole(membership: Awaited<ReturnType<typeof getOrgMembership>>, allowedRoles: OrgRole[]) {
   return Boolean(membership && allowedRoles.includes(membership.role));
 }
@@ -301,6 +346,52 @@ export async function requireAttendeeNoteAccess(noteId: string, allowedRoles: Or
     membership,
     attendeeNote,
     registration: attendeeNote.registration,
+    event
+  };
+}
+
+export async function requireStoreProductAccess(productId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const storeProduct = await getStoreProductTenant(productId);
+
+  if (!storeProduct) {
+    throw new Error("Store product not found.");
+  }
+
+  const event = storeProduct.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this store product.");
+  }
+
+  return {
+    userId,
+    membership,
+    storeProduct,
+    event
+  };
+}
+
+export async function requireOrderAccess(orderId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const order = await getOrderTenant(orderId);
+
+  if (!order) {
+    throw new Error("Order not found.");
+  }
+
+  const event = order.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this order.");
+  }
+
+  return {
+    userId,
+    membership,
+    order,
     event
   };
 }

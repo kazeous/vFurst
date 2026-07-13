@@ -33,19 +33,21 @@ async function requireUserId() {
   return session.user.id;
 }
 
-async function getOrCreateCart(userId: string, orgId: string, eventId: string) {
+async function getOrCreateCart(userId: string, event: { id: string; orgId: string }) {
   return prisma.cart.upsert({
     where: {
       userId_eventId: {
         userId,
-        eventId
+        eventId: event.id
       }
     },
-    update: {},
+    update: {
+      orgId: event.orgId
+    },
     create: {
-      orgId,
+      orgId: event.orgId,
       userId,
-      eventId
+      eventId: event.id
     }
   });
 }
@@ -67,14 +69,10 @@ function selectedOptionsFromForm(formData: FormData, options: ReturnType<typeof 
 export async function addToCart(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
       productId: z.string().uuid(),
       quantity: z.coerce.number().int().min(1).max(99)
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
       productId: formData.get("productId"),
       quantity: formData.get("quantity")
     });
@@ -84,24 +82,33 @@ export async function addToCart(formData: FormData) {
   }
 
   const userId = await requireUserId();
-  const product = await prisma.storeProduct.findFirstOrThrow({
+  const product = await prisma.storeProduct.findUnique({
     where: {
-      id: parsed.data.productId,
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId
+      id: parsed.data.productId
+    },
+    include: {
+      event: {
+        include: {
+          org: true
+        }
+      }
     }
   });
+
+  if (!product || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
+    throw new Error("This product is not available for purchase.");
+  }
 
   if (product.stock < parsed.data.quantity) {
     throw new Error("Not enough inventory is available.");
   }
 
-  const cart = await getOrCreateCart(userId, parsed.data.orgId, parsed.data.eventId);
+  const cart = await getOrCreateCart(userId, product.event);
   const options = parseProductOptions(product.options);
 
   await prisma.cartItem.create({
     data: {
-      orgId: parsed.data.orgId,
+      orgId: product.event.orgId,
       cartId: cart.id,
       itemType: "PRODUCT",
       refId: product.id,
@@ -114,8 +121,8 @@ export async function addToCart(formData: FormData) {
     }
   });
 
-  revalidatePath(`/${formData.get("orgSlug") ?? ""}/store`);
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/store`);
+  revalidatePath(`/${product.event.org.subdomain}/store`);
+  revalidatePath(`/dashboard/events/${product.event.id}/store`);
 }
 
 export async function removeFromCart(formData: FormData) {
@@ -237,19 +244,34 @@ export async function convertCartToOrder(formData: FormData) {
     throw new Error("Your cart is empty.");
   }
 
+  if (cart.orgId !== cart.event.orgId) {
+    throw new Error("Cart tenant does not match its event.");
+  }
+
   for (const item of cart.items) {
+    if (
+      item.itemType === "PRODUCT" &&
+      (!item.product || item.product.eventId !== cart.eventId || item.product.orgId !== cart.event.orgId)
+    ) {
+      throw new Error("A product in this cart does not belong to the cart event.");
+    }
+
     if (item.product && item.product.stock < item.quantity) {
       throw new Error(`${item.product.name} does not have enough stock remaining.`);
     }
   }
 
+  if (cart.voucher && (cart.voucher.eventId !== cart.eventId || cart.voucher.orgId !== cart.event.orgId)) {
+    throw new Error("The voucher on this cart does not belong to the cart event.");
+  }
+
   const summary = getCartSummary(cart.items, cart.voucher);
   if (summary.total > 0) {
-    await assertPaidCheckoutAvailable(cart.orgId, cart.event.currency);
+    await assertPaidCheckoutAvailable(cart.event.orgId, cart.event.currency);
   }
   const order = await prisma.order.create({
     data: {
-      orgId: cart.orgId,
+      orgId: cart.event.orgId,
       userId,
       eventId: cart.eventId,
       cartId: cart.id,
@@ -260,7 +282,7 @@ export async function convertCartToOrder(formData: FormData) {
       items: {
         createMany: {
           data: cart.items.map((item) => ({
-            orgId: cart.orgId,
+            orgId: cart.event.orgId,
             itemType: orderItemTypes[item.itemType],
             refId: item.refId,
             unitPrice: item.unitPrice,

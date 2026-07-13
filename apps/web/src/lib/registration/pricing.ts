@@ -44,6 +44,10 @@ export function formatCurrency(amount: number, currency: CurrencyCode = "USD") {
   }).format(currency === "USD" ? amount / 100 : amount);
 }
 
+export function formatMoneyInput(amount: number, currency: CurrencyCode) {
+  return currency === "USD" ? (amount / 100).toFixed(2) : String(amount);
+}
+
 export function parseScheduledPricing(value: unknown): ScheduledPrice[] {
   const parsed = z.array(scheduledPriceSchema).safeParse(value);
   return parsed.success ? parsed.data : [];

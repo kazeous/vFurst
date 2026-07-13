@@ -324,9 +324,6 @@ export default async function PublicStorePage({
                     {getSurchargeTotal(product.surcharges) > 0 ? <small className="vf-muted"> with surcharges</small> : null}
                   </p>
                   <form action={addToCart} className="vf-form">
-                    <input type="hidden" name="orgId" value={org.id} />
-                    <input type="hidden" name="orgSlug" value={org.subdomain} />
-                    <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="productId" value={product.id} />
                     {options.map((option) => (
                       <label key={option.name}>

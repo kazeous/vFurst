@@ -1,5 +1,5 @@
 import { createProduct, deleteProduct, updateProduct } from "@/actions/store-actions";
-import { formatCurrency } from "@/lib/registration/pricing";
+import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions, parseProductSurcharges } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -58,8 +58,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
       <section className="vf-two-column">
         <div className="vf-section">
           <h2>Create product</h2>
-          <form action={createProduct} className="vf-form" encType="multipart/form-data">
-            <input type="hidden" name="orgId" value={event.orgId} />
+          <form action={createProduct} className="vf-form">
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Name
@@ -72,7 +71,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
             <div className="vf-subform-row">
               <label>
                 Price
-                <input name="price" type="number" min="0" step="0.01" required />
+                <input name="price" type="number" min="0" step={event.currency === "VND" ? "1" : "0.01"} required />
               </label>
               <label>
                 Stock
@@ -85,11 +84,12 @@ export default async function StoreManagementPage({ params }: { params: Promise<
             </div>
             <label>
               Image URL
-              <input name="imageUrl" placeholder="https://..." />
+              <input name="imageUrl" type="url" placeholder="https://..." />
             </label>
             <label>
               Upload image
-              <input name="imageFile" type="file" accept="image/*" />
+              <input name="imageFile" type="file" accept="image/png,image/jpeg,image/webp" />
+              <small className="vf-muted">PNG, JPEG, or WebP · up to 5 MB</small>
             </label>
             <div className="vf-subform-row">
               <label>
@@ -98,7 +98,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
               </label>
               <label>
                 Amount
-                <input name="surchargeAmount" type="number" min="0" step="0.01" />
+                <input name="surchargeAmount" type="number" min="0" step={event.currency === "VND" ? "1" : "0.01"} />
               </label>
             </div>
             <div className="vf-subform-row">
@@ -149,8 +149,6 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                   </p>
                 </div>
                 <form action={deleteProduct}>
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="productId" value={product.id} />
                   <Button label="Delete" type="submit" variant="destructive" size="sm" />
                 </form>
@@ -164,13 +162,8 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                   ))}
                 </div>
               ) : null}
-              <form action={updateProduct} className="vf-form" encType="multipart/form-data">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
+              <form action={updateProduct} className="vf-form">
                 <input type="hidden" name="productId" value={product.id} />
-                {images.map((image) => (
-                  <input key={image} type="hidden" name="existingImage" value={image} />
-                ))}
                 <label>
                   Name
                   <input name="name" defaultValue={product.name} required />
@@ -182,7 +175,14 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                 <div className="vf-subform-row">
                   <label>
                     Price
-                    <input name="price" type="number" min="0" step="0.01" defaultValue={(product.price / 100).toFixed(2)} required />
+                    <input
+                      name="price"
+                      type="number"
+                      min="0"
+                      step={event.currency === "VND" ? "1" : "0.01"}
+                      defaultValue={formatMoneyInput(product.price, event.currency)}
+                      required
+                    />
                   </label>
                   <label>
                     Stock
@@ -201,7 +201,13 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                     </label>
                     <label>
                       Amount
-                      <input name="surchargeAmount" type="number" min="0" step="0.01" defaultValue={(surcharge.amount / 100).toFixed(2)} />
+                      <input
+                        name="surchargeAmount"
+                        type="number"
+                        min="0"
+                        step={event.currency === "VND" ? "1" : "0.01"}
+                        defaultValue={formatMoneyInput(surcharge.amount, event.currency)}
+                      />
                     </label>
                   </div>
                 ))}
@@ -219,7 +225,8 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                 ))}
                 <label>
                   Add image
-                  <input name="imageFile" type="file" accept="image/*" />
+                  <input name="imageFile" type="file" accept="image/png,image/jpeg,image/webp" />
+                  <small className="vf-muted">PNG, JPEG, or WebP · up to 5 MB</small>
                 </label>
                 <Button label="Save product" type="submit" />
               </form>

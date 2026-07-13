@@ -135,16 +135,20 @@ export default async function StoreOrdersPage({
             {order.status === "PAID" || order.status === "PARTIALLY_REFUNDED" ? (
               <div className="vf-inline-forms">
                 <form action={refundOrder}>
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="orderId" value={order.id} />
                   <Button label="Full refund" type="submit" variant="destructive" size="sm" />
                 </form>
                 <form action={partialRefund} className="vf-inline-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="orderId" value={order.id} />
-                  <input name="amount" type="number" min="0.01" step="0.01" placeholder="25.00" required aria-label="Partial refund amount" />
+                  <input
+                    name="amount"
+                    type="number"
+                    min={order.currency === "VND" ? "1" : "0.01"}
+                    step={order.currency === "VND" ? "1" : "0.01"}
+                    placeholder={order.currency === "VND" ? "250000" : "25.00"}
+                    required
+                    aria-label="Partial refund amount"
+                  />
                   <Button label="Partial refund" type="submit" size="sm" />
                 </form>
               </div>

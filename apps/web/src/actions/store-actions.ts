@@ -1,37 +1,21 @@
 "use server";
 
 import { convertCartToOrder } from "@/actions/cart-actions";
-import { auth } from "@/lib/auth";
+import { requireEventAccess, requireOrderAccess, requireStoreProductAccess } from "@/lib/dashboard-access";
 import { parseMoney } from "@/lib/registration/pricing";
 import { getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
+import {
+  PRODUCT_IMAGE_MAX_COUNT,
+  validateProductImageContents,
+  validateProductImageMetadata,
+  validateProductImageUrl
+} from "@/lib/store/product-image-policy";
 import { productOptionSchema, productSurchargeSchema } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage store products for this event.");
-  }
-}
 
 function surchargesFromForm(formData: FormData, currency: "USD" | "VND") {
   const names = formData.getAll("surchargeName");
@@ -62,22 +46,33 @@ function optionsFromForm(formData: FormData) {
     .map((option) => productOptionSchema.parse(option));
 }
 
-async function imagesFromForm(orgId: string, eventId: string, formData: FormData) {
+function storedImageUrls(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+async function imagesFromForm(orgId: string, eventId: string, formData: FormData, existingImageCount = 0) {
   const imageUrls = formData
     .getAll("imageUrl")
     .map((value) => String(value).trim())
-    .filter(Boolean);
-  const uploads = formData.getAll("imageFile");
+    .filter(Boolean)
+    .map(validateProductImageUrl);
+  const uploads = formData
+    .getAll("imageFile")
+    .filter((upload): upload is File => upload instanceof File && upload.size > 0);
+  const requestedImageCount = imageUrls.length + uploads.length;
 
-  const uploadedUrls = [];
+  if (requestedImageCount > 0 && existingImageCount + requestedImageCount > PRODUCT_IMAGE_MAX_COUNT) {
+    throw new Error(`Products may have at most ${PRODUCT_IMAGE_MAX_COUNT} images.`);
+  }
+
+  const uploadedUrls: string[] = [];
 
   for (const upload of uploads) {
-    if (!(upload instanceof File) || upload.size === 0) {
-      continue;
-    }
-
-    const key = buildObjectKey(orgId, `events/${eventId}/store`, `${crypto.randomUUID()}-${upload.name}`);
-    const url = await uploadFromBuffer(key, Buffer.from(await upload.arrayBuffer()), upload.type || "application/octet-stream");
+    const { contentType, extension } = validateProductImageMetadata(upload);
+    const buffer = Buffer.from(await upload.arrayBuffer());
+    validateProductImageContents(buffer, contentType);
+    const key = buildObjectKey(orgId, `events/${eventId}/store`, `product-${crypto.randomUUID()}.${extension}`);
+    const url = await uploadFromBuffer(key, buffer, contentType);
     uploadedUrls.push(url);
   }
 
@@ -85,9 +80,6 @@ async function imagesFromForm(orgId: string, eventId: string, formData: FormData
 }
 
 const productSchema = z.object({
-  orgId: z.string().uuid(),
-  eventId: z.string().uuid(),
-  productId: z.string().uuid().optional(),
   name: z.string().trim().min(1),
   description: z.string().trim().optional(),
   price: z.coerce.number().int().min(0),
@@ -97,10 +89,8 @@ const productSchema = z.object({
 
 export async function createProduct(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
+  const { event } = await requireEventAccess(eventId);
   const parsed = productSchema.safeParse({
-    orgId: formData.get("orgId"),
-    eventId: formData.get("eventId"),
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     price: parseMoney(formData.get("price"), event.currency),
@@ -112,33 +102,32 @@ export async function createProduct(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid product.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
+  const surcharges = surchargesFromForm(formData, event.currency);
+  const options = optionsFromForm(formData);
+  const images = await imagesFromForm(event.orgId, event.id, formData);
 
   await prisma.storeProduct.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       name: parsed.data.name,
       description: parsed.data.description,
       price: parsed.data.price,
       stock: parsed.data.stock,
       category: parsed.data.category,
-      images: await imagesFromForm(parsed.data.orgId, parsed.data.eventId, formData),
-      surcharges: surchargesFromForm(formData, event.currency),
-      options: optionsFromForm(formData)
+      images,
+      surcharges,
+      options
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/store`);
+  revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
 export async function updateProduct(formData: FormData) {
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
-  const parsed = productSchema.required({ productId: true }).safeParse({
-    orgId: formData.get("orgId"),
-    eventId: formData.get("eventId"),
-    productId: formData.get("productId"),
+  const productId = z.string().uuid().parse(formData.get("productId"));
+  const { storeProduct, event } = await requireStoreProductAccess(productId);
+  const parsed = productSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     price: parseMoney(formData.get("price"), event.currency),
@@ -150,47 +139,42 @@ export async function updateProduct(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid product.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const existingImages = formData
-    .getAll("existingImage")
-    .map((value) => String(value).trim())
-    .filter(Boolean);
+  const existingImages = storedImageUrls(storeProduct.images);
+  const surcharges = surchargesFromForm(formData, event.currency);
+  const options = optionsFromForm(formData);
+  const newImages = await imagesFromForm(event.orgId, event.id, formData, existingImages.length);
 
   await prisma.storeProduct.update({
     where: {
-      id: parsed.data.productId
+      id: storeProduct.id
     },
     data: {
+      orgId: event.orgId,
       name: parsed.data.name,
       description: parsed.data.description,
       price: parsed.data.price,
       stock: parsed.data.stock,
       category: parsed.data.category,
-      images: [...existingImages, ...(await imagesFromForm(parsed.data.orgId, parsed.data.eventId, formData))],
-      surcharges: surchargesFromForm(formData, event.currency),
-      options: optionsFromForm(formData)
+      images: [...existingImages, ...newImages],
+      surcharges,
+      options
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/store`);
+  revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
 export async function deleteProduct(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const productId = z.string().uuid().parse(formData.get("productId"));
+  const { storeProduct, event } = await requireStoreProductAccess(productId);
 
-  await requireEventAccess(orgId);
-
-  await prisma.storeProduct.deleteMany({
+  await prisma.storeProduct.delete({
     where: {
-      id: productId,
-      orgId,
-      eventId
+      id: storeProduct.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/store`);
+  revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
 export async function createOrder(formData: FormData) {
@@ -198,19 +182,10 @@ export async function createOrder(formData: FormData) {
 }
 
 export async function refundOrder(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const orderId = z.string().uuid().parse(formData.get("orderId"));
+  const { order, event } = await requireOrderAccess(orderId);
 
-  await requireEventAccess(orgId);
-  assertActionRateLimit("payment:store-refund", `${orgId}:${orderId}`);
-  const order = await prisma.order.findFirstOrThrow({
-    where: {
-      id: orderId,
-      orgId,
-      eventId
-    }
-  });
+  assertActionRateLimit("payment:store-refund", `${event.orgId}:${order.id}`);
 
   if (order.stripePaymentIntentId && order.total > 0) {
     await getStripe().refunds.create({
@@ -227,22 +202,13 @@ export async function refundOrder(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/store/orders`);
+  revalidatePath(`/dashboard/events/${event.id}/store/orders`);
 }
 
 export async function partialRefund(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const orderId = z.string().uuid().parse(formData.get("orderId"));
-  await requireEventAccess(orgId);
-  assertActionRateLimit("payment:store-partial-refund", `${orgId}:${orderId}`);
-  const order = await prisma.order.findFirstOrThrow({
-    where: {
-      id: orderId,
-      orgId,
-      eventId
-    }
-  });
+  const { order, event } = await requireOrderAccess(orderId);
+  assertActionRateLimit("payment:store-partial-refund", `${event.orgId}:${order.id}`);
   const amount = parseMoney(formData.get("amount"), order.currency);
 
   if (amount <= 0) {
@@ -267,5 +233,5 @@ export async function partialRefund(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/store/orders`);
+  revalidatePath(`/dashboard/events/${event.id}/store/orders`);
 }
