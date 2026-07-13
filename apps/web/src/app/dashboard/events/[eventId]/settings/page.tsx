@@ -1,7 +1,7 @@
 import { updateEventSettings } from "@/actions/event-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { getCoreEventSettings } from "@/lib/event-settings";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
@@ -19,7 +19,7 @@ export default async function EventSettingsPage({
 }) {
   const { eventId } = await params;
   const { saved } = await searchParams;
-  await requireEventAccess(eventId);
+  await requireEventPageAccess(eventId);
 
   const event = await prisma.event.findUnique({
     where: {

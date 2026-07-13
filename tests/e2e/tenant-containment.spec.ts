@@ -1,0 +1,223 @@
+import { expect, test, type Page } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
+const runId = `${Date.now()}-${process.pid}`;
+const password = "ContainmentPass123!";
+const platformAdminEmail = `containment-platform-${runId}@example.com`;
+const ownerEmail = `containment-owner-${runId}@example.com`;
+const memberEmail = `containment-member-${runId}@example.com`;
+const foreignOwnerEmail = `containment-foreign-${runId}@example.com`;
+const publicEmail = `containment-public-${runId}@example.com`;
+const orgASlug = `containment-a-${runId}`;
+const orgBSlug = `containment-b-${runId}`;
+
+let orgAId: string;
+let orgBId: string;
+let eventAId: string;
+
+test.describe.configure({ mode: "serial" });
+test.setTimeout(90_000);
+test.use({ serviceWorkers: "block" });
+
+test.beforeAll(async () => {
+  const passwordHash = await bcrypt.hash(password, 12);
+  const [platformAdmin, owner, member, foreignOwner, publicUser] = await Promise.all([
+    prisma.user.create({
+      data: {
+        email: platformAdminEmail,
+        name: "Containment Platform Admin",
+        passwordHash,
+        platformRole: "PLATFORM_ADMIN"
+      }
+    }),
+    prisma.user.create({
+      data: {
+        email: ownerEmail,
+        name: "Containment Owner",
+        passwordHash
+      }
+    }),
+    prisma.user.create({
+      data: {
+        email: memberEmail,
+        name: "Containment Member",
+        passwordHash
+      }
+    }),
+    prisma.user.create({
+      data: {
+        email: foreignOwnerEmail,
+        name: "Containment Foreign Owner",
+        passwordHash
+      }
+    }),
+    prisma.user.create({
+      data: {
+        email: publicEmail,
+        name: "Containment Public User",
+        passwordHash
+      }
+    })
+  ]);
+
+  const orgA = await prisma.organization.create({
+    data: {
+      name: "Containment Organization A",
+      slug: orgASlug,
+      subdomain: orgASlug,
+      contactEmail: ownerEmail,
+      members: {
+        create: [
+          { userId: owner.id, role: "OWNER" },
+          { userId: member.id, role: "MEMBER" }
+        ]
+      },
+      events: {
+        create: {
+          name: "Containment Event A",
+          slug: "containment-event-a",
+          startDate: new Date("2027-09-01T09:00:00Z"),
+          endDate: new Date("2027-09-02T17:00:00Z")
+        }
+      }
+    },
+    include: {
+      events: true
+    }
+  });
+
+  const orgB = await prisma.organization.create({
+    data: {
+      name: "Containment Organization B",
+      slug: orgBSlug,
+      subdomain: orgBSlug,
+      contactEmail: foreignOwnerEmail,
+      members: {
+        create: {
+          userId: foreignOwner.id,
+          role: "OWNER"
+        }
+      },
+      events: {
+        create: {
+          name: "Containment Event B",
+          slug: "containment-event-b",
+          startDate: new Date("2027-10-01T09:00:00Z"),
+          endDate: new Date("2027-10-02T17:00:00Z")
+        }
+      }
+    }
+  });
+
+  orgAId = orgA.id;
+  orgBId = orgB.id;
+  eventAId = orgA.events[0]!.id;
+
+  expect(platformAdmin.platformRole).toBe("PLATFORM_ADMIN");
+  expect(publicUser.platformRole).toBe("USER");
+});
+
+test.afterAll(async () => {
+  await prisma.organization.deleteMany({
+    where: {
+      slug: {
+        in: [orgASlug, orgBSlug]
+      }
+    }
+  });
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        in: [platformAdminEmail, ownerEmail, memberEmail, foreignOwnerEmail, publicEmail]
+      }
+    }
+  });
+  await prisma.$disconnect();
+});
+
+async function loginAs(page: Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+}
+
+test("platform admin can reach provisioning routes but not tenant organizer routes without membership", async ({ page }) => {
+  await loginAs(page, platformAdminEmail);
+
+  const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });
+  await expect(navigation.getByRole("link", { name: "Organizations" })).toBeVisible();
+
+  await page.goto("/dashboard/organizations");
+  await expect(page.getByRole("heading", { name: "Organizations" })).toBeVisible();
+  await page.goto("/dashboard/organizations/new");
+  await expect(page.getByRole("heading", { name: "Create organization" })).toBeVisible();
+
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+});
+
+test("organization owner sees only their tenant and cannot reach provisioning", async ({ page }) => {
+  await loginAs(page, ownerEmail);
+
+  const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });
+  await expect(navigation.getByRole("link", { name: "Organizations" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Create event" })).toBeVisible();
+
+  expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
+  expect((await page.request.get("/dashboard/organizations/new")).status()).toBe(404);
+  expect((await page.request.get(`/dashboard/organizations/${orgBId}`)).status()).toBe(404);
+  expect((await page.request.get(`/dashboard/organizations/${orgBId}/members`)).status()).toBe(404);
+  expect((await page.request.get(`/dashboard/organizations/${orgBId}/stripe-connect`)).status()).toBe(404);
+
+  await page.goto(`/dashboard/organizations/${orgAId}`);
+  await expect(page.getByRole("heading", { name: "Containment Organization A" })).toBeVisible();
+
+  await page.goto("/dashboard/events/new");
+  const organizationSelect = page.locator('form.vf-wizard select[name="orgId"]');
+  await expect(organizationSelect.locator("option")).toHaveCount(1);
+  await expect(organizationSelect).toHaveValue(orgAId);
+  await expect(organizationSelect.locator("option")).toHaveText("Containment Organization A");
+
+  await page.goto("/dashboard/events");
+  await expect(page.getByRole("link", { name: "Containment Event A" })).toBeVisible();
+  await expect(page.getByText("Containment Event B")).toHaveCount(0);
+});
+
+test("member role cannot enter owner-admin organization or event-management routes", async ({ page }) => {
+  await loginAs(page, memberEmail);
+
+  await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
+  await expect(page.getByText("No organizer access")).toBeVisible();
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
+  expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(404);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+
+  await page.goto("/dashboard/events");
+  await expect(page.getByText("Containment Event A")).toHaveCount(0);
+  await expect(page.getByText("Containment Event B")).toHaveCount(0);
+});
+
+test("public account receives no tenant inventory or organizer actions", async ({ page }) => {
+  await loginAs(page, publicEmail);
+
+  await expect(page.getByText("No organizer access")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
+  expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+
+  await page.goto("/dashboard/events");
+  await expect(page.getByText("Containment Event A")).toHaveCount(0);
+  await expect(page.getByText("Containment Event B")).toHaveCount(0);
+});

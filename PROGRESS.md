@@ -19,17 +19,38 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Audit reopened | Core features exist, but the implemented self-service organization creation contradicts the new managed/invite-only tenant contract; organization guards, invitations, lifecycle, separated platform routes, and resource-derived authorization are not implemented. |
+| 1 - Core Infrastructure | Remediation in progress | The first containment unit is implemented: only platform admins can list/provision organizations, organizer pages and event portfolios are membership-scoped, and shared organization/event page guards reject foreign tenants. Invitations, lifecycle, separated `/platform` routes, and full resource-derived action authorization are not implemented. |
 | 2 - Registration & Hotel | Audit reopened | Core flows exist, but cross-tenant single-record mutations and VND/admin payment correctness require remediation. |
 | 3 - Store & Add-ons | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained product uploads require remediation. |
 | 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
 | 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
 | 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
-| 7 - Launch | Blocked | Operational Calm and Stripe/SePay happy paths remain implemented; the code still has 41 models and the prior passing test evidence. The maintained plan now targets managed provisioning with `Organization.status`, `OrgInvitation`, separated `/platform` and `/dashboard` surfaces, and a 42-model schema. None of that remediation is implemented yet. The July 13 audit blockers and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | The managed-tenant containment unit now passes the full 17-test E2E suite and 24 web unit tests, but deployment remains blocked. Resource-derived authorization across mutation actions, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, contain tenant provisioning and organizer access
+- Implemented the first managed-tenant containment unit:
+  - Restricted organization listing and provisioning pages plus the `createOrganization` server action to `PLATFORM_ADMIN` users. The platform administrator is temporarily assigned as the new tenant owner until the planned owner-invitation workflow exists.
+  - Added shared platform, organization, and event access helpers; page guards return a controlled 404 for unauthorized direct URLs while server actions retain explicit permission errors.
+  - Added a common organization layout guard and event layout guard so nested organizer pages cannot disclose a foreign tenant merely by changing the URL.
+  - Scoped the dashboard workspace, event portfolio, and create-event organization selector to `OWNER`/`ADMIN` memberships. Removed organization provisioning navigation/actions from organizer and public accounts.
+  - Added a self-contained Playwright persona matrix covering a platform administrator without membership, an organization owner, a `MEMBER`, and a public account, including cross-tenant direct-URL checks.
+- Stabilized verification:
+  - Made the root test task build workspace dependencies first so a clean repository resolves `@vfurst/db` without relying on stale `dist` output.
+  - Fixed Playwright at four workers, matching the proven local concurrency ceiling, and refreshed the two desktop organizer snapshots intentionally changed by removing the organization-provisioning navigation item.
+- Verified:
+  - Focused tenant containment E2E passed 4/4.
+  - Full Chromium E2E passed 17/17 with four workers, including SePay and visual regression coverage.
+  - Root unit tests passed 24/24; repository-wide type-check, lint, Prisma validation, and production build passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+  - `git diff --check` passed. The pre-existing `.idea/.name` modification remains untouched and excluded.
+- Remaining issues / blockers:
+  - Do not deploy. This unit contains the broad self-service/global-inventory exposure but does not yet prove that every UUID-based mutation derives its tenant from the target resource (`SEC-02`). Unsigned Stripe webhook handling (`SEC-03`) also remains open.
+  - Owner invitations, organization lifecycle/status, the dedicated `/platform` control plane, and the 42-model target schema belong to later logical units.
+- Next session should:
+  - Implement one resource-derived authorization unit from the Phase 7 remediation plan, starting with an inventory of event/ticket/add-on mutation families and cross-tenant regression tests. Do not start invitation/schema or route-migration work in the same session.
 
 ### 2026-07-14 - Phase 7, replace self-service SaaS plan with managed tenant provisioning
 - Replaced the incorrect product contract:

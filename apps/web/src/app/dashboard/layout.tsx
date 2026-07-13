@@ -12,7 +12,12 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   }
 
   const memberships = await prisma.orgMember.findMany({
-    where: { userId: session.user.id },
+    where: {
+      userId: session.user.id,
+      role: {
+        in: ["OWNER", "ADMIN"]
+      }
+    },
     orderBy: { org: { name: "asc" } },
     select: {
       org: {
@@ -42,7 +47,12 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   );
 
   return (
-    <DashboardAppShell userName={session.user.name} userEmail={session.user.email} workspace={{ organizations, events }}>
+    <DashboardAppShell
+      userName={session.user.name}
+      userEmail={session.user.email}
+      isPlatformAdmin={session.user.platformRole === "PLATFORM_ADMIN"}
+      workspace={{ organizations, events }}
+    >
       {children}
     </DashboardAppShell>
   );

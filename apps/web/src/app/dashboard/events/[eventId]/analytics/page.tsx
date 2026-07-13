@@ -1,6 +1,6 @@
 import { AnalyticsCharts } from "@/app/dashboard/events/[eventId]/analytics/analytics-charts";
 import { getOrganizationFeeReport } from "@/lib/billing/reports";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma, type OrderItemType } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ function revenueByType(items: Array<{ itemType: OrderItemType; unitPrice: number
 
 export default async function EventAnalyticsPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  await requireEventAccess(eventId);
+  await requireEventPageAccess(eventId);
 
   const event = await prisma.event.findUnique({
     where: {

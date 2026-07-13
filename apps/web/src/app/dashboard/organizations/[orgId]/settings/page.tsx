@@ -1,6 +1,6 @@
 import { updateCustomDomain, updateOrganization, verifyCustomDomain } from "@/actions/org-actions";
 import { getCustomDomainRecords, isCustomDomainVerified } from "@/lib/custom-domain";
-import { requireOrgAccess } from "@/lib/dashboard-access";
+import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,7 +15,7 @@ type EmailSettings = {
 
 export default async function OrganizationSettingsPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
-  await requireOrgAccess(orgId);
+  await requireOrgPageAccess(orgId);
   const org = await prisma.organization.findUnique({
     where: {
       id: orgId

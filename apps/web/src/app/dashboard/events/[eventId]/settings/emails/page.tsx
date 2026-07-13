@@ -1,5 +1,5 @@
 import { saveEmailTemplate } from "@/actions/phase5-actions";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -66,7 +66,7 @@ function renderPreview(template: string, eventName: string) {
 
 export default async function EmailSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  await requireEventAccess(eventId);
+  await requireEventPageAccess(eventId);
   const event = await prisma.event.findUnique({
     where: {
       id: eventId

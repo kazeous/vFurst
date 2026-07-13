@@ -1,16 +1,32 @@
 import { EventWizard } from "@/app/dashboard/events/new/event-wizard";
+import { requireDashboardUser } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
+import { notFound } from "next/navigation";
 
 export default async function NewEventPage() {
-  const organizations = await prisma.organization.findMany({
-    orderBy: {
-      name: "asc"
+  const userId = await requireDashboardUser();
+  const memberships = await prisma.orgMember.findMany({
+    where: {
+      userId,
+      role: {
+        in: ["OWNER", "ADMIN"]
+      }
     },
+    orderBy: { org: { name: "asc" } },
     select: {
-      id: true,
-      name: true
+      org: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
     }
   });
+  const organizations = memberships.map(({ org }) => org);
+
+  if (organizations.length === 0) {
+    notFound();
+  }
 
   return (
     <div className="vf-page vf-narrow">
@@ -24,4 +40,3 @@ export default async function NewEventPage() {
     </div>
   );
 }
-

@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getEffectiveEventBranding, getStoredEventBranding } from "@/lib/event-branding";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { formatDateRange } from "@/lib/i18n";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
@@ -12,7 +12,7 @@ import { notFound } from "next/navigation";
 export default async function EventBrandingPage({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ saved?: string }> }) {
   const { eventId } = await params;
   const { saved } = await searchParams;
-  await requireEventAccess(eventId);
+  await requireEventPageAccess(eventId);
   const event = await prisma.event.findUnique({ where: { id: eventId }, include: { org: true } });
   if (!event) notFound();
 

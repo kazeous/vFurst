@@ -1,5 +1,5 @@
 import { createApiKey, revokeApiKey, updateApiKeyScopes } from "@/actions/saas-actions";
-import { requireOrgAccess } from "@/lib/dashboard-access";
+import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,7 +23,7 @@ export default async function ApiKeysPage({
 }) {
   const { orgId } = await params;
   const { created } = await searchParams;
-  await requireOrgAccess(orgId);
+  await requireOrgPageAccess(orgId);
 
   const org = await prisma.organization.findUnique({
     where: {

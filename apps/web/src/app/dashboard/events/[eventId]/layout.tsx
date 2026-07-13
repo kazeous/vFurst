@@ -1,5 +1,5 @@
 import { EventSectionTabs } from "@/components/dashboard/event-section-tabs";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { isDashboardResourceId } from "@/lib/dashboard-navigation";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -11,7 +11,7 @@ export default async function EventLayout({ children, params }: { children: Reac
     notFound();
   }
 
-  await requireEventAccess(eventId);
+  await requireEventPageAccess(eventId);
 
   return (
     <div className="vf-event-content">

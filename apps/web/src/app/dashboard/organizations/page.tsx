@@ -4,10 +4,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getRootDomain } from "@/lib/platform-hosts";
 import { OrganizationsTable } from "./organizations-table";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { requirePlatformAdminPage } from "@/lib/dashboard-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrganizationsPage() {
+  await requirePlatformAdminPage();
+
   const rootDomain = getRootDomain();
   const organizations = await prisma.organization.findMany({
     orderBy: {

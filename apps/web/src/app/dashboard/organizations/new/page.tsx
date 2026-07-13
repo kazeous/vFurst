@@ -1,8 +1,11 @@
 import { createOrganization } from "@/actions/org-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { requirePlatformAdminPage } from "@/lib/dashboard-access";
 
-export default function NewOrganizationPage() {
+export default async function NewOrganizationPage() {
+  await requirePlatformAdminPage();
+
   return (
     <div className="vf-page vf-narrow">
       <header className="vf-page-header">
@@ -35,4 +38,3 @@ export default function NewOrganizationPage() {
     </div>
   );
 }
-

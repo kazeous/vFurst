@@ -1,6 +1,6 @@
 import { runFeeReconciliation } from "@/actions/saas-actions";
 import { getOrganizationFeeReport } from "@/lib/billing/reports";
-import { requireOrgAccess } from "@/lib/dashboard-access";
+import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ export default async function BillingPage({
 }) {
   const { orgId } = await params;
   const { reconciled } = await searchParams;
-  await requireOrgAccess(orgId);
+  await requireOrgPageAccess(orgId);
 
   const org = await prisma.organization.findUnique({
     where: {

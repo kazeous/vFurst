@@ -54,7 +54,7 @@ type NavItem = {
   activePrefixes?: string[];
 };
 
-const workspaceNav: NavItem[] = [
+const baseWorkspaceNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/events", label: "Events", icon: CalendarDays },
   { href: "/dashboard/organizations", label: "Organizations", icon: Building2 },
@@ -134,7 +134,19 @@ function NavLink({ item, collapsed, onNavigate }: { item: NavItem; collapsed: bo
   );
 }
 
-export function DashboardAppShell({ children, userName, userEmail, workspace }: Readonly<{ children: ReactNode; userName?: string | null; userEmail?: string | null; workspace: DashboardWorkspaceData }>) {
+export function DashboardAppShell({
+  children,
+  userName,
+  userEmail,
+  isPlatformAdmin,
+  workspace
+}: Readonly<{
+  children: ReactNode;
+  userName?: string | null;
+  userEmail?: string | null;
+  isPlatformAdmin: boolean;
+  workspace: DashboardWorkspaceData;
+}>) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -147,6 +159,10 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   const currentEvent = workspace.events.find((event) => event.id === eventId);
   const currentOrgId = currentEvent?.orgId ?? orgIdFromPath;
   const currentOrg = workspace.organizations.find((org) => org.id === currentOrgId);
+  const workspaceNav = useMemo(
+    () => baseWorkspaceNav.filter((item) => isPlatformAdmin || item.href !== "/dashboard/organizations"),
+    [isPlatformAdmin]
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem("vfurst-sidebar-collapsed");
@@ -180,7 +196,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
       icon: CalendarDays
     }));
     return [...globalItems, ...destinationItems, ...eventItems];
-  }, [currentEvent?.name, eventId, workspace.events]);
+  }, [currentEvent?.name, eventId, workspace.events, workspaceNav]);
 
   const sectionLabel = pathname.split("/").filter(Boolean).at(-1)?.replaceAll("-", " ") ?? "Dashboard";
   const isContextRoot = pathname === `/dashboard/events/${currentEvent?.id}` || pathname === `/dashboard/organizations/${currentOrg?.id}`;
@@ -225,7 +241,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
             value={currentOrgId ?? ""}
             onChange={(event) => router.push(event.target.value ? `/dashboard/organizations/${event.target.value}` : "/dashboard/organizations")}
           >
-            <option value="">All organizations</option>
+            <option value="">Choose organization</option>
             {workspace.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
           </select>
           <label className="vf-sr-only" htmlFor="vf-event-switcher">Event</label>

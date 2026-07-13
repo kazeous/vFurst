@@ -1,5 +1,5 @@
 import { deleteWebhookEndpoint, saveWebhookEndpoint, testWebhookEndpoint } from "@/actions/saas-actions";
-import { requireOrgAccess } from "@/lib/dashboard-access";
+import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
 import { webhookQueue } from "@/lib/webhook-queue";
 import { prisma } from "@vfurst/db";
@@ -20,7 +20,7 @@ async function getRecentWebhookJobs(orgId: string) {
 
 export default async function WebhooksPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
-  await requireOrgAccess(orgId);
+  await requireOrgPageAccess(orgId);
 
   const [org, jobs] = await Promise.all([
     prisma.organization.findUnique({

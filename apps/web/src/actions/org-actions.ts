@@ -2,6 +2,7 @@
 
 import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/dashboard-access";
 import { isPlatformDomain } from "@/lib/platform-hosts";
 import { prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -78,7 +79,7 @@ async function requireOrgRole(orgId: string, allowedRoles: OrgRole[] = ["OWNER",
 }
 
 export async function createOrganization(formData: FormData) {
-  const userId = await requireUser();
+  const platformAdmin = await requirePlatformAdmin();
   const parsed = createOrganizationSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -99,7 +100,7 @@ export async function createOrganization(formData: FormData) {
       logo: parsed.data.logo || null,
       members: {
         create: {
-          userId,
+          userId: platformAdmin.id,
           role: "OWNER"
         }
       }
