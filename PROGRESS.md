@@ -25,11 +25,32 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
 | 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
 | 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | Marketing/legal pages, Sentry wiring, rate limiting, load-test tooling, launch audit docs, DB indexes, critical-path/accessibility E2E coverage, functional organizer settings, and platform-controlled Stripe/SePay checkout and settlement operations are implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the current 500-registration/50-check-in Phase 7 load target pass. Not complete: real beta conventions are not onboarded; marketing site is not externally deployed/live; production Sentry env, real SePay Sandbox credentials/simulations, and physical screen-reader evidence are still missing. |
+| 7 - Launch | In progress | The complete light-only “Operational Calm” UI/UX rebuild now covers the organizer shell, event operations, branding, public portal, registration, checkout, marketing, auth, docs, and specialist event-day surfaces without changing routes or backend contracts. Sentry wiring, rate limiting, load-test tooling, launch audit docs, DB indexes, critical-path/accessibility E2E coverage, functional organizer settings, and platform-controlled Stripe/SePay checkout and settlement operations remain implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the existing 500-registration/50-check-in Phase 7 load evidence pass. Not complete: real beta conventions are not onboarded; the rebuilt interface is not externally deployed/live; production Sentry env, real SePay Sandbox credentials/simulations, and physical screen-reader evidence are still missing. |
 
 Legend: Not started - In progress - Verified complete
 
 ## Session log
+
+### 2026-07-13 - Phase 7, complete “Operational Calm” UI/UX rebuild
+- Built:
+  - Replaced the nested dashboard navigation with one responsive organizer shell: organization/event switchers, grouped two-action event navigation, active states, breadcrumbs, collapsible desktop rail, accessible mobile drawer, user menu, and Ctrl/Cmd-K command palette with focus restoration.
+  - Established the light-only Geist design system and approved warm-canvas/teal semantic tokens, operational density, responsive table/form conventions, local Radix/shadcn primitives, reduced-motion behavior, standardized status/empty/loading affordances, typed `ActionResult`, and centralized English date/formatting helpers.
+  - Rebuilt dashboard home, event/list/overview/registration/analytics/settings reference surfaces and applied the system across commerce, hotel, staff, vendors, raffle, badges, designer, check-in, cashier, and express kiosk families. Event-day routes now use dedicated focus layouts and scoped offline-service-worker behavior.
+  - Added migration-free `settings.branding` parsing/merging, safe PNG/JPEG/WebP upload limits, contrast-derived event accent tokens, organization/initials/system-pattern fallbacks, branding settings preview, and the updated reference JSON contract.
+  - Rebuilt the public convention shell, guided Ticket → Attendee/Add-ons → Review/Payment registration, branded Stripe/SePay checkout, portal/store/application framing, marketing home, shared marketing/footer shell, auth framing, and docs navigation while preserving existing actions, URLs, permissions, APIs, and payment fulfillment.
+  - Added serious/critical axe scans, keyboard/focus tests, mobile drawer and 390px overflow checks, responsive registration coverage, and ten stable desktop/mobile screenshot baselines for marketing home, event overview, registrations, public portal, and checkout.
+  - Disabled Serwist bundling during development and global auto-registration in all modes; production offline support is registered only by check-in/kiosk surfaces. Updated the launch load wrapper to honor `VFURST_LOAD_PROFILE` and made failed k6 content checks fail the gate.
+- Verified:
+  - Repository-wide `npm run type-check`, `npm run lint`, `npm run test`, and `npm run db:validate` passed; the web unit suite has 19/19 passing tests including branding preservation/fallback/contrast coverage.
+  - `npm run build` passed for all workspaces. The existing BullMQ dynamic-import warning remains non-blocking.
+  - Production-mode Playwright passed 13/13 tests with four workers, including registration fulfillment, vendor application, organizer CRUD/settings authorization, check-in, mobile responsiveness, axe scans, visual baselines, SePay QR, signed webhook fulfillment, and payment polling.
+  - Docker-backed k6 smoke passed 157/157 checks with 0% failed HTTP requests and 48.74 ms p95 response time.
+  - Visual/manual evidence covers 1440×900 and 1024×768 without horizontal overflow; Playwright covers 390×844 and confirms 44px mobile actions. The in-app browser's viewport floor prevented an additional manual 390px resize, so the 390px evidence is automated rather than a second manual capture.
+  - Changes are organized on `codex/operational-calm-rebuild` in conventional logical commits. The pre-existing `.idea/.name` worktree modification was preserved and excluded.
+- Remaining issues / blockers:
+  - No production cutover or deployment was performed, as required. External Phase 7 blockers remain: beta-convention evidence, live verification after an eventual full cutover, production monitoring/Sentry configuration, real SePay Sandbox evidence, and a physical NVDA or VoiceOver pass.
+- Next session should:
+  - Review the branch and screenshot baselines, then schedule the all-at-once deployment only after the external monitoring, beta, payment-sandbox, and physical screen-reader evidence is ready.
 
 ### 2026-07-13 - Phase 7, marketing homepage layout repair
 - Diagnosed:

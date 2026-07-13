@@ -38,6 +38,7 @@ function readConfig() {
     slug,
     staffEmail: process.env.VFURST_STAFF_EMAIL ?? `load-admin-${slug}@example.com`,
     staffPassword: process.env.VFURST_STAFF_PASSWORD ?? "LoadPass123!",
+    loadProfile: process.env.VFURST_LOAD_PROFILE ?? "full",
     registrationVus: process.env.VFURST_REGISTRATION_VUS ?? "500",
     checkInVus: process.env.VFURST_CHECKIN_VUS ?? "50",
     skipLocalServer: isEnabled(process.env.VFURST_SKIP_LOCAL_SERVER),
@@ -385,7 +386,7 @@ async function main() {
         VFURST_LOAD_EVENT_ID: eventId,
         VFURST_STAFF_EMAIL: config.staffEmail,
         VFURST_STAFF_PASSWORD: config.staffPassword,
-        VFURST_LOAD_PROFILE: "full",
+        VFURST_LOAD_PROFILE: config.loadProfile,
         VFURST_REGISTRATION_VUS: config.registrationVus,
         VFURST_CHECKIN_VUS: config.checkInVus
       },

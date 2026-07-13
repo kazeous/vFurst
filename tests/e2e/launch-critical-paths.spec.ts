@@ -150,7 +150,7 @@ async function login(page: Page) {
     page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
   ]);
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -224,9 +224,12 @@ test("marketing and legal launch pages render", async ({ page }) => {
 
 test("public registration completes and creates a paid zero-dollar order", async ({ page }) => {
   await page.goto(`/${orgSlug}/register`);
+  await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name").fill("Launch Attendee");
   await page.getByLabel("Email").fill(attendeeEmail);
-  await page.getByRole("button", { name: "Continue to checkout" }).click();
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Complete registration" }).click();
 
   await expect.poll(
     async () => {
@@ -335,7 +338,7 @@ test("dashboard settings hub filters access and updates event settings", async (
   await expect(dashboardNavigation.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Launch Test Convention" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Payment methods" })).toBeVisible();
-  await expect(page.getByText("Member Only Convention")).toHaveCount(0);
+  await expect(page.getByRole("main").getByText("Member Only Convention")).toHaveCount(0);
 
   const unauthorizedOrgResponse = await page.request.get(`/dashboard/organizations/${memberOnlyOrgId}/settings`);
   expect(unauthorizedOrgResponse.ok()).toBe(false);
@@ -423,13 +426,13 @@ test("embedded SePay QR fulfills through a signed webhook after the provider is 
   });
 
   await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}`);
-  await page.getByRole("button", { name: "Pay with SePay QR" }).click();
+  await page.getByRole("button", { name: "Show QR" }).click();
   await expect.poll(
     () => prisma.paymentAttempt.count({ where: { orderId: order.id, provider: "SEPAY" } }),
     { timeout: 30_000 }
   ).toBe(1);
   await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
-  await expect(page.getByRole("heading", { name: "Scan to pay with SePay" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Complete bank transfer" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("img", { name: /SePay QR code/ })).toBeVisible();
   const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });
 

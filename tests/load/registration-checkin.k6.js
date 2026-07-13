@@ -49,6 +49,7 @@ export const options = {
     }
   },
   thresholds: {
+    checks: ["rate>0.99"],
     http_req_failed: ["rate<0.01"],
     http_req_duration: [durationThreshold]
   }
@@ -116,7 +117,7 @@ export function registrationFlow() {
 
   check(response, {
     "registration page returned 200": (result) => result.status === 200,
-    "registration page rendered form": (result) => bodyIncludes(result, "Register")
+    "registration page rendered form": (result) => bodyIncludes(result, "Registration")
   });
 
   sleep(1);
