@@ -31,6 +31,23 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-13 - Phase 7, create-event navigation crash
+- Diagnosed:
+  - The rebuilt organizer shell parsed the reserved `/dashboard/events/new` create route as if `new` were an event ID. This exposed event-only navigation and generated `/dashboard/events/new/staff`, where dynamic event pages attempted to query `new` as a UUID and produced the production Server Components error.
+  - Browser-blocked monitoring requests visible in the report were unrelated to the application failure.
+- Fixed:
+  - Centralized dashboard event/organization route-context parsing and excluded reserved create-route segments from resource context.
+  - Added a static `/dashboard/events/new/[...invalid]` 404 route plus a dynamic event-layout guard, preventing invalid create-route children from reaching event authorization or data queries.
+  - Added unit coverage for reserved route parsing and an authenticated production-mode Playwright regression for the exact create-event-to-Staff failure path.
+- Verified:
+  - Web unit suite passed with 24/24 tests; web type-check and lint passed.
+  - The optimized web production build passed with the existing non-blocking BullMQ dynamic-import warning.
+  - Targeted production-mode Playwright passed 1/1; `/dashboard/events/new` showed workspace navigation, `/dashboard/events/new/staff` returned 404, and the server emitted no Prisma UUID or Server Components error.
+- Remaining issues / blockers:
+  - The fix is local until pushed and redeployed. Existing Phase 7 external blockers remain unchanged: beta-convention evidence, production monitoring configuration, real SePay Sandbox evidence, live verification, and a physical NVDA or VoiceOver pass.
+- Next session should:
+  - Push and redeploy this fix, then verify the production create-event page and invalid nested URL before continuing the outstanding Phase 7 evidence work.
+
 ### 2026-07-13 - Phase 7, complete “Operational Calm” UI/UX rebuild
 - Built:
   - Replaced the nested dashboard navigation with one responsive organizer shell: organization/event switchers, grouped two-action event navigation, active states, breadcrumbs, collapsible desktop rail, accessible mobile drawer, user menu, and Ctrl/Cmd-K command palette with focus restoration.

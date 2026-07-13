@@ -297,6 +297,12 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await ensureConfirmedRegistration();
   await login(page);
 
+  await page.goto("/dashboard/events/new");
+  await expect(page.getByRole("heading", { name: "Create event" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Dashboard navigation" }).getByRole("link", { name: "Staff" })).toHaveCount(0);
+  const invalidCreateEventChild = await page.request.get("/dashboard/events/new/staff");
+  expect(invalidCreateEventChild.status()).toBe(404);
+
   await page.goto("/dashboard/organizations/new");
   await page.getByLabel("Name").fill("Launch CRUD Org");
   await page.getByLabel("Subdomain slug").fill(crudOrgSlug);

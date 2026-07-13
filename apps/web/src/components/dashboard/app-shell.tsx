@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getDashboardEventId, getDashboardOrganizationId } from "@/lib/dashboard-navigation";
 
 export type DashboardWorkspaceData = {
   organizations: Array<{ id: string; name: string; logo: string | null }>;
@@ -141,8 +142,8 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   const [commandOpen, setCommandOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const commandTriggerRef = useRef<HTMLButtonElement>(null);
-  const eventId = pathname.match(/^\/dashboard\/events\/([^/]+)/)?.[1];
-  const orgIdFromPath = pathname.match(/^\/dashboard\/organizations\/([^/]+)/)?.[1];
+  const eventId = getDashboardEventId(pathname);
+  const orgIdFromPath = getDashboardOrganizationId(pathname);
   const currentEvent = workspace.events.find((event) => event.id === eventId);
   const currentOrgId = currentEvent?.orgId ?? orgIdFromPath;
   const currentOrg = workspace.organizations.find((org) => org.id === currentOrgId);
