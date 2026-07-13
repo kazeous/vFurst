@@ -31,6 +31,24 @@ Legend: Not started - In progress - Verified complete
 
 ## Session log
 
+### 2026-07-13 - Phase 7, marketing homepage layout repair
+- Diagnosed:
+  - The text-only replacement for the removed homepage hero image was rendered as an uncontained grid child and referenced four undefined `--vf-*` CSS variables. Its border, background, and shadow therefore disappeared while its content stretched to the viewport edge, producing the broken desktop layout seen in production.
+- Built:
+  - Reworked the homepage hero into a centered responsive two-column composition with a self-contained convention operations preview, clearer messaging hierarchy, and compact proof-point treatment.
+  - Refined the shared marketing navigation, calls to action, feature cards, and mobile breakpoints to match the repaired hero without changing the existing routes or product capabilities.
+  - Updated the launch accessibility assertion for the new preview label and added focused homepage coverage for preview visibility and mobile horizontal containment.
+- Verified:
+  - `npm run type-check --workspace @vfurst/web` passed.
+  - `npm run lint --workspace @vfurst/web` passed with the existing three `<img>` warnings in convention store, checkout QR, and dashboard store pages.
+  - `npm run test:e2e -- tests/e2e/home.spec.ts` passed with 2/2 Chromium tests, including the new 390px mobile containment check.
+  - `npm run build --workspace @vfurst/web` passed. The known BullMQ dynamic dependency warning and database/Redis connection-refused diagnostics remained because the local Docker services were stopped.
+  - In-app browser QA passed at 1440×900 and 390×844: the hero stayed centered, no horizontal overflow was present, the navigation collapsed correctly on mobile, and the browser console contained no errors.
+- Remaining issues / blockers:
+  - Phase 7 external launch blockers remain unchanged: beta-convention evidence, live marketing verification after redeploy, production Sentry env, and physical screen-reader pass.
+- Next session should:
+  - Redeploy the homepage repair and verify the production root URL at desktop and mobile widths, then continue the existing SePay Sandbox and launch-evidence work.
+
 ### 2026-07-12 - Phase 7, production login schema synchronization fix
 - Diagnosed:
   - The shared Sentry issue reports an Auth.js `CallbackRouteError` on `POST /login` immediately after the SePay commit.

@@ -14,7 +14,7 @@ export function MarketingNav() {
       <Link className="vf-marketing-brand" href="/">
         vFurst
       </Link>
-      <div>
+      <div className="vf-marketing-nav-links">
         <Link href="/features">Features</Link>
         <Link href="/pricing">Pricing</Link>
         <Link href="/docs">Docs</Link>
