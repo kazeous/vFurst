@@ -41,7 +41,15 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
   const data = await getPublicRegistrationData(orgSlug);
   if (!data) notFound();
   const { event, org } = data;
-  const successRegistration = query.success ? await prisma.registration.findUnique({ where: { id: query.success }, include: { event: true, type: true, user: true } }) : null;
+  const successRegistration = query.success
+    ? await prisma.registration.findFirst({
+        where: {
+          id: query.success,
+          orgId: org.id
+        },
+        include: { event: true, type: true, user: true }
+      })
+    : null;
 
   return (
     <main className="vf-public-page vf-registration-flow-page">
@@ -50,7 +58,6 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       {query.cancelled ? <Alert variant="warning"><h2>Checkout cancelled</h2><p>No payment was captured. Your ticket selection is still available to start again.</p></Alert> : null}
       {!event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
         <RegistrationFlow
-          orgId={org.id}
           eventId={event.id}
           currency={event.currency}
           tiers={event.registrationTypes.map((type) => ({

@@ -48,8 +48,6 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
 
       <section className="vf-two-column">
         <form action={requestRegistrationTransfer} className="vf-section vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
-          <input type="hidden" name="eventId" value={event.id} />
           <h2>Request transfer</h2>
           <label>
             Existing registration
@@ -69,8 +67,6 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         </form>
 
         <form action={adminTransferRegistration} className="vf-section vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
-          <input type="hidden" name="eventId" value={event.id} />
           <h2>Complete transfer</h2>
           <label>
             Source registration

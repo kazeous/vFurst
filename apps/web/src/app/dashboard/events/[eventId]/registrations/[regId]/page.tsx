@@ -72,20 +72,14 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         </div>
         <div className="vf-actions">
           <form action={resendRegistrationEmail}>
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
-            <Button label="Confirm" type="submit" size="sm" />
+            <Button label="Resend email" type="submit" size="sm" />
           </form>
           <form action={cancelRegistration}>
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
             <Button label="Cancel" type="submit" size="sm" variant="destructive" />
           </form>
           <form action={refundRegistration}>
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
             <Button label="Refund" type="submit" size="sm" variant="destructive" />
           </form>
@@ -135,8 +129,6 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         <div className="vf-section">
           <h2>Upgrade tier</h2>
           <form action={upgradeTier} className="vf-form">
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
             <label>
               New tier
@@ -152,8 +144,6 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           </form>
           <h2>Transfer</h2>
           <form action={transferRegistration} className="vf-form">
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
             <label>
               New attendee name
@@ -166,18 +156,14 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
             <Button label="Transfer registration" type="submit" />
           </form>
           <form action={confirmRegistration}>
-            <input type="hidden" name="orgId" value={registration.orgId} />
-            <input type="hidden" name="eventId" value={registration.eventId} />
             <input type="hidden" name="registrationId" value={registration.id} />
-            <Button label="Resend email" type="submit" size="sm" />
+            <Button label="Confirm" type="submit" size="sm" />
           </form>
         </div>
       </section>
       <section className="vf-section">
         <h2>Staff notes</h2>
         <form action={createAttendeeNote} className="vf-form">
-          <input type="hidden" name="orgId" value={registration.orgId} />
-          <input type="hidden" name="eventId" value={registration.eventId} />
           <input type="hidden" name="registrationId" value={registration.id} />
           <label>
             Note
@@ -193,9 +179,6 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
                 {note.author.name ?? note.author.email} - {note.createdAt.toLocaleString()}
               </small>
               <form action={deleteAttendeeNote}>
-                <input type="hidden" name="orgId" value={registration.orgId} />
-                <input type="hidden" name="eventId" value={registration.eventId} />
-                <input type="hidden" name="registrationId" value={registration.id} />
                 <input type="hidden" name="noteId" value={note.id} />
                 <Button label="Delete" type="submit" size="sm" variant="destructive" />
               </form>

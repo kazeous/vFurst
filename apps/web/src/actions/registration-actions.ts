@@ -1,6 +1,11 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import {
+  requireAttendeeNoteAccess,
+  requireEventAccess,
+  requireRegistrationAccess
+} from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
@@ -13,29 +18,6 @@ import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage registrations for this event.");
-  }
-
-  return session.user.id;
-}
 
 async function findOrCreateAttendee(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -129,7 +111,6 @@ async function getValidVoucher(eventId: string, code: string | null, typeId: str
 export async function createRegistration(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       typeId: z.string().uuid(),
       attendeeName: z.string().trim().min(1),
@@ -138,7 +119,6 @@ export async function createRegistration(formData: FormData) {
       checkoutMode: z.enum(["stripe", "cart"]).optional()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       typeId: formData.get("typeId"),
       attendeeName: formData.get("attendeeName"),
@@ -156,7 +136,6 @@ export async function createRegistration(formData: FormData) {
   const event = await prisma.event.findFirstOrThrow({
     where: {
       id: parsed.data.eventId,
-      orgId: parsed.data.orgId,
       status: "PUBLISHED"
     },
     include: {
@@ -368,59 +347,67 @@ export async function createRegistration(formData: FormData) {
 }
 
 export async function confirmRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-
-  await requireEventAccess(orgId);
+  const { registration, event } = await requireRegistrationAccess(registrationId);
 
   await prisma.registration.update({
     where: {
-      id: registrationId
+      id: registration.id
     },
     data: {
       status: "CONFIRMED"
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }
 
 export async function cancelRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-
-  await requireEventAccess(orgId);
+  const { registration, event } = await requireRegistrationAccess(registrationId);
 
   await prisma.registration.update({
     where: {
-      id: registrationId
+      id: registration.id
     },
     data: {
       status: "CANCELLED"
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }
 
+const registrationIdListSchema = z
+  .array(z.string().uuid())
+  .max(500)
+  .refine((ids) => new Set(ids).size === ids.length, "Registration IDs must be unique.");
+
 export async function bulkUpdateRegistrations(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const action = z.enum(["CONFIRMED", "CANCELLED"]).parse(formData.get("action"));
-  const registrationIds = z
-    .string()
-    .parse(formData.get("registrationIds"))
-    .split(",")
-    .filter(Boolean);
-
-  await requireEventAccess(orgId);
+  const registrationIds = registrationIdListSchema.parse(
+    z.string().parse(formData.get("registrationIds")).split(",").filter(Boolean)
+  );
+  const { event } = await requireEventAccess(eventId);
 
   if (registrationIds.length === 0) {
     return;
+  }
+
+  const registrationCount = await prisma.registration.count({
+    where: {
+      id: {
+        in: registrationIds
+      },
+      eventId: event.id
+    }
+  });
+
+  if (registrationCount !== registrationIds.length) {
+    throw new Error("One or more registrations do not belong to this event.");
   }
 
   await prisma.registration.updateMany({
@@ -428,28 +415,29 @@ export async function bulkUpdateRegistrations(formData: FormData) {
       id: {
         in: registrationIds
       },
-      eventId,
-      orgId
+      eventId: event.id,
+      orgId: event.orgId
     },
     data: {
       status: action
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
 
 export async function refundRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-
-  const userId = await requireEventAccess(orgId);
-  assertActionRateLimit("payment:registration-refund", `${userId}:${registrationId}`);
+  const { userId, registration, event } = await requireRegistrationAccess(registrationId);
+  assertActionRateLimit("payment:registration-refund", `${userId}:${registration.id}`);
 
   const orderItem = await prisma.orderItem.findFirst({
     where: {
-      registrationId
+      registrationId: registration.id,
+      order: {
+        eventId: event.id,
+        orgId: event.orgId
+      }
     },
     include: {
       order: true
@@ -465,7 +453,7 @@ export async function refundRegistration(formData: FormData) {
   await prisma.$transaction([
     prisma.registration.update({
       where: {
-        id: registrationId
+        id: registration.id
       },
       data: {
         status: "CANCELLED"
@@ -485,20 +473,17 @@ export async function refundRegistration(formData: FormData) {
       : [])
   ]);
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }
 
 export async function resendRegistrationEmail(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-
-  await requireEventAccess(orgId);
+  const { registration: authorizedRegistration, event } = await requireRegistrationAccess(registrationId);
 
   const registration = await prisma.registration.findUniqueOrThrow({
     where: {
-      id: registrationId
+      id: authorizedRegistration.id
     },
     include: {
       event: true,
@@ -512,49 +497,50 @@ export async function resendRegistrationEmail(formData: FormData) {
     attendeeName: registration.user.name
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${authorizedRegistration.id}`);
 }
 
 export async function upgradeTier(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const typeId = z.string().uuid().parse(formData.get("typeId"));
+  const { registration, event } = await requireRegistrationAccess(registrationId);
+  const targetType = await prisma.registrationType.findFirst({
+    where: {
+      id: typeId,
+      eventId: event.id
+    },
+    select: {
+      id: true
+    }
+  });
 
-  await requireEventAccess(orgId);
+  if (!targetType) {
+    throw new Error("Registration tier does not belong to this event.");
+  }
 
   await prisma.registration.update({
     where: {
-      id: registrationId
+      id: registration.id
     },
     data: {
-      typeId
+      typeId: targetType.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }
 
 export async function transferRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
-
-  await requireEventAccess(orgId);
-
-  const source = await prisma.registration.findUniqueOrThrow({
-    where: {
-      id: registrationId
-    }
-  });
+  const { registration: source, event } = await requireRegistrationAccess(registrationId);
   const attendee = await findOrCreateAttendee(attendeeEmail, attendeeName);
 
   await prisma.$transaction([
     prisma.registration.update({
       where: {
-        id: registrationId
+        id: source.id
       },
       data: {
         status: "TRANSFERRED"
@@ -562,51 +548,45 @@ export async function transferRegistration(formData: FormData) {
     }),
     prisma.registration.create({
       data: {
-        orgId,
-        eventId,
+        orgId: event.orgId,
+        eventId: event.id,
         userId: attendee.id,
         typeId: source.typeId,
         status: "CONFIRMED",
-        transferredFromId: registrationId
+        transferredFromId: source.id
       }
     })
   ]);
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
 
 export async function createAttendeeNote(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const content = z.string().trim().min(1).parse(formData.get("content"));
-  const authorId = await requireEventAccess(orgId);
+  const { userId: authorId, registration, event } = await requireRegistrationAccess(registrationId);
 
   await prisma.attendeeNote.create({
     data: {
-      orgId,
-      registrationId,
+      orgId: event.orgId,
+      registrationId: registration.id,
       authorId,
       content
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }
 
 export async function deleteAttendeeNote(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const noteId = z.string().uuid().parse(formData.get("noteId"));
-
-  await requireEventAccess(orgId);
+  const { attendeeNote, registration, event } = await requireAttendeeNoteAccess(noteId);
 
   await prisma.attendeeNote.delete({
     where: {
-      id: noteId
+      id: attendeeNote.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/${registrationId}`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
 }

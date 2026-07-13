@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { badgeQueue } from "@/lib/badge-queue";
+import { requireRegistrationAccess } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { dollarsToCents } from "@/lib/registration/pricing";
@@ -414,16 +415,13 @@ export async function createWalkInRegistration(formData: FormData) {
 }
 
 export async function requestRegistrationTransfer(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const recipientEmail = z.string().email().parse(formData.get("recipientEmail"));
-
-  await requireEventAccess(orgId);
+  const { registration: authorizedRegistration, event } = await requireRegistrationAccess(registrationId);
 
   const registration = await prisma.registration.findUniqueOrThrow({
     where: {
-      id: registrationId
+      id: authorizedRegistration.id
     },
     include: {
       event: true,
@@ -438,29 +436,20 @@ export async function requestRegistrationTransfer(formData: FormData) {
     message: `${registration.user.name ?? registration.user.email} requested to transfer a registration to ${recipientEmail}. Staff can complete the transfer from the dashboard.`
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/transfers`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
 }
 
 export async function adminTransferRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
-
-  await requireEventAccess(orgId);
-
-  const source = await prisma.registration.findUniqueOrThrow({
-    where: {
-      id: registrationId
-    }
-  });
+  const { registration: source, event } = await requireRegistrationAccess(registrationId);
   const attendee = await findOrCreateUser(attendeeEmail, attendeeName);
 
   await prisma.$transaction([
     prisma.registration.update({
       where: {
-        id: registrationId
+        id: source.id
       },
       data: {
         status: "TRANSFERRED"
@@ -468,18 +457,18 @@ export async function adminTransferRegistration(formData: FormData) {
     }),
     prisma.registration.create({
       data: {
-        orgId,
-        eventId,
+        orgId: event.orgId,
+        eventId: event.id,
         userId: attendee.id,
         typeId: source.typeId,
         status: "CONFIRMED",
-        transferredFromId: registrationId
+        transferredFromId: source.id
       }
     })
   ]);
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/transfers`);
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
 
 export async function createRaffle(formData: FormData) {

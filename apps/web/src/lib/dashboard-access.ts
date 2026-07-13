@@ -92,6 +92,53 @@ async function getAddOnDefinitionTenant(addOnId: string) {
   });
 }
 
+async function getRegistrationTenant(registrationId: string) {
+  return prisma.registration.findUnique({
+    where: {
+      id: registrationId
+    },
+    select: {
+      id: true,
+      eventId: true,
+      typeId: true,
+      userId: true,
+      status: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getAttendeeNoteTenant(noteId: string) {
+  return prisma.attendeeNote.findUnique({
+    where: {
+      id: noteId
+    },
+    select: {
+      id: true,
+      registrationId: true,
+      registration: {
+        select: {
+          id: true,
+          eventId: true,
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function hasAllowedOrgRole(membership: Awaited<ReturnType<typeof getOrgMembership>>, allowedRoles: OrgRole[]) {
   return Boolean(membership && allowedRoles.includes(membership.role));
 }
@@ -208,6 +255,52 @@ export async function requireAddOnDefinitionAccess(addOnId: string, allowedRoles
     userId,
     membership,
     addOnDefinition,
+    event
+  };
+}
+
+export async function requireRegistrationAccess(registrationId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const registration = await getRegistrationTenant(registrationId);
+
+  if (!registration) {
+    throw new Error("Registration not found.");
+  }
+
+  const membership = await getOrgMembership(userId, registration.event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this registration.");
+  }
+
+  return {
+    userId,
+    membership,
+    registration,
+    event: registration.event
+  };
+}
+
+export async function requireAttendeeNoteAccess(noteId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const attendeeNote = await getAttendeeNoteTenant(noteId);
+
+  if (!attendeeNote) {
+    throw new Error("Attendee note not found.");
+  }
+
+  const event = attendeeNote.registration.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this attendee note.");
+  }
+
+  return {
+    userId,
+    membership,
+    attendeeNote,
+    registration: attendeeNote.registration,
     event
   };
 }

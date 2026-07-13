@@ -11,7 +11,6 @@ import { useMemo, useState } from "react";
 
 type RegistrationRow = {
   id: string;
-  orgId: string;
   eventId: string;
   attendee: string;
   email: string;
@@ -70,7 +69,7 @@ function badgeVariant(status: RegistrationRow["status"]) {
   return "warning";
 }
 
-export function RegistrationsTable({ rows, eventId, orgId }: { rows: RegistrationRow[]; eventId: string; orgId: string }) {
+export function RegistrationsTable({ rows, eventId }: { rows: RegistrationRow[]; eventId: string }) {
   const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const selectedIds = selected.join(",");
@@ -135,14 +134,12 @@ export function RegistrationsTable({ rows, eventId, orgId }: { rows: Registratio
       <PowerSearch config={config} filters={filters} onChange={(nextFilters) => setFilters([...nextFilters])} placeholder="Search registrations" />
       <div className="vf-actions">
         <form action={bulkUpdateRegistrations}>
-          <input type="hidden" name="orgId" value={orgId} />
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="registrationIds" value={selectedIds} />
           <input type="hidden" name="action" value="CONFIRMED" />
           <Button label="Confirm selected" type="submit" size="sm" />
         </form>
         <form action={bulkUpdateRegistrations}>
-          <input type="hidden" name="orgId" value={orgId} />
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="registrationIds" value={selectedIds} />
           <input type="hidden" name="action" value="CANCELLED" />

@@ -37,11 +37,9 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
       </header>
       <section className="vf-section">
         <RegistrationsTable
-          orgId={event.orgId}
           eventId={event.id}
           rows={event.registrations.map((registration) => ({
             id: registration.id,
-            orgId: registration.orgId,
             eventId: registration.eventId,
             attendee: registration.user.name ?? registration.user.email,
             email: registration.user.email,
@@ -54,4 +52,3 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
     </div>
   );
 }
-

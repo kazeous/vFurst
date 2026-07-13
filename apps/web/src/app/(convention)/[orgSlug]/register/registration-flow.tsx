@@ -11,7 +11,7 @@ type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; 
 
 const stepLabels = ["Ticket", "Attendee", "Review"];
 
-export function RegistrationFlow({ orgId, eventId, currency, tiers }: { orgId: string; eventId: string; currency: "USD" | "VND"; tiers: Tier[] }) {
+export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string; currency: "USD" | "VND"; tiers: Tier[] }) {
   const availableTier = tiers.find((tier) => !tier.soldOut);
   const [step, setStep] = useState(0);
   const [isReady, setIsReady] = useState(false);
@@ -81,7 +81,7 @@ export function RegistrationFlow({ orgId, eventId, currency, tiers }: { orgId: s
 
           {step === 2 && selectedTier ? (
             <form action={createRegistration} className="vf-stack">
-              <input type="hidden" name="orgId" value={orgId} /><input type="hidden" name="eventId" value={eventId} /><input type="hidden" name="typeId" value={selectedTier.id} />
+              <input type="hidden" name="eventId" value={eventId} /><input type="hidden" name="typeId" value={selectedTier.id} />
               <input type="hidden" name="attendeeName" value={attendeeName} /><input type="hidden" name="attendeeEmail" value={attendeeEmail} /><input type="hidden" name="voucherCode" value={voucherCode} />
               {selectedTier.addOns.map((addOn) => <input key={addOn.id} type="hidden" name={`addon-${addOn.id}`} value={quantities[addOn.id] ?? 0} />)}
               <div><p className="vf-label">Step 3 of 3</p><h2 id="registration-flow-title">Review registration</h2><p className="vf-muted">Confirm the attendee and ticket before continuing to secure checkout.</p></div>
