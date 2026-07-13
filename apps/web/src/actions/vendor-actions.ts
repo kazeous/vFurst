@@ -1,6 +1,7 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { getConventionOrg } from "@/lib/convention";
+import { requireEventAccess, requireVendorApplicationAccess } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
@@ -9,31 +10,16 @@ import { assertActionRateLimit } from "@/lib/rate-limit";
 import { parseMoney } from "@/lib/registration/pricing";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { amenitySchema, boothSchema, getVendorConfig, tableTypeSchema } from "@/lib/vendor/config";
+import {
+  VENDOR_DOCUMENT_MAX_COUNT,
+  validateVendorDocumentContents,
+  validateVendorDocumentMetadata,
+  validateVendorDocumentUrl
+} from "@/lib/vendor/document-upload-policy";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage vendors for this event.");
-  }
-}
 
 async function findOrCreateUser(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -108,17 +94,24 @@ async function filesFromForm(orgId: string, eventId: string, formData: FormData)
   const urls = formData
     .getAll("fileUrl")
     .map((value) => String(value).trim())
-    .filter(Boolean);
-  const uploads = formData.getAll("fileUpload");
-  const uploadedUrls = [];
+    .filter(Boolean)
+    .map(validateVendorDocumentUrl);
+  const uploads = formData
+    .getAll("fileUpload")
+    .filter((upload): upload is File => upload instanceof File && upload.size > 0);
 
-  for (const upload of uploads) {
-    if (!(upload instanceof File) || upload.size === 0) {
-      continue;
-    }
+  if (urls.length + uploads.length > VENDOR_DOCUMENT_MAX_COUNT) {
+    throw new Error(`Vendor applications may have at most ${VENDOR_DOCUMENT_MAX_COUNT} files.`);
+  }
 
-    const key = buildObjectKey(orgId, `events/${eventId}/vendors`, `${crypto.randomUUID()}-${upload.name}`);
-    const url = await uploadFromBuffer(key, Buffer.from(await upload.arrayBuffer()), upload.type || "application/octet-stream");
+  const uploadMetadata = uploads.map((upload) => ({ upload, ...validateVendorDocumentMetadata(upload) }));
+  const uploadedUrls: string[] = [];
+
+  for (const { upload, contentType, extension } of uploadMetadata) {
+    const buffer = Buffer.from(await upload.arrayBuffer());
+    validateVendorDocumentContents(buffer, contentType);
+    const key = buildObjectKey(orgId, `events/${eventId}/vendors`, `document-${crypto.randomUUID()}.${extension}`);
+    const url = await uploadFromBuffer(key, buffer, contentType);
     uploadedUrls.push(url);
   }
 
@@ -130,10 +123,8 @@ function vendorPlatformFee(total: number) {
 }
 
 export async function saveBoothConfig(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-
-  await requireEventAccess(orgId);
+  const { event: authorizedEvent } = await requireEventAccess(eventId);
 
   const tableNames = formData.getAll("tableName");
   const tablePrices = formData.getAll("tablePrice");
@@ -141,7 +132,7 @@ export async function saveBoothConfig(formData: FormData) {
   const amenityPrices = formData.getAll("amenityPrice");
   const boothLabels = formData.getAll("boothLabel");
   const boothTableTypes = formData.getAll("boothTableType");
-  const event = await prisma.event.findFirstOrThrow({ where: { id: eventId, orgId } });
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: authorizedEvent.id } });
 
   const tableTypes = tableNames
     .map((name, index) => ({
@@ -196,8 +187,7 @@ export async function saveBoothConfig(formData: FormData) {
 export async function submitApplication(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
+      orgSlug: z.string().trim().min(1),
       contactName: z.string().trim().min(1),
       contactEmail: z.string().email(),
       businessName: z.string().trim().min(2),
@@ -208,8 +198,7 @@ export async function submitApplication(formData: FormData) {
       locationPreference: z.string().trim().optional()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
+      orgSlug: formData.get("orgSlug"),
       contactName: formData.get("contactName"),
       contactEmail: formData.get("contactEmail"),
       businessName: formData.get("businessName"),
@@ -224,22 +213,36 @@ export async function submitApplication(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid vendor application.");
   }
 
+  const org = await getConventionOrg(parsed.data.orgSlug);
+
+  if (!org) {
+    throw new Error("Organization not found.");
+  }
+
   const event = await prisma.event.findFirstOrThrow({
     where: {
-      id: parsed.data.eventId,
-      orgId: parsed.data.orgId,
+      orgId: org.id,
       status: "PUBLISHED"
+    },
+    orderBy: {
+      startDate: "asc"
     },
     include: {
       org: true
     }
   });
-  const vendor = await findOrCreateUser(parsed.data.contactEmail, parsed.data.contactName);
   const config = getVendorConfig(event.settings);
   const selectedTable = config.tableTypes.find((table) => table.id === parsed.data.tableType);
+
+  if (parsed.data.tableType && !selectedTable) {
+    throw new Error("The selected vendor table type does not belong to this event.");
+  }
+
   const amenityIds = formData.getAll("amenityId").map((value) => String(value));
   const selectedAmenities = config.amenities.filter((amenity) => amenityIds.includes(amenity.id));
   const boothPrice = (selectedTable?.price ?? 0) + selectedAmenities.reduce((sum, amenity) => sum + amenity.price, 0);
+  const files = await filesFromForm(event.orgId, event.id, formData);
+  const vendor = await findOrCreateUser(parsed.data.contactEmail, parsed.data.contactName);
 
   const application = await prisma.vendorApplication.create({
     data: {
@@ -255,7 +258,7 @@ export async function submitApplication(formData: FormData) {
       boothPrice,
       assistants: assistantsFromForm(formData),
       amenities: selectedAmenities,
-      files: await filesFromForm(event.orgId, event.id, formData),
+      files,
       preferences: {
         neighbor: parsed.data.neighborPreference,
         location: parsed.data.locationPreference
@@ -263,21 +266,17 @@ export async function submitApplication(formData: FormData) {
     }
   });
 
-  redirect(`/${formData.get("orgSlug")}/vendor-apply?success=${application.id}`);
+  redirect(`/${event.org.subdomain}/vendor-apply?success=${application.id}`);
 }
 
 export async function approveVendor(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const boothPriceValue = formData.get("boothPrice");
-
-  await requireEventAccess(orgId);
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
+  const { vendorApplication, event } = await requireVendorApplicationAccess(applicationId);
 
   const application = await prisma.vendorApplication.update({
     where: {
-      id: applicationId
+      id: vendorApplication.id
     },
     data: {
       status: "APPROVED",
@@ -297,8 +296,8 @@ export async function approveVendor(formData: FormData) {
     note: "Your booth is approved. Please return to the vendor application page to complete booth payment after assignment."
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/vendors`);
-  revalidatePath(`/dashboard/events/${eventId}/vendors/booths`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors/booths`);
 }
 
 export async function rejectVendor(formData: FormData) {
@@ -310,18 +309,38 @@ export async function waitlistVendor(formData: FormData) {
 }
 
 export async function bulkReviewVendors(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const status = z.enum(["APPROVED", "REJECTED", "WAITLISTED"]).parse(formData.get("status"));
-  const applicationIds = formData
-    .getAll("applicationId")
-    .map((value) => String(value))
-    .filter(Boolean);
-
-  await requireEventAccess(orgId);
+  const applicationIds = [
+    ...new Set(
+      z
+        .array(z.string().uuid())
+        .parse(
+          formData
+            .getAll("applicationId")
+            .map((value) => String(value))
+            .filter(Boolean)
+        )
+    )
+  ];
+  const { event } = await requireEventAccess(eventId);
 
   if (applicationIds.length === 0) {
     return;
+  }
+
+  const applicationCount = await prisma.vendorApplication.count({
+    where: {
+      id: {
+        in: applicationIds
+      },
+      orgId: event.orgId,
+      eventId: event.id
+    }
+  });
+
+  if (applicationCount !== applicationIds.length) {
+    throw new Error("Every vendor application must belong to this event.");
   }
 
   await prisma.vendorApplication.updateMany({
@@ -329,28 +348,25 @@ export async function bulkReviewVendors(formData: FormData) {
       id: {
         in: applicationIds
       },
-      orgId,
-      eventId
+      orgId: event.orgId,
+      eventId: event.id
     },
     data: {
       status
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/vendors`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }
 
 async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAITLISTED") {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const note = String(formData.get("note") ?? "").trim();
-
-  await requireEventAccess(orgId);
+  const { vendorApplication, event } = await requireVendorApplicationAccess(applicationId);
 
   const application = await prisma.vendorApplication.update({
     where: {
-      id: applicationId
+      id: vendorApplication.id
     },
     data: {
       status
@@ -369,21 +385,17 @@ async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAIT
     note
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/vendors`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }
 
 export async function assignBooth(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const boothId = z.string().trim().min(1).parse(formData.get("boothId"));
+  const { vendorApplication, event: authorizedEvent } = await requireVendorApplicationAccess(applicationId);
 
-  await requireEventAccess(orgId);
-
-  const event = await prisma.event.findFirstOrThrow({
+  const event = await prisma.event.findUniqueOrThrow({
     where: {
-      id: eventId,
-      orgId
+      id: authorizedEvent.id
     }
   });
   const settings = settingsObject(event.settings);
@@ -395,12 +407,12 @@ export async function assignBooth(formData: FormData) {
   }
 
   const updatedBooths = config.booths.map((item) => {
-    if (item.vendorApplicationId === applicationId) {
+    if (item.vendorApplicationId === vendorApplication.id) {
       return { ...item, status: "AVAILABLE" as const, vendorApplicationId: undefined };
     }
 
     if (item.id === boothId) {
-      return { ...item, status: "ASSIGNED" as const, vendorApplicationId: applicationId };
+      return { ...item, status: "ASSIGNED" as const, vendorApplicationId: vendorApplication.id };
     }
 
     return item;
@@ -409,7 +421,7 @@ export async function assignBooth(formData: FormData) {
   await prisma.$transaction([
     prisma.vendorApplication.update({
       where: {
-        id: applicationId
+        id: vendorApplication.id
       },
       data: {
         boothAssignment: booth.label
@@ -417,7 +429,7 @@ export async function assignBooth(formData: FormData) {
     }),
     prisma.event.update({
       where: {
-        id: eventId
+        id: event.id
       },
       data: {
         settings: jsonInput({
@@ -431,13 +443,11 @@ export async function assignBooth(formData: FormData) {
     })
   ]);
 
-  revalidatePath(`/dashboard/events/${eventId}/vendors`);
-  revalidatePath(`/dashboard/events/${eventId}/vendors/booths`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors/booths`);
 }
 
 export async function addAssistant(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const assistant = z
     .object({
@@ -449,13 +459,11 @@ export async function addAssistant(formData: FormData) {
       email: formData.get("assistantEmail") || ""
     });
 
-  await requireEventAccess(orgId);
+  const { vendorApplication, event } = await requireVendorApplicationAccess(applicationId);
 
   const application = await prisma.vendorApplication.findFirstOrThrow({
     where: {
-      id: applicationId,
-      orgId,
-      eventId
+      id: vendorApplication.id
     }
   });
   const assistants = Array.isArray(application.assistants) ? application.assistants : [];
@@ -469,16 +477,27 @@ export async function addAssistant(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/vendors`);
+  revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }
 
 export async function payVendorBooth(formData: FormData) {
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
+  const orgSlug = z.string().trim().min(1).parse(formData.get("orgSlug"));
   assertActionRateLimit("payment:vendor-booth", applicationId);
 
-  const application = await prisma.vendorApplication.findUniqueOrThrow({
+  const org = await getConventionOrg(orgSlug);
+
+  if (!org) {
+    throw new Error("Organization not found.");
+  }
+
+  const application = await prisma.vendorApplication.findFirstOrThrow({
     where: {
-      id: applicationId
+      id: applicationId,
+      orgId: org.id,
+      event: {
+        status: "PUBLISHED"
+      }
     },
     include: {
       event: {
@@ -514,6 +533,10 @@ export async function payVendorBooth(formData: FormData) {
         }
       })
     : null;
+
+  if (order && (order.orgId !== application.orgId || order.eventId !== application.eventId || order.userId !== application.userId)) {
+    throw new Error("The vendor payment order does not belong to this application.");
+  }
   const payableOrder =
     order ??
     (await prisma.order.create({

@@ -60,13 +60,9 @@ function ShiftDrop({ shift }: { shift: BoardShift }) {
 }
 
 export function ShiftAssignmentBoard({
-  orgId,
-  eventId,
   volunteers,
   shifts
 }: {
-  orgId: string;
-  eventId: string;
   volunteers: BoardVolunteer[];
   shifts: BoardShift[];
 }) {
@@ -81,8 +77,6 @@ export function ShiftAssignmentBoard({
     }
 
     const formData = new FormData();
-    formData.set("orgId", orgId);
-    formData.set("eventId", eventId);
     formData.set("applicationId", volunteer.id);
     formData.set("roleId", shift.roleId);
     formData.set("shiftDate", shift.date);

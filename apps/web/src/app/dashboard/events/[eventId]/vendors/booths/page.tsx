@@ -1,5 +1,5 @@
 import { assignBooth, saveBoothConfig } from "@/actions/vendor-actions";
-import { formatCurrency } from "@/lib/registration/pricing";
+import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { getVendorConfig } from "@/lib/vendor/config";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +61,6 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
       <section className="vf-section">
         <h2>Table types and amenities</h2>
         <form action={saveBoothConfig} className="vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
           <input type="hidden" name="eventId" value={event.id} />
           <input type="hidden" name="orgSlug" value={event.org.subdomain} />
           <div className="vf-stack">
@@ -74,7 +73,13 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
                 </label>
                 <label>
                   Price
-                  <input name="tablePrice" type="number" min="0" step="0.01" defaultValue={(table.price / 100).toFixed(2)} />
+                  <input
+                    name="tablePrice"
+                    type="number"
+                    min="0"
+                    step={event.currency === "VND" ? "1" : "0.01"}
+                    defaultValue={formatMoneyInput(table.price, event.currency)}
+                  />
                 </label>
               </div>
             ))}
@@ -89,7 +94,13 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
                 </label>
                 <label>
                   Price
-                  <input name="amenityPrice" type="number" min="0" step="0.01" defaultValue={(amenity.price / 100).toFixed(2)} />
+                  <input
+                    name="amenityPrice"
+                    type="number"
+                    min="0"
+                    step={event.currency === "VND" ? "1" : "0.01"}
+                    defaultValue={formatMoneyInput(amenity.price, event.currency)}
+                  />
                 </label>
               </div>
             ))}
@@ -140,8 +151,6 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
                 </div>
                 <p>{assignedVendor?.businessName ?? "Available"}</p>
                 <form action={assignBooth} className="vf-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="boothId" value={booth.id} />
                   <label>
                     Assign vendor

@@ -1,6 +1,13 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { getConventionOrg } from "@/lib/convention";
+import {
+  requireDepartmentAccess,
+  requireEventAccess,
+  requireStaffAssignmentAccess,
+  requireStaffRoleAccess,
+  requireVolunteerApplicationAccess
+} from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -28,29 +35,6 @@ const shiftSlotSchema = z.object({
 });
 
 type ShiftSlot = z.infer<typeof shiftSlotSchema>;
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage staff for this event.");
-  }
-
-  return session.user.id;
-}
 
 async function findOrCreateUser(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -81,6 +65,28 @@ async function findOrCreateUser(email: string, name: string) {
       name
     }
   });
+}
+
+async function assertLeadBelongsToOrg(leadUserId: string | undefined, orgId: string) {
+  if (!leadUserId) {
+    return;
+  }
+
+  const membership = await prisma.orgMember.findUnique({
+    where: {
+      userId_orgId: {
+        userId: leadUserId,
+        orgId
+      }
+    },
+    select: {
+      userId: true
+    }
+  });
+
+  if (!membership) {
+    throw new Error("Department leads must belong to the event organization.");
+  }
 }
 
 function parseFormSchema(raw: FormDataEntryValue | null) {
@@ -184,23 +190,24 @@ async function assertNoShiftConflict(userId: string, shift: ShiftSlot, ignoreAss
 }
 
 async function createAssignment(applicationId: string, roleId: string, shift: ShiftSlot) {
+  const [{ volunteerApplication, event }, { staffRole, department }] = await Promise.all([
+    requireVolunteerApplicationAccess(applicationId),
+    requireStaffRoleAccess(roleId)
+  ]);
+
+  if (event.id !== department.eventId || volunteerApplication.departmentId !== department.id) {
+    throw new Error("The staff role must belong to the volunteer application's department and event.");
+  }
+
   const application = await prisma.volunteerApplication.findUniqueOrThrow({
     where: {
-      id: applicationId
+      id: volunteerApplication.id
     },
     include: {
       department: true,
       event: true,
       org: true,
       user: true
-    }
-  });
-
-  const role = await prisma.staffRole.findFirstOrThrow({
-    where: {
-      id: roleId,
-      departmentId: application.departmentId,
-      orgId: application.orgId
     }
   });
 
@@ -221,7 +228,7 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
       data: {
         orgId: application.orgId,
         userId: application.userId,
-        roleId: role.id,
+        roleId: staffRole.id,
         volunteerApplicationId: application.id,
         shiftSlot: jsonInput(shift),
         status: "ASSIGNED"
@@ -232,23 +239,21 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
   await sendOrgEmail(application.org, application.user.email, "volunteer-shift-assignment", {
     eventName: application.event.name,
     volunteerName: application.user.name,
-    roleName: role.roleName,
+    roleName: staffRole.roleName,
     shiftLabel: shiftLabel(shift)
   });
 
-  return assignment;
+  return { assignment, event };
 }
 
 export async function createDepartment(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       name: z.string().trim().min(2),
       leadUserId: z.string().uuid().optional()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       name: formData.get("name"),
       leadUserId: formData.get("leadUserId") || undefined
@@ -258,34 +263,33 @@ export async function createDepartment(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid department.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
+  const { event } = await requireEventAccess(parsed.data.eventId);
+  await assertLeadBelongsToOrg(parsed.data.leadUserId, event.orgId);
 
   await prisma.department.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       name: parsed.data.name,
       leadUserId: parsed.data.leadUserId,
       formSchema: parseFormSchema(formData.get("formSchema"))
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/staff`);
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/staff/departments`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/departments`);
 }
 
 export async function updateDepartmentForm(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const departmentId = z.string().uuid().parse(formData.get("departmentId"));
   const name = z.string().trim().min(2).parse(formData.get("name"));
   const leadUserId = z.string().uuid().optional().parse(formData.get("leadUserId") || undefined);
-
-  await requireEventAccess(orgId);
+  const { department, event } = await requireDepartmentAccess(departmentId);
+  await assertLeadBelongsToOrg(leadUserId, event.orgId);
 
   await prisma.department.update({
     where: {
-      id: departmentId
+      id: department.id
     },
     data: {
       name,
@@ -294,41 +298,32 @@ export async function updateDepartmentForm(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/departments`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/departments`);
 }
 
 export async function deleteDepartment(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const departmentId = z.string().uuid().parse(formData.get("departmentId"));
+  const { department, event } = await requireDepartmentAccess(departmentId);
 
-  await requireEventAccess(orgId);
-
-  await prisma.department.deleteMany({
+  await prisma.department.delete({
     where: {
-      id: departmentId,
-      orgId,
-      eventId
+      id: department.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/departments`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/departments`);
 }
 
 export async function createStaffRole(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
       departmentId: z.string().uuid(),
       roleName: z.string().trim().min(2),
       maxVolunteers: z.coerce.number().int().min(1).optional()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
       departmentId: formData.get("departmentId"),
       roleName: formData.get("roleName"),
       maxVolunteers: formData.get("maxVolunteers") || undefined
@@ -338,51 +333,45 @@ export async function createStaffRole(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid staff role.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
+  const { department, event } = await requireDepartmentAccess(parsed.data.departmentId);
   const shifts = shiftsFromForm(formData);
 
   await prisma.staffRole.create({
     data: {
-      orgId: parsed.data.orgId,
-      departmentId: parsed.data.departmentId,
+      orgId: event.orgId,
+      departmentId: department.id,
       roleName: parsed.data.roleName,
       maxVolunteers: parsed.data.maxVolunteers,
       shifts
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function deleteStaffRole(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const roleId = z.string().uuid().parse(formData.get("roleId"));
+  const { staffRole, event } = await requireStaffRoleAccess(roleId);
 
-  await requireEventAccess(orgId);
-
-  await prisma.staffRole.deleteMany({
+  await prisma.staffRole.delete({
     where: {
-      id: roleId,
-      orgId
+      id: staffRole.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function submitVolunteerApplication(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
+      orgSlug: z.string().trim().min(1),
       departmentId: z.string().uuid(),
       applicantName: z.string().trim().min(1),
       applicantEmail: z.string().email()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
+      orgSlug: formData.get("orgSlug"),
       departmentId: formData.get("departmentId"),
       applicantName: formData.get("applicantName"),
       applicantEmail: formData.get("applicantEmail")
@@ -392,14 +381,26 @@ export async function submitVolunteerApplication(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid volunteer application.");
   }
 
+  const org = await getConventionOrg(parsed.data.orgSlug);
+
+  if (!org) {
+    throw new Error("Organization not found.");
+  }
+
+  const event = await prisma.event.findFirstOrThrow({
+    where: {
+      orgId: org.id,
+      status: "PUBLISHED"
+    },
+    orderBy: {
+      startDate: "asc"
+    }
+  });
   const department = await prisma.department.findFirstOrThrow({
     where: {
       id: parsed.data.departmentId,
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
-      event: {
-        status: "PUBLISHED"
-      }
+      orgId: org.id,
+      eventId: event.id
     }
   });
   const schema = z.array(formFieldSchema).parse(department.formSchema);
@@ -420,7 +421,7 @@ export async function submitVolunteerApplication(formData: FormData) {
   }
 
   responses.departmentPreferences = [
-    String(formData.get("preference1") ?? "").trim(),
+    department.name,
     String(formData.get("preference2") ?? "").trim(),
     String(formData.get("preference3") ?? "").trim()
   ]
@@ -430,51 +431,47 @@ export async function submitVolunteerApplication(formData: FormData) {
   const volunteer = await findOrCreateUser(parsed.data.applicantEmail, parsed.data.applicantName);
   const application = await prisma.volunteerApplication.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
-      departmentId: parsed.data.departmentId,
+      orgId: org.id,
+      eventId: event.id,
+      departmentId: department.id,
       userId: volunteer.id,
       formResponses: responses,
       availability: availabilityFromForm(formData)
     }
   });
 
-  redirect(`/${formData.get("orgSlug")}/volunteer?success=${application.id}`);
+  redirect(`/${org.subdomain}/volunteer?success=${application.id}`);
 }
 
 export async function approveApplication(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const roleId = z.string().uuid().parse(formData.get("roleId"));
-  const reviewerId = await requireEventAccess(orgId);
+  const { userId: reviewerId, volunteerApplication, event } = await requireVolunteerApplicationAccess(applicationId);
   const shift = shiftFromForm(formData);
 
-  await createAssignment(applicationId, roleId, shift);
+  await createAssignment(volunteerApplication.id, roleId, shift);
   await prisma.volunteerApplication.update({
     where: {
-      id: applicationId
+      id: volunteerApplication.id
     },
     data: {
       reviewedById: reviewerId
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/applications`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/applications`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function rejectApplication(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const reason = String(formData.get("reason") ?? "").trim();
-  const reviewerId = await requireEventAccess(orgId);
+  const { userId: reviewerId, volunteerApplication, event } = await requireVolunteerApplicationAccess(applicationId);
 
   const application = await prisma.volunteerApplication.update({
     where: {
-      id: applicationId
+      id: volunteerApplication.id
     },
     data: {
       status: "REJECTED",
@@ -495,19 +492,18 @@ export async function rejectApplication(formData: FormData) {
     reason
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/applications`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/applications`);
 }
 
 export async function bulkReviewApplications(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const action = z.enum(["APPROVED", "REJECTED"]).parse(formData.get("action"));
   const explicitApplicationIds = formData
     .getAll("applicationId")
     .map((value) => String(value))
     .filter(Boolean);
-  const applicationIds =
+  const rawApplicationIds =
     explicitApplicationIds.length > 0
       ? explicitApplicationIds
       : z
@@ -515,18 +511,42 @@ export async function bulkReviewApplications(formData: FormData) {
           .parse(formData.get("applicationIds"))
           .split(",")
           .filter(Boolean);
-  const reviewerId = await requireEventAccess(orgId);
+  const applicationIds = [...new Set(z.array(z.string().uuid()).parse(rawApplicationIds))];
+  const { userId: reviewerId, event } = await requireEventAccess(eventId);
 
   if (applicationIds.length === 0) {
     return;
   }
 
+  const applications = await prisma.volunteerApplication.findMany({
+    where: {
+      id: {
+        in: applicationIds
+      },
+      orgId: event.orgId,
+      eventId: event.id
+    },
+    select: {
+      id: true,
+      departmentId: true
+    }
+  });
+
+  if (applications.length !== applicationIds.length) {
+    throw new Error("Every volunteer application must belong to this event.");
+  }
+
   if (action === "APPROVED") {
     const roleId = z.string().uuid().parse(formData.get("roleId"));
     const shift = shiftFromForm(formData);
+    const { staffRole, department, event: roleEvent } = await requireStaffRoleAccess(roleId);
+
+    if (roleEvent.id !== event.id || applications.some((application) => application.departmentId !== department.id)) {
+      throw new Error("The staff role must belong to every volunteer application's department and event.");
+    }
 
     for (const applicationId of applicationIds) {
-      await createAssignment(applicationId, roleId, shift);
+      await createAssignment(applicationId, staffRole.id, shift);
       await prisma.volunteerApplication.update({
         where: {
           id: applicationId
@@ -542,8 +562,8 @@ export async function bulkReviewApplications(formData: FormData) {
         id: {
           in: applicationIds
         },
-        orgId,
-        eventId
+        orgId: event.orgId,
+        eventId: event.id
       },
       data: {
         status: "REJECTED",
@@ -553,57 +573,46 @@ export async function bulkReviewApplications(formData: FormData) {
     });
   }
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/applications`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/applications`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function assignShift(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const roleId = z.string().uuid().parse(formData.get("roleId"));
 
-  await requireEventAccess(orgId);
-  await createAssignment(applicationId, roleId, shiftFromForm(formData));
+  const { event } = await createAssignment(applicationId, roleId, shiftFromForm(formData));
 
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function removeAssignment(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const assignmentId = z.string().uuid().parse(formData.get("assignmentId"));
-
-  await requireEventAccess(orgId);
+  const { staffAssignment, event } = await requireStaffAssignmentAccess(assignmentId);
 
   await prisma.staffAssignment.update({
     where: {
-      id: assignmentId
+      id: staffAssignment.id
     },
     data: {
       status: "CANCELLED"
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/staff`);
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
 export async function massEmailDepartment(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const departmentId = z.string().uuid().parse(formData.get("departmentId"));
   const subject = z.string().trim().min(1).parse(formData.get("subject"));
   const message = z.string().trim().min(1).parse(formData.get("message"));
-
-  await requireEventAccess(orgId);
+  const { department: authorizedDepartment, event } = await requireDepartmentAccess(departmentId);
 
   const department = await prisma.department.findFirstOrThrow({
     where: {
-      id: departmentId,
-      orgId,
-      eventId
+      id: authorizedDepartment.id
     },
     include: {
       event: true,
@@ -644,5 +653,5 @@ export async function massEmailDepartment(formData: FormData) {
     });
   }
 
-  revalidatePath(`/dashboard/events/${eventId}/staff/schedule`);
+  revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }

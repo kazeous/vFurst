@@ -49,15 +49,18 @@ export default async function PublicVendorApplyPage({
     }
   });
   const successApplication = query.success
-    ? await prisma.vendorApplication.findFirst({
+    ? event
+      ? await prisma.vendorApplication.findFirst({
         where: {
           id: query.success,
-          orgId: org.id
+          orgId: org.id,
+          eventId: event.id
         },
         include: {
           event: true
         }
-      })
+        })
+      : null
     : null;
   const config = event ? getVendorConfig(event.settings) : { tableTypes: [], amenities: [], booths: [] };
 
@@ -90,6 +93,7 @@ export default async function PublicVendorApplyPage({
           {successApplication.status === "APPROVED" && successApplication.boothAssignment && !successApplication.boothPaidAt ? (
             <form action={payVendorBooth}>
               <input type="hidden" name="applicationId" value={successApplication.id} />
+              <input type="hidden" name="orgSlug" value={org.subdomain} />
               <Button label="Pay booth invoice" type="submit" variant="primary" />
             </form>
           ) : null}
@@ -111,8 +115,6 @@ export default async function PublicVendorApplyPage({
         </section>
       ) : (
         <form action={submitApplication} className="vf-section vf-form">
-          <input type="hidden" name="orgId" value={org.id} />
-          <input type="hidden" name="eventId" value={event.id} />
           <input type="hidden" name="orgSlug" value={org.subdomain} />
           <div>
             <p className="vf-label">{event.name}</p>
@@ -198,7 +200,7 @@ export default async function PublicVendorApplyPage({
               </label>
               <label>
                 Upload file
-                <input name="fileUpload" type="file" />
+                <input name="fileUpload" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
               </label>
             </div>
           </section>

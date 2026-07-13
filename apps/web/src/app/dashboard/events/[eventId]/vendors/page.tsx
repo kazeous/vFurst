@@ -1,5 +1,5 @@
 import { addAssistant, approveVendor, bulkReviewVendors, rejectVendor, waitlistVendor } from "@/actions/vendor-actions";
-import { formatCurrency } from "@/lib/registration/pricing";
+import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,6 @@ export default async function VendorsPage({
       <section className="vf-section">
         <h2>Bulk review</h2>
         <form action={bulkReviewVendors} className="vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
           <input type="hidden" name="eventId" value={event.id} />
           <div className="vf-table">
             <div className="vf-table-head">
@@ -181,8 +180,6 @@ export default async function VendorsPage({
                     {assistants.length === 0 ? <p className="vf-empty">No assistants listed.</p> : null}
                   </div>
                   <form action={addAssistant} className="vf-subform-row">
-                    <input type="hidden" name="orgId" value={event.orgId} />
-                    <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="applicationId" value={application.id} />
                     <label>
                       Assistant name
@@ -210,22 +207,22 @@ export default async function VendorsPage({
               </div>
               <div className="vf-inline-forms">
                 <form action={approveVendor} className="vf-inline-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="applicationId" value={application.id} />
-                  <input name="boothPrice" type="number" step="0.01" min="0" defaultValue={(application.boothPrice / 100).toFixed(2)} />
+                  <input
+                    name="boothPrice"
+                    type="number"
+                    step={event.currency === "VND" ? "1" : "0.01"}
+                    min="0"
+                    defaultValue={formatMoneyInput(application.boothPrice, event.currency)}
+                  />
                   <Button label="Approve" type="submit" size="sm" />
                 </form>
                 <form action={waitlistVendor} className="vf-inline-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input name="note" placeholder="Optional note" />
                   <Button label="Waitlist" type="submit" size="sm" />
                 </form>
                 <form action={rejectVendor} className="vf-inline-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input name="note" placeholder="Optional note" />
                   <Button label="Reject" type="submit" size="sm" variant="destructive" />

@@ -233,6 +233,148 @@ async function getHotelBookingTenant(bookingId: string) {
   });
 }
 
+async function getDepartmentTenant(departmentId: string) {
+  return prisma.department.findUnique({
+    where: {
+      id: departmentId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      formSchema: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getStaffRoleTenant(roleId: string) {
+  return prisma.staffRole.findUnique({
+    where: {
+      id: roleId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      departmentId: true,
+      roleName: true,
+      department: {
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true,
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+async function getVolunteerApplicationTenant(applicationId: string) {
+  return prisma.volunteerApplication.findUnique({
+    where: {
+      id: applicationId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      departmentId: true,
+      userId: true,
+      status: true,
+      department: {
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true,
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+async function getStaffAssignmentTenant(assignmentId: string) {
+  return prisma.staffAssignment.findUnique({
+    where: {
+      id: assignmentId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      roleId: true,
+      userId: true,
+      volunteerApplicationId: true,
+      status: true,
+      role: {
+        select: {
+          id: true,
+          orgId: true,
+          department: {
+            select: {
+              id: true,
+              orgId: true,
+              eventId: true,
+              event: {
+                select: {
+                  id: true,
+                  orgId: true,
+                  currency: true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+async function getVendorApplicationTenant(applicationId: string) {
+  return prisma.vendorApplication.findUnique({
+    where: {
+      id: applicationId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      userId: true,
+      status: true,
+      boothPrice: true,
+      boothAssignment: true,
+      boothPaidAt: true,
+      paymentOrderId: true,
+      assistants: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
 function hasAllowedOrgRole(membership: Awaited<ReturnType<typeof getOrgMembership>>, allowedRoles: OrgRole[]) {
   return Boolean(membership && allowedRoles.includes(membership.role));
 }
@@ -487,6 +629,155 @@ export async function requireHotelBookingAccess(bookingId: string, allowedRoles:
     userId,
     membership,
     hotelBooking,
+    event
+  };
+}
+
+export async function requireDepartmentAccess(departmentId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const department = await getDepartmentTenant(departmentId);
+
+  if (!department || department.orgId !== department.event.orgId || department.eventId !== department.event.id) {
+    throw new Error("Department not found.");
+  }
+
+  const event = department.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this department.");
+  }
+
+  return {
+    userId,
+    membership,
+    department,
+    event
+  };
+}
+
+export async function requireStaffRoleAccess(roleId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const staffRole = await getStaffRoleTenant(roleId);
+
+  if (
+    !staffRole ||
+    staffRole.orgId !== staffRole.department.orgId ||
+    staffRole.department.orgId !== staffRole.department.event.orgId ||
+    staffRole.department.eventId !== staffRole.department.event.id
+  ) {
+    throw new Error("Staff role not found.");
+  }
+
+  const event = staffRole.department.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this staff role.");
+  }
+
+  return {
+    userId,
+    membership,
+    staffRole,
+    department: staffRole.department,
+    event
+  };
+}
+
+export async function requireVolunteerApplicationAccess(
+  applicationId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]
+) {
+  const userId = await requireDashboardUser();
+  const volunteerApplication = await getVolunteerApplicationTenant(applicationId);
+
+  if (
+    !volunteerApplication ||
+    volunteerApplication.orgId !== volunteerApplication.department.orgId ||
+    volunteerApplication.eventId !== volunteerApplication.department.eventId ||
+    volunteerApplication.department.orgId !== volunteerApplication.department.event.orgId ||
+    volunteerApplication.department.eventId !== volunteerApplication.department.event.id
+  ) {
+    throw new Error("Volunteer application not found.");
+  }
+
+  const event = volunteerApplication.department.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this volunteer application.");
+  }
+
+  return {
+    userId,
+    membership,
+    volunteerApplication,
+    department: volunteerApplication.department,
+    event
+  };
+}
+
+export async function requireStaffAssignmentAccess(
+  assignmentId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]
+) {
+  const userId = await requireDashboardUser();
+  const staffAssignment = await getStaffAssignmentTenant(assignmentId);
+
+  if (
+    !staffAssignment ||
+    staffAssignment.orgId !== staffAssignment.role.orgId ||
+    staffAssignment.role.orgId !== staffAssignment.role.department.orgId ||
+    staffAssignment.role.department.orgId !== staffAssignment.role.department.event.orgId ||
+    staffAssignment.role.department.eventId !== staffAssignment.role.department.event.id
+  ) {
+    throw new Error("Staff assignment not found.");
+  }
+
+  const event = staffAssignment.role.department.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this staff assignment.");
+  }
+
+  return {
+    userId,
+    membership,
+    staffAssignment,
+    staffRole: staffAssignment.role,
+    department: staffAssignment.role.department,
+    event
+  };
+}
+
+export async function requireVendorApplicationAccess(
+  applicationId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]
+) {
+  const userId = await requireDashboardUser();
+  const vendorApplication = await getVendorApplicationTenant(applicationId);
+
+  if (
+    !vendorApplication ||
+    vendorApplication.orgId !== vendorApplication.event.orgId ||
+    vendorApplication.eventId !== vendorApplication.event.id
+  ) {
+    throw new Error("Vendor application not found.");
+  }
+
+  const event = vendorApplication.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this vendor application.");
+  }
+
+  return {
+    userId,
+    membership,
+    vendorApplication,
     event
   };
 }

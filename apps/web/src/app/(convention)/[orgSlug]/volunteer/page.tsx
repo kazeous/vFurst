@@ -92,8 +92,6 @@ export default async function PublicVolunteerPage({
         </section>
       ) : (
         <form action={submitVolunteerApplication} className="vf-section vf-form">
-          <input type="hidden" name="orgId" value={org.id} />
-          <input type="hidden" name="eventId" value={event.id} />
           <input type="hidden" name="orgSlug" value={org.subdomain} />
           <div>
             <p className="vf-label">{event.name}</p>
@@ -144,7 +142,6 @@ export default async function PublicVolunteerPage({
               </select>
             </label>
           </div>
-          <input type="hidden" name="preference1" value={selectedDepartment?.name ?? ""} />
           {fields.map((field) => {
             if (field.type === "checkbox") {
               return (

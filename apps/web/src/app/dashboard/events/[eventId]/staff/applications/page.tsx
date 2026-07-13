@@ -113,7 +113,6 @@ export default async function StaffApplicationsPage({
       <section className="vf-section">
         <h2>Bulk review</h2>
         <form action={bulkReviewApplications} className="vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
           <input type="hidden" name="eventId" value={event.id} />
           <div className="vf-table">
             <div className="vf-table-head">
@@ -194,8 +193,6 @@ export default async function StaffApplicationsPage({
             </dl>
             <div className="vf-two-column">
               <form action={approveApplication} className="vf-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="applicationId" value={application.id} />
                 <label>
                   Role
@@ -228,8 +225,6 @@ export default async function StaffApplicationsPage({
                 <Button label="Approve and assign" type="submit" isDisabled={application.department.roles.length === 0} />
               </form>
               <form action={rejectApplication} className="vf-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="applicationId" value={application.id} />
                 <label>
                   Rejection reason

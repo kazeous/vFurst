@@ -19,17 +19,39 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks, and hotel bookings. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks/bookings, departments, staff roles/assignments, volunteer applications, and vendor applications. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
 | 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, and hotel block/booking mutations now derive tenant access from stored resources and pass cross-tenant regression tests. Remaining VND/admin payment correctness still requires remediation. |
-| 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, VND product inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families and vendor uploads remain. |
-| 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
+| 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, VND product inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
+| 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
 | 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order, and hotel authorization units now pass the full 32-test E2E suite and 34 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order, hotel, and staff/volunteer/vendor authorization units now pass the full 37-test E2E suite and 43 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, derive staff, volunteer, and vendor authorization from stored resources
+- Remediated the staff/vendor `SEC-02`, vendor-upload `SEC-04`, and related `FIN-02` family:
+  - Added shared guards for departments, staff roles, volunteer applications, staff assignments, and vendor applications. Organizer mutations now derive the authoritative organization/event/currency through the stored resource and reject internally mismatched tenant relationships instead of trusting hidden organization/event values.
+  - Department leads must be members of the event organization. Assignment/approval flows require the application and role to belong to the same department/event; bulk volunteer/vendor reviews validate every selected ID before writing; booth assignment derives its event from the stored vendor application.
+  - Public volunteer/vendor submissions now resolve the organization from the portal slug, bind to that portal's first published event, and derive tenant fields server-side. Volunteer department selection and vendor table selection must belong to that event, and vendor success/payment lookups are portal/event scoped.
+  - Removed redundant hidden `orgId`/`eventId` inputs from resource-targeted staff/vendor forms and drag/drop assignment payloads. Event IDs remain only where the event itself is the creation or bulk-operation resource.
+  - Added a vendor-document policy distinct from product images: at most five files, 10 MB each, PDF/PNG/JPEG/WebP only, metadata checks before byte reads, magic-byte verification, HTTP(S)-only URLs, and generated extension-safe object names. Invalid files are rejected before a vendor user/application is created.
+  - Booth table, amenity, and approval editors now preserve VND whole-dong values and use whole-number steps instead of dividing by 100.
+- Added regression evidence:
+  - Added Org A/Org B browser fixtures covering public department tampering and success disclosure, foreign department/role/application/assignment mutations, mixed-tenant vendor bulk review, foreign booth assignment, unsupported/forged vendor files, and valid VND booth configuration round-tripping.
+  - Added unit coverage for vendor file type, size, signature, and URL policy.
+- Verified:
+  - Focused staff/vendor-resource E2E passed 5/5 in development mode.
+  - Full production-mode Chromium E2E passed 37/37 with four workers; expected server logs record the deliberately rejected mutation and upload attempts.
+  - Root unit tests passed 43/43; repository-wide type-check, lint, Prisma validation, and production build passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+  - `git diff --check` passed before this progress update and will be repeated before commit.
+- Remaining issues / blockers:
+  - `SEC-02` remains open for badges/check-in, raffles/vouchers, API keys/webhooks, exports, and other unremediated upload/action families. `SEC-03` unsigned Stripe webhook handling also remains open; do not deploy.
+  - Remaining VND cashier/payment correctness, invitations/lifecycle, `/platform` surface separation, domain/payment boundaries, and the 42-model target schema remain later logical units.
+- Next session should:
+  - Inventory and remediate badges/check-in as the next event-day stored-resource authorization unit. Keep raffles/vouchers and API keys/webhooks as separate logical units.
 
 ### 2026-07-14 - Phase 7, derive hotel block and booking authorization from stored resources
 - Remediated the hotel `SEC-02` family and the hotel portion of `FIN-02`:

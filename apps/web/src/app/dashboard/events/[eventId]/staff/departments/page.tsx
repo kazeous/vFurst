@@ -71,7 +71,6 @@ export default async function StaffDepartmentsPage({ params }: { params: Promise
       <section className="vf-section">
         <h2>Create department</h2>
         <form action={createDepartment} className="vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
           <input type="hidden" name="eventId" value={event.id} />
           <input type="hidden" name="formSchema" value="[]" />
           <div className="vf-subform-row">
@@ -105,15 +104,11 @@ export default async function StaffDepartmentsPage({ params }: { params: Promise
                 <p className="vf-muted">Lead: {department.leadUser?.name ?? department.leadUser?.email ?? "Unassigned"}</p>
               </div>
               <form action={deleteDepartment}>
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="departmentId" value={department.id} />
                 <Button label="Delete" type="submit" variant="destructive" size="sm" />
               </form>
             </div>
             <form action={updateDepartmentForm} className="vf-form">
-              <input type="hidden" name="orgId" value={event.orgId} />
-              <input type="hidden" name="eventId" value={event.id} />
               <input type="hidden" name="departmentId" value={department.id} />
               <div className="vf-subform-row">
                 <label>

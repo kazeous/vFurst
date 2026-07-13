@@ -139,8 +139,6 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
       <section className="vf-section">
         <h2>Create role and shifts</h2>
         <form action={createStaffRole} className="vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
-          <input type="hidden" name="eventId" value={event.id} />
           <div className="vf-subform-row">
             <label>
               Department
@@ -183,7 +181,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
         </form>
       </section>
 
-      <ShiftAssignmentBoard orgId={event.orgId} eventId={event.id} volunteers={boardVolunteers} shifts={boardShifts} />
+      <ShiftAssignmentBoard volunteers={boardVolunteers} shifts={boardShifts} />
 
       <section className="vf-stack">
         {event.departments.map((department) => (
@@ -194,8 +192,6 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                 <h2>{department.name}</h2>
               </div>
               <form action={massEmailDepartment} className="vf-inline-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="departmentId" value={department.id} />
                 <input name="subject" placeholder="Subject" required />
                 <input name="message" placeholder="Message" required />
@@ -214,8 +210,6 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                         <p className="vf-muted">{role.maxVolunteers ?? "Unlimited"} max volunteers</p>
                       </div>
                       <form action={deleteStaffRole}>
-                        <input type="hidden" name="orgId" value={event.orgId} />
-                        <input type="hidden" name="eventId" value={event.id} />
                         <input type="hidden" name="roleId" value={role.id} />
                         <Button label="Delete" type="submit" variant="destructive" size="sm" />
                       </form>
@@ -239,8 +233,6 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                               <div key={assignment.id} className="vf-list-row">
                                 <span>{assignment.user.name ?? assignment.user.email}</span>
                                 <form action={removeAssignment}>
-                                  <input type="hidden" name="orgId" value={event.orgId} />
-                                  <input type="hidden" name="eventId" value={event.id} />
                                   <input type="hidden" name="assignmentId" value={assignment.id} />
                                   <Button label="Remove" type="submit" size="sm" />
                                 </form>
@@ -248,8 +240,6 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                             ))}
                           </div>
                           <form action={assignShift} className="vf-form">
-                            <input type="hidden" name="orgId" value={event.orgId} />
-                            <input type="hidden" name="eventId" value={event.id} />
                             <input type="hidden" name="roleId" value={role.id} />
                             <input type="hidden" name="shiftDate" value={shift.date} />
                             <input type="hidden" name="shiftStart" value={shift.startTime} />
