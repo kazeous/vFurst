@@ -2,6 +2,7 @@ import { EventsTable } from "@/app/dashboard/events/events-table";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +20,7 @@ export default async function EventsPage() {
 
   return (
     <div className="vf-page">
-      <header className="vf-page-header">
-        <div>
-          <p className="vf-label">Events</p>
-          <h1>Convention calendar</h1>
-        </div>
-        <Button label="New event" href="/dashboard/events/new" variant="primary" />
-      </header>
+      <PageHeader eyebrow="Event portfolio" title="Convention calendar" description="Track every draft, published, and archived convention from one place." actions={<Button label="New event" href="/dashboard/events/new" variant="primary" />} />
       <section className="vf-section">
         <EventsTable
           events={events.map((event) => ({

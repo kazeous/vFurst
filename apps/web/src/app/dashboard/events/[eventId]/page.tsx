@@ -1,9 +1,12 @@
 import { publishEvent } from "@/actions/event-actions";
 import { RegistrationTrendChart } from "@/app/dashboard/events/[eventId]/registration-trend-chart";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { BadgeDollarSign, ScanLine, TicketCheck } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +40,6 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
         }
       },
       registrations: {
-        take: 8,
         orderBy: {
           createdAt: "desc"
         },
@@ -68,13 +70,13 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
 
   return (
     <div className="vf-page">
-      <header className="vf-page-header">
-        <div>
-          <p className="vf-label">{event.org.name}</p>
-          <h1>{event.name}</h1>
-          <p className="vf-muted">{event.description ?? event.venue ?? "Event workspace"}</p>
-        </div>
-        <div className="vf-actions">
+      <PageHeader
+        eyebrow={event.org.name}
+        title={event.name}
+        description={event.description ?? event.venue ?? "Event operations workspace"}
+        actions={
+          <>
+          <Badge label={event.status.toLowerCase()} variant={event.status === "PUBLISHED" ? "success" : event.status === "ARCHIVED" ? "neutral" : "warning"} />
           <Button label="Public registration" href={`/${event.org.subdomain}/register`} />
           {event.status !== "PUBLISHED" ? (
             <form action={publishEvent}>
@@ -83,12 +85,14 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
               <Button label="Publish" type="submit" variant="primary" />
             </form>
           ) : null}
-        </div>
-      </header>
+          </>
+        }
+      />
       <section className="vf-stat-grid">
-        <StatCard label="Registrations" value={event.registrations.length.toString()} detail="All attendee records" progress={65} />
-        <StatCard label="Paid revenue" value={formatCurrency(paidRevenue, event.currency)} detail="Gross paid order volume" progress={70} />
-        <StatCard label="Platform fees" value={formatCurrency(platformFees, event.currency)} detail="Registration and hotel platform fees" progress={40} />
+        <StatCard label="Registrations" value={event.registrations.length.toString()} detail="All attendee records" icon={TicketCheck} />
+        <StatCard label="Paid revenue" value={formatCurrency(paidRevenue, event.currency)} detail="Gross paid order volume" icon={BadgeDollarSign} tone="success" />
+        <StatCard label="Checked in" value={event.registrations.filter((registration) => registration.status === "CHECKED_IN").length.toString()} detail="Attendees through the door" icon={ScanLine} tone="info" />
+        <StatCard label="Platform fees" value={formatCurrency(platformFees, event.currency)} detail="Registration and hotel fees" icon={BadgeDollarSign} />
       </section>
       <section className="vf-two-column">
         <div className="vf-section">
@@ -122,7 +126,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
       <section className="vf-section">
         <h2>Recent registrations</h2>
         <div className="vf-list">
-          {event.registrations.map((registration) => (
+          {event.registrations.slice(0, 8).map((registration) => (
             <a key={registration.id} className="vf-list-row" href={`/dashboard/events/${event.id}/registrations/${registration.id}`}>
               <span>{registration.user.name ?? registration.user.email}</span>
               <small>

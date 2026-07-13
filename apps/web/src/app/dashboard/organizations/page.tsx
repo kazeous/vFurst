@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getRootDomain } from "@/lib/platform-hosts";
 import { OrganizationsTable } from "./organizations-table";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,7 @@ export default async function OrganizationsPage() {
 
   return (
     <div className="vf-page">
-      <header className="vf-page-header">
-        <div>
-          <p className="vf-label">Tenant management</p>
-          <h1>Organizations</h1>
-        </div>
-        <Button label="Create organization" href="/dashboard/organizations/new" variant="primary" />
-      </header>
+      <PageHeader eyebrow="Workspace management" title="Organizations" description="Manage organizer teams, event portfolios, domains, billing, and integrations." actions={<Button label="Create organization" href="/dashboard/organizations/new" variant="primary" />} />
       {organizations.length > 0 ? (
         <OrganizationsTable rows={rows} />
       ) : (

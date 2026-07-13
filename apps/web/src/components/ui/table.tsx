@@ -98,7 +98,11 @@ export function Table<T extends Record<string, unknown>>({
                 const content = column.renderCell ? column.renderCell(row) : formatCellValue(row[column.key as keyof T]);
 
                 return (
-                  <td key={String(column.key)} data-align={column.align ?? "start"}>
+                  <td
+                    key={String(column.key)}
+                    data-align={column.align ?? "start"}
+                    data-label={typeof column.header === "string" ? column.header : undefined}
+                  >
                     {content}
                   </td>
                 );
