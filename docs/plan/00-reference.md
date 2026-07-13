@@ -191,7 +191,7 @@ Several entities use JSON fields. To prevent ambiguity, their schemas are define
 | **Raffle.prizes** | `Array<{ name: string, description: string, quantity: number }>` | `[{ name: "VIP Pass", description: "Free upgrade", quantity: 3 }]` |
 | **VendorApplication.assistants** | `Array<{ name: string, email: string }>` | `[{ name: "Jane Doe", email: "jane@example.com" }]` |
 | **StoreProduct.surcharges** | `Array<{ name: string, amount: number }>` | `[{ name: "Shipping", amount: 500 }]` (in cents) |
-| **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string }` | Event-level configuration flags |
+| **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string, branding?: { logoUrl?: string, coverImageUrl?: string, accentColor?: "#RRGGBB" } }` | Event-level configuration flags and constrained public-portal branding. |
 
 > [!NOTE]
 > Monetary values are integers in their currency's minor unit: USD uses cents and VND uses whole dong. The owning Event and Order carry an immutable currency so values are never interpreted without currency context.
