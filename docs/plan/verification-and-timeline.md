@@ -10,17 +10,22 @@ npm run test
 npm run test:e2e
 
 # Type checking across monorepo
-turbo run type-check
+npm run type-check
 
 # Linting across monorepo
-turbo run lint
+npm run lint
 
 # Database schema validation
-cd packages/db && npx prisma validate
+npm run db:validate
 
 # Full build check
-turbo run build
+npm run build
+
+# Dependency/security gate
+npm audit --audit-level=moderate
 ```
+
+Phase 7 additionally runs `npm run test:load:smoke`, the documented 500-registration/50-check-in launch proof after material critical-path changes, and `npm run check:launch`.
 
 ### Manual Verification Checkpoints
 
@@ -28,12 +33,12 @@ turbo run build
 |-------|-------------|
 | **0** | Monorepo builds, Prisma schema validates, CI pipeline green, dev env runs |
 | **1** | Login/register works, dashboard renders, org CRUD works, Stripe Connect onboarding completes, subdomain routing resolves |
-| **2** | Create event → configure tiers → publish → register as attendee → pay → see in admin → receive email; Create hotel block → book room → verify $1.00 fee collected |
-| **3** | Add store products → purchase as attendee → unified cart works → voucher applies → refund processes |
-| **4** | Submit volunteer application → admin reviews form responses → approve → assign shift (VolunteerApplication → StaffAssignment); Apply as vendor → approve → assign booth → booth payment |
+| **2** | Create event → configure tiers/currency → publish → register as attendee → shared checkout → provider-neutral fulfillment → see in admin → receive email; create hotel block → book room → verify immutable platform fee |
+| **3** | Add store products → purchase as attendee → unified cart works → voucher applies → Stripe refund and recorded SePay refund reverse fulfillment safely |
+| **4** | Submit volunteer application → admin reviews form responses → approve → assign shift (VolunteerApplication → StaffAssignment); apply as vendor → approve → assign booth → shared provider-neutral booth payment |
 | **5** | Design badge → print test badge → express check-in with QR → offline check-in works → raffle draw |
-| **6** | API key works → API returns data → webhook fires → custom domain resolves → usage dashboard shows correct fee totals from reconcile-fees reports |
-| **7** | Load test passes → security audit clean → E2E suite green → marketing site live → beta conventions onboarded |
+| **6** | API key works → API returns data → webhook fires → custom domain resolves → usage dashboard and reconciliation keep provider/currency totals separate |
+| **7** | Operational Calm visual/accessibility gate passes → Stripe and signed SePay critical paths pass → 500/50 load proof passes → security audit clean → E2E suite green → marketing site live → production Sentry configured → real SePay Sandbox evidence recorded → physical screen-reader pass complete → two beta conventions onboarded |
 
 ---
 

@@ -11,11 +11,11 @@ Product management:
 - Product add-ons (e.g., size selection, color)
 - Inventory tracking with low-stock alerts
 
-##### [NEW] `apps/web/src/app/(convention)/store/page.tsx`
+##### [NEW] `apps/web/src/app/(convention)/[orgSlug]/store/page.tsx`
 Public storefront (convention subdomain):
 - Product grid with shadcn/ui `Card`, image gallery
 - **Unified cart**: combine registration + store items in one checkout
-- Stripe Checkout with 1% `application_fee_amount`
+- Shared provider-neutral checkout; Stripe uses a 1% `application_fee_amount`, while matched SePay VND orders retain the same platform fee before organizer ledger credit
 
 ##### [NEW] `apps/web/src/components/store/cart.tsx`
 Shopping cart component:
@@ -25,7 +25,7 @@ Shopping cart component:
 - Works across devices (user logs in → same cart), survives incognito/storage clears
 - Discount code application
 - Real-time total calculation with surcharges
-- Cart → Order conversion on successful Stripe Checkout (CartItems become OrderItems, cart is cleared)
+- Cart → Order conversion before shared checkout; CartItems become OrderItems and the cart clears only after successful provider-neutral fulfillment
 
 > [!NOTE]
 > **Why not localStorage?** Next.js App Router renders on the server first. A localStorage-based cart would render empty on the server, then hydrate with items on the client, causing a React hydration mismatch error. A DB-backed cart also enables cross-device persistence and unified cart features (registration + store in one checkout).
@@ -41,7 +41,7 @@ Voucher management:
 Order management:
 - Order list with status filters
 - Order detail with line items + platform fee breakdown
-- **Refund flow**: full or partial refund via Stripe Connect
+- **Refund flow**: Stripe refund through the platform-owned charge; SePay full refund recorded after the external bank transfer, with idempotent fulfillment and ledger reversal
 
 ##### [NEW] `apps/web/src/actions/store-actions.ts`
 Server Actions: `createProduct`, `updateProduct`, `deleteProduct`, `createOrder`, `refundOrder`, `partialRefund`.

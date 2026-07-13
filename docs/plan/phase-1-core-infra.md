@@ -76,9 +76,9 @@ Member management: invite by email, assign roles (OWNER/ADMIN/MEMBER), remove.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/stripe-connect/page.tsx`
 Stripe Connect onboarding:
-- OAuth flow to connect convention's Stripe account
+- Stripe-hosted Account Links in test/live mode (not classic OAuth)
 - Account status dashboard
-- Test mode toggle
+- Truthful environment-derived mode indicator; no fake per-organization mode toggle
 
 ##### [NEW] `apps/web/src/actions/event-actions.ts`
 Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `deleteEvent`.
@@ -88,20 +88,21 @@ Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `d
 #### Dashboard Shell
 
 ##### [NEW] `apps/web/src/app/dashboard/layout.tsx`
-Dashboard layout using a local shadcn/ui-styled shell and sidebar:
+Dashboard layout using the responsive Operational Calm organizer shell:
 ```
-├── Dashboard (home)
-├── Organizations
-├── Events
-├── Settings
-└── [User Avatar] Profile / Logout
+├── Organization and event switchers
+├── Grouped organization/event navigation
+├── Breadcrumbs + active states
+├── Collapsible desktop rail / accessible mobile drawer
+├── Ctrl/Cmd-K command menu
+└── User menu / logout
 ```
 
 ##### [NEW] `apps/web/src/app/dashboard/page.tsx`
 Dashboard home: recent events, quick stats (total attendees, revenue), quick action buttons.
 
 ##### [NEW] `apps/web/src/components/dashboard/app-shell.tsx`
-Reusable dashboard shell wrapper with navigation state management.
+Reusable organizer shell with route-context parsing, navigation state, focus restoration, responsive drawer/rail behavior, and reserved create-route protection.
 
 ##### [NEW] `apps/web/src/components/dashboard/stat-card.tsx`
 Metric card component using shadcn/ui `Card`, `ProgressBar`, and semantic headings/text.

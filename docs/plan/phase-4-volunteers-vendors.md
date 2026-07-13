@@ -23,7 +23,7 @@ Volunteer application management:
 - Reject with optional reason (sent via email)
 - Bulk approve/reject
 
-##### [NEW] `apps/web/src/app/(convention)/volunteer/page.tsx`
+##### [NEW] `apps/web/src/app/(convention)/[orgSlug]/volunteer/page.tsx`
 Public volunteer application form (convention subdomain):
 - Renders dynamic form fields from department's JSON schema
 - Availability calendar picker (which days/shifts the volunteer is available)
@@ -66,14 +66,14 @@ Booth/table management:
 - Assign vendors to booths
 - Track booth status (available, assigned, paid)
 
-##### [NEW] `apps/web/src/app/(convention)/vendor-apply/page.tsx`
+##### [NEW] `apps/web/src/app/(convention)/[orgSlug]/vendor-apply/page.tsx`
 Public vendor application (convention subdomain):
 - Business info, product description
 - Table type selection + amenity add-ons
 - **Dealer assistants**: add assistant names + badges
 - **Seating preferences**: neighbor/location preferences
 - File uploads (product photos, business license)
-- Payment for booth upon approval
+- Payment for booth upon approval through the same signed Stripe/SePay checkout and provider-neutral fulfillment pipeline
 
 ##### [NEW] `apps/web/src/actions/vendor-actions.ts`
 Server Actions: `submitApplication`, `approveVendor`, `rejectVendor`, `waitlistVendor`, `assignBooth`, `addAssistant`.

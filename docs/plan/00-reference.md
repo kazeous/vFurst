@@ -13,8 +13,8 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 | Question | Decision |
 |----------|----------|
 | **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.reyuugames.com`. Custom domains (CNAME) added in Phase 6. |
-| **UI theme** | **shadcn/ui CSS-variable tokens** - local, editable component code with a clean SaaS aesthetic. |
-| **Mobile app** | **React Native companion app** — planned for Phase 5+, covering ticket scanning, check-in, and sales monitoring. |
+| **UI theme** | **Light-only “Operational Calm”** — Geist typography, warm canvas, teal semantic accent, compact operational density, responsive layouts, reduced motion, and accessible local shadcn/Radix primitives. |
+| **Mobile/event day** | **Responsive web/PWA surfaces** — check-in, cashier, express kiosk, and monitoring remain in the web app with scoped offline support. A separate React Native app is not part of the current phase plan. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |
 
 ---
@@ -29,7 +29,7 @@ Adopted from [convention_saas_roadmap.md](file:///D:/GitHub/vFurst/convention_sa
 | Per hotel room booked | **$1.00** |
 | Store / vendor transactions | **1%** |
 
-USD card payments are processed via **Stripe Connect** using **destination charges**. VND events can additionally use an embedded **SePay VietQR**: funds arrive in vFurst's central account, exact transfers are matched by a unique payment memo, and organizer net proceeds are credited to a ledger for manual payout.
+USD card payments are processed via **Stripe Connect** using **destination charges**. Configured VND events can additionally offer an embedded **SePay VietQR**: funds arrive in vFurst's central account, exact whole-đồng transfers are matched by a unique payment memo, and organizer net proceeds are credited to a ledger for manual payout.
 
 > [!IMPORTANT]
 > **Stripe Connect charge type: Destination charges** (not direct charges or separate charges and transfers).
@@ -40,7 +40,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 > - Convention receives funds minus fee automatically
 
 > [!IMPORTANT]
-> **Fee collection is single-path**: all platform fees are collected at checkout time via `application_fee_amount`. There is **no secondary billing job** that invoices conventions separately. The Phase 6 `reconcile-fees.ts` job is **read-only** — it audits that fees were collected correctly, generates usage reports for the billing dashboard, and flags discrepancies, but never charges conventions again.
+> **Fee collection is single-path per provider**: Stripe collects the platform fee at checkout through `application_fee_amount`; SePay records the platform fee when the matched transfer credits organizer net proceeds to the internal ledger. There is **no secondary billing job** that invoices conventions separately. Reconciliation jobs audit and report; they never charge conventions again.
 
 ---
 
@@ -48,18 +48,18 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Monorepo** | Turborepo | Shared packages between web, API, mobile |
+| **Monorepo** | Turborepo | Shared packages between the web app, worker, database, and email service |
 | **Frontend** | Next.js 15 (App Router) | SSR, API routes, middleware, subdomain routing |
 | **UI Library** | shadcn/ui-style local components (`apps/web/src/components/ui`) | Editable, accessible React primitives owned by the app |
-| **Theme** | shadcn/ui CSS variables in `apps/web/src/app/globals.css` | Clean SaaS aesthetic with light/dark token support |
+| **Theme** | Operational Calm tokens in `apps/web/src/app/globals.css` | Light-only warm-canvas/teal system with responsive operational density and reduced-motion support |
 | **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect + SePay VietQR | Connected card settlement plus central VND receipt, reconciliation, organizer ledger, and manual payout/refund records |
 | **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
 | **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
-| **Validation** | Zod | Schema validation for forms and API |
-| **State** | React Server Components + `nuqs` | URL state for filters/search, minimal client state |
+| **Validation** | Zod + colocated TypeScript contracts | Validation stays with the owning action, API, payment, or package module |
+| **State** | React Server Components + URL/form state | Server-first rendering with minimal client state |
 | **Charts** | Recharts | Dashboard analytics visualization |
 | **Barcode/QR** | `bwip-js` (generation) + `@zxing/browser` (scanning) | `bwip-js` generates barcode/QR images for badges. `@zxing/browser` decodes QR codes from device camera in check-in/express pages. |
 | **Badge Rendering** | `pdf-lib` (PDF) + ZPL string gen (thermal) | Pure-JS server-side badge rendering. No native bindings, runs on Railway/Vercel without issues. `pdf-lib` for PDF output, custom ZPL string builder for Zebra thermal printers. |
@@ -67,7 +67,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | **Drag & Drop** | `@dnd-kit/core` + `@dnd-kit/sortable` | Accessible DnD for tier reordering (Phase 2), form builder field ordering (Phase 4), shift schedule assignment (Phase 4). |
 | **Printing** | WebUSB API | Direct browser-to-Zebra thermal printer (Chrome/Edge only — see compat note in `webusb-printer.ts`) |
 | **Real-time** | Server-Sent Events | Live check-in counters, dashboard updates |
-| **Mobile** | React Native (Expo) | Companion app for scanning + monitoring |
+| **Mobile** | Responsive web/PWA | Check-in, cashier, express kiosk, and monitoring without a separate native codebase |
 | **CI/CD** | GitHub Actions | Lint, test, build, deploy pipeline |
 | **Hosting** | Local Docker Compose for Phases 0–7; Vercel (web) + Railway (Redis/workers) at deployment time only | See "Local Development" below. Vercel/Railway aren't set up until the project deploys — every phase builds and verifies against local containers. |
 
@@ -129,6 +129,10 @@ erDiagram
     User ||--o{ VendorApplication : "submits"
     Cart ||--o{ CartItem : "contains"
     Order ||--o{ OrderItem : "contains"
+    Order ||--o{ PaymentAttempt : "attempts"
+    Order ||--o{ PaymentException : "may require review"
+    Order ||--o{ OrganizerLedgerEntry : "credits organizer"
+    Order ||--o| PaymentRefund : "may be refunded"
     User ||--o{ Order : "places"
     Voucher ||--o{ Order : "applied to"
     StoreProduct ||--o{ OrderItem : "sold as"
@@ -137,17 +141,21 @@ erDiagram
     User ||--o{ HotelBooking : "books"
     Raffle ||--o{ RaffleEntry : "has"
     User ||--o{ RaffleEntry : "enters"
+    Organization ||--o{ OrganizerLedgerEntry : "owns"
+    Organization ||--o{ OrganizerPayout : "receives"
+    OrganizerPayout ||--o{ OrganizerLedgerEntry : "settles"
+    PaymentAttempt ||--o{ PaymentException : "may create"
 ```
 
-### Core Entities (29)
+### Product and tenant entities (29)
 
 | Entity | Key Fields | Purpose |
 |--------|-----------|---------|
-| **User** | id, email, name, avatar, emailVerified | Platform-wide user account |
-| **Organization** | id, name, slug, subdomain, logo, contactEmail, customDomain | Convention organizing body |
+| **User** | id, email, name, avatar, emailVerified, platformRole | Platform-wide account; platform administration is separate from organization RBAC |
+| **Organization** | id, name, slug, subdomain, logo, contactEmail, customDomain, payoutBankCode, payoutAccountNumber, payoutAccountHolder | Convention organizing body and SePay payout destination |
 | **OrgMember** | userId, orgId, role (OWNER/ADMIN/MEMBER) | Org membership + role |
 | **StripeConnect** | orgId, stripeAccountId, onboardingComplete | Stripe Connect account link |
-| **Event** | id, orgId, name, slug, startDate, endDate, venue, status, settings | A specific convention instance |
+| **Event** | id, orgId, name, slug, startDate, endDate, venue, status, currency, settings | A convention with immutable USD/VND monetary context |
 | **RegistrationType** | id, eventId, name, price, maxCapacity, scheduledPricing (JSON) | Attendance tiers (General, VIP, Sponsor) |
 | **AddOnDefinition** | id, registrationTypeId, name, price, isComplimentary, maxQuantity, sortOrder | Defines an available add-on for a specific registration tier. Scoped to `RegistrationType` (not Event) so different tiers can offer different add-ons. `RegistrationAddOn` instances reference this. |
 | **Registration** | id, eventId, userId, typeId, status, checkedInAt, badgeNumber, transferredFromId | An attendee's event registration |
@@ -162,7 +170,7 @@ erDiagram
 | **StoreProduct** | id, eventId, name, price, stock, images, category, surcharges | Merchandise for event store |
 | **Cart** | id, userId, eventId, createdAt, updatedAt | Server-side shopping cart (DB-backed, survives device switches and avoids SSR hydration issues) |
 | **CartItem** | id, cartId, itemType (REGISTRATION/ADDON/PRODUCT), refId, unitPrice, quantity | Line items in an active cart. Converted to OrderItems on checkout. Cleared after successful payment. |
-| **Order** | id, userId, eventId, total, platformFee, status, stripePaymentIntentId, voucherId | Payment + fee record |
+| **Order** | id, userId, eventId, total, platformFee, currency, status, paymentProvider, paymentReference, checkout context, stripePaymentIntentId, voucherId | Provider-neutral payment, reservation, and fee record |
 | **OrderItem** | id, orderId, itemType, refId, unitPrice, quantity | Line items in a completed order |
 | **Voucher** | id, eventId, code, discountType, discountValue, maxUses, usedCount, expiresAt | Promo codes / comped registrations |
 | **HotelBlock** | id, eventId, hotelName, roomTypes (JSON), cutoffDate | Hotel room block |
@@ -172,6 +180,22 @@ erDiagram
 | **AttendeeNote** | id, registrationId, authorId (→ User), content, createdAt | Internal staff notes. `authorId` is a foreign key to User (the staff member writing the note). |
 | **ApiKey** | id, orgId, name, keyHash, scopes, lastUsedAt | Public API authentication |
 | **WebhookEndpoint** | id, orgId, url, events, secret, active | Outbound webhook config |
+
+### Infrastructure and payment operations (12)
+
+These models supplement the original 29 product/tenant entities. The Prisma schema therefore contains **41 models** in total.
+
+| Entity | Purpose |
+|---|---|
+| **Account**, **Session**, **VerificationToken**, **Authenticator** | Auth.js persistence and provider/session infrastructure |
+| **PaymentProviderConfig** | Platform-admin Stripe/SePay enablement plus non-secret provider settings |
+| **PaymentAttempt** | Provider, amount, currency, unique SePay memo/reference, lifecycle, and expiry for an order attempt |
+| **SePayWebhookEvent** | Raw webhook deduplication and processing record |
+| **SePayReconciliationCursor** | API v2 incremental reconciliation position |
+| **PaymentException** | Manual review for unknown, late, underpaid, overpaid, account-mismatched, or invalid transfers |
+| **OrganizerLedgerEntry** | Idempotent organizer credit, refund, and adjustment entries for centrally received VND funds |
+| **OrganizerPayout** | Recorded external organizer settlement and bank reference |
+| **PaymentRefund** | Provider-aware manual refund record tied to idempotent fulfillment reversal |
 
 ---
 
@@ -194,7 +218,7 @@ Several entities use JSON fields. To prevent ambiguity, their schemas are define
 | **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string, branding?: { logoUrl?: string, coverImageUrl?: string, accentColor?: "#RRGGBB" } }` | Event-level configuration flags and constrained public-portal branding. |
 
 > [!NOTE]
-> Monetary values are integers in their currency's minor unit: USD uses cents and VND uses whole dong. The owning Event and Order carry an immutable currency so values are never interpreted without currency context.
+> Monetary values are integers in their currency's minor unit: USD uses cents and VND uses whole đồng. The owning Event and Order carry an immutable currency so values are never interpreted without currency context. Zod and TypeScript contracts are colocated with their owning actions and libraries rather than kept in empty shared-package stubs.
 
 ---
 
@@ -208,31 +232,33 @@ d:\GitHub\vFurst\
 ├── turbo.json                         # Turborepo workspace config
 ├── package.json                       # Root workspace (apps/*, packages/*)
 ├── .github/workflows/                 # CI/CD pipelines
-├── docs/                              # API contracts, OpenAPI specs
+├── docs/                              # Plan, API contracts, launch audits/runbooks
 ├── packages/
 │   ├── db/                            # Prisma schema + client singleton
-│   ├── email/                         # Email service abstraction (SES + SMTP)
-│   ├── validators/                    # Shared Zod schemas
-│   └── types/                         # Shared TypeScript types + enums
+│   └── email/                         # Email service abstraction (SES + SMTP)
 ├── apps/
 │   ├── web/                           # Next.js 15 frontend + API
 │   │   ├── middleware.ts              # Subdomain routing
-│   │   ├── next.config.ts             # Includes @serwist/next for SW compilation
+│   │   ├── next.config.ts             # Sentry + scoped @serwist/next compilation
 │   │   ├── public/                    # Static assets + compiled SW (sw.js)
 │   │   └── src/
 │   │       ├── app/                   # Next.js App Router pages
 │   │       │   ├── (auth)/            # Login, register
 │   │       │   ├── (marketing)/       # Landing, pricing, features, legal
-│   │       │   ├── (convention)/      # Convention subdomain pages (public)
-│   │       │   ├── dashboard/         # Admin dashboard (local shell + sidebar)
-│   │       │   └── api/               # API routes (auth, webhooks, v1 public)
-│   │       ├── components/            # Reusable UI components
-│   │       ├── hooks/                 # Client hooks (e.g., useServiceWorker)
-│   │       ├── lib/                   # Utilities (auth, stripe, barcode, etc.)
-│   │       ├── actions/               # Server Actions
+│   │       │   ├── (convention)/[orgSlug]/ # Public tenant portal
+│   │       │   ├── checkout/[orderId]/ # Shared Stripe/SePay checkout
+│   │       │   ├── dashboard/         # Organizer and platform operations
+│   │       │   ├── docs/              # Embedded product/API docs
+│   │       │   └── api/               # Auth, v1, payment status, webhooks
+│   │       ├── components/            # UI, organizer shell, portal, marketing
+│   │       ├── hooks/                 # Scoped service-worker registration
+│   │       ├── lib/                   # Auth, tenant, payment, domain logic
+│   │       ├── actions/               # Authenticated Server Actions
 │   │       └── sw/                    # Service Worker source (compiled → public/sw.js)
 │   └── worker/                        # BullMQ background job processor
-│       └── src/jobs/                  # Email, badge gen, fee reconciliation
+│       └── src/jobs/                  # Email, badge, webhook, fee/SePay jobs
+├── scripts/                           # E2E, load, readiness, platform-admin tools
+└── tests/                             # Playwright, visual, accessibility, k6
 ```
 
 > [!NOTE]
@@ -244,14 +270,14 @@ d:\GitHub\vFurst\
 
 | Feature Area | Local shadcn/ui Components |
 |-------------|----------------------------|
-| **Dashboard Shell** | Local dashboard shell, sidebar links, `Button` |
+| **Dashboard Shell** | Responsive app shell, org/event switchers, breadcrumbs, collapsible rail, mobile drawer, user menu, command menu |
 | **Data Tables** | `Table`, `PowerSearch`, `Badge` |
 | **Forms** | `FormLayout`, `TextInput`, native inputs/selects/textareas styled by tokens |
 | **Cards & Stats** | `Card`, `ProgressBar`, semantic headings/text |
-| **Overlays** | Add shadcn/Radix primitives in `components/ui` as flows require |
-| **Navigation** | Local sidebar, `SegmentedControl`, `Button` links |
-| **Feedback** | `Badge`, `EmptyState`, token-styled banners |
+| **Overlays** | Radix-backed dropdown, tooltip, tabs, command dialog, and alert primitives |
+| **Navigation** | Grouped event links, event-section tabs, breadcrumbs, `SegmentedControl`, and button links |
+| **Feedback** | `Badge`, `Alert`, `EmptyState`, and consistent loading/error/status treatments |
 | **Buttons/Actions** | `Button`, `buttonVariants` |
-| **Layout** | App `vf-*` layout classes backed by shadcn CSS variables |
+| **Layout** | Operational Calm `vf-*` layout classes, warm canvas, responsive density, 44 px mobile targets, reduced motion |
 | **Content** | Native semantic HTML plus local UI primitives |
-| **Check-in/Kiosk** | Native controls and local buttons/cards |
+| **Check-in/Kiosk** | Focus layouts, online/offline status, native controls, local buttons/cards, scoped service-worker registration |

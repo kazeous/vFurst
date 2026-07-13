@@ -6,31 +6,31 @@
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/billing/page.tsx`
 **Usage dashboard** for convention organizers (read-only reporting, NOT invoicing):
-- Per-attendee fee breakdown ($1.00 × N attendees)
-- Per-booking fee breakdown ($1.00 × N hotel bookings)
+- Currency-separated attendee, booking, and transaction fee breakdowns
+- USD fixed fees use $1.00; VND fixed fees use the immutable order fee captured from the platform configuration at checkout
 - Transaction fee breakdown (1% × store/vendor revenue)
-- Fee collection history (sourced from Stripe Connect `application_fee` objects via `reconcile-fees.ts` reports)
-- Total fees collected to date
+- Fee collection history sourced from paid provider-neutral orders, with Stripe/SePay attribution
+- Total platform fees collected to date without mixing USD cents and VND whole-đồng values
 
 > [!NOTE]
-> This page displays **fees already collected** at checkout via `application_fee_amount`. There are no invoices, no payment methods, no billing cycles. Conventions are never billed separately — the dashboard is purely informational.
+> This page displays **fees already captured** in paid provider-neutral orders. There are no invoices, no payment methods, and no billing cycles. Conventions are never billed separately; the dashboard is purely informational.
 
 ##### [NEW] `apps/worker/src/jobs/reconcile-fees.ts`
 **Fee reconciliation** (read-only audit job, NOT a billing job):
-- Nightly job: aggregate all `application_fee_amount` values collected via Stripe Connect for each org
-- Compare against expected fees (count of registrations × $1.00, hotel bookings × $1.00, store revenue × 1%)
-- Generate usage reports for the billing dashboard (breakdown by fee type)
+- Nightly job: aggregate immutable `Order.platformFee` values from paid Stripe and SePay orders for each organization and currency
+- Compare against expected fees without combining currencies (USD fixed fees, configured VND fixed fees, and 1% store/vendor revenue)
+- Generate provider- and currency-aware usage reports for the billing dashboard
 - **Flag discrepancies** (e.g., comped registrations that bypassed Stripe, failed webhooks)
-- Does NOT create charges or invoices — all fees are already collected at checkout via `application_fee_amount`
+- Does NOT create charges or invoices — every fee was already captured by the paid Order and its provider settlement path
 
 > [!IMPORTANT]
-> **No double billing**: Platform fees are collected once, at checkout time, via Stripe Connect's `application_fee_amount`. This job only audits and reports — it never charges conventions. The billing dashboard in `[orgId]/billing/page.tsx` reads from this job's reports.
+> **No double billing**: Platform fees are captured once in each paid order—through Stripe's `application_fee_amount` or before SePay organizer ledger credit. This job only audits and reports; it never charges conventions. The billing dashboard in `[orgId]/billing/page.tsx` reads from provider-neutral order records.
 
 ##### [NEW] `apps/web/middleware.ts` (MODIFY)
 **Custom domain (CNAME) support**:
 - Database lookup for custom domains
 - Verify domain ownership via DNS TXT record
-- SSL handled by Vercel/Cloudflare
+- SSL handled by the eventual production host; cloud cutover remains outside local Phase 0–7 verification
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/settings/page.tsx` (MODIFY)
 Add custom domain configuration:

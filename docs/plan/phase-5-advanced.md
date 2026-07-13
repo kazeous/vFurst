@@ -82,10 +82,12 @@ BullMQ job processor for `badgeQueue`:
 The offline check-in system uses **3 files**:
 
 ##### [NEW] `apps/web/next.config.ts` (MODIFY)
-Add `@serwist/next` plugin to the Next.js config. This compiles the SW source from `src/sw/` and outputs the compiled JS to `public/sw.js` at build time:
+Add `@serwist/next` to the Next.js config. Production builds compile the SW source from `src/sw/` to `public/sw.js`; development bundling is disabled, and global auto-registration remains off:
 ```ts
 import withSerwist from '@serwist/next';
 export default withSerwist({
+  disable: process.env.NODE_ENV === 'development',
+  register: false,
   swSrc: 'src/sw/offline-checkin.ts',  // Source (TypeScript)
   swDest: 'public/sw.js',              // Output (served at /sw.js)
 })({ /* existing next config */ });
@@ -111,7 +113,7 @@ export function useServiceWorker() {
   }, []);
 }
 ```
-The check-in and express mode pages call `useServiceWorker()` to register the compiled SW.
+Only the production check-in and express/cashier event-day surfaces call `useServiceWorker()` to register the compiled SW. Marketing, auth, public checkout, and general dashboard routes do not register it.
 
 **Offline fallback behavior:**
 - Cache check-in page + attendee data for offline use
