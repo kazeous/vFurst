@@ -80,7 +80,6 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
           <Button label="Public registration" href={`/${event.org.subdomain}/register`} />
           {event.status !== "PUBLISHED" ? (
             <form action={publishEvent}>
-              <input type="hidden" name="orgId" value={event.orgId} />
               <input type="hidden" name="eventId" value={event.id} />
               <Button label="Publish" type="submit" variant="primary" />
             </form>

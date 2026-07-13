@@ -31,7 +31,7 @@ function SortableTier({ tier }: { tier: TierItem }) {
   );
 }
 
-export function SortableTierList({ tiers }: { tiers: TierItem[] }) {
+export function SortableTierList({ eventId, tiers }: { eventId: string; tiers: TierItem[] }) {
   const [items, setItems] = useState(tiers);
 
   async function onDragEnd(event: DragEndEvent) {
@@ -46,7 +46,7 @@ export function SortableTierList({ tiers }: { tiers: TierItem[] }) {
     const reordered = arrayMove(items, oldIndex, newIndex);
 
     setItems(reordered);
-    await updateRegistrationTypeOrder(reordered.map((item, index) => ({ id: item.id, sortOrder: index })));
+    await updateRegistrationTypeOrder(eventId, reordered.map((item, index) => ({ id: item.id, sortOrder: index })));
   }
 
   return (
@@ -61,4 +61,3 @@ export function SortableTierList({ tiers }: { tiers: TierItem[] }) {
     </DndContext>
   );
 }
-

@@ -44,7 +44,50 @@ async function getEventTenant(eventId: string) {
     },
     select: {
       id: true,
-      orgId: true
+      orgId: true,
+      currency: true
+    }
+  });
+}
+
+async function getRegistrationTypeTenant(typeId: string) {
+  return prisma.registrationType.findUnique({
+    where: {
+      id: typeId
+    },
+    select: {
+      id: true,
+      eventId: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getAddOnDefinitionTenant(addOnId: string) {
+  return prisma.addOnDefinition.findUnique({
+    where: {
+      id: addOnId
+    },
+    select: {
+      id: true,
+      registrationTypeId: true,
+      registrationType: {
+        select: {
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      }
     }
   });
 }
@@ -120,6 +163,51 @@ export async function requireEventAccess(eventId: string, allowedRoles: OrgRole[
   return {
     userId,
     membership,
+    event
+  };
+}
+
+export async function requireRegistrationTypeAccess(typeId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const registrationType = await getRegistrationTypeTenant(typeId);
+
+  if (!registrationType) {
+    throw new Error("Registration type not found.");
+  }
+
+  const membership = await getOrgMembership(userId, registrationType.event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this registration type.");
+  }
+
+  return {
+    userId,
+    membership,
+    registrationType,
+    event: registrationType.event
+  };
+}
+
+export async function requireAddOnDefinitionAccess(addOnId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const addOnDefinition = await getAddOnDefinitionTenant(addOnId);
+
+  if (!addOnDefinition) {
+    throw new Error("Add-on not found.");
+  }
+
+  const event = addOnDefinition.registrationType.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this add-on.");
+  }
+
+  return {
+    userId,
+    membership,
+    addOnDefinition,
     event
   };
 }

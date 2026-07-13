@@ -19,17 +19,38 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | The first containment unit is implemented: only platform admins can list/provision organizations, organizer pages and event portfolios are membership-scoped, and shared organization/event page guards reject foreign tenants. Invitations, lifecycle, separated `/platform` routes, and full resource-derived action authorization are not implemented. |
-| 2 - Registration & Hotel | Audit reopened | Core flows exist, but cross-tenant single-record mutations and VND/admin payment correctness require remediation. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, and add-on definitions. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
+| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on mutations now derive tenant access from stored resources and pass cross-tenant regression tests. Registration/notes/transfers, hotel mutations, and VND/admin payment correctness still require remediation. |
 | 3 - Store & Add-ons | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained product uploads require remediation. |
 | 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
 | 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
 | 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
-| 7 - Launch | Blocked | The managed-tenant containment unit now passes the full 17-test E2E suite and 24 web unit tests, but deployment remains blocked. Resource-derived authorization across mutation actions, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on authorization unit now pass the full 20-test E2E suite and 24 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, derive event, tier, and add-on authorization from stored resources
+- Remediated the first `SEC-02` action family:
+  - Replaced event update/status/delete authorization based on a submitted organization with `requireEventAccess(eventId)`. Revalidation paths now also use the organization stored on the authorized event.
+  - Added resource-derived registration-tier and add-on guards. Tier update/delete derives the event and tenant from the stored tier; add-on update/delete derives them through the stored add-on and registration tier.
+  - Tier creation now authorizes its stored event and copies the authoritative event `orgId`/currency. Add-on creation authorizes its stored registration tier and copies the authoritative event tenant/currency.
+  - Tier reordering now requires an authorized event, rejects missing/duplicate/foreign tier IDs, and scopes every update to that event.
+  - Removed redundant hidden `orgId`/`eventId`/`typeId` fields from the affected mutation forms. Creating an event still accepts `orgId` because no target event exists yet, then verifies the caller's owner/admin membership.
+- Added regression evidence:
+  - Added self-contained Org A/Org B mutation tests that tamper event, tier, and add-on IDs on an owned page and submit the actual React server actions.
+  - Covered event status/settings, tier create/update/delete, and add-on create/update/delete. Every attempted foreign write was rejected and assertions proved both tenants' resources remained unchanged.
+- Verified:
+  - Focused event-resource authorization E2E passed 3/3 in development mode.
+  - Full production-mode Chromium E2E passed 20/20 with four workers; expected server logs record the deliberately rejected mutation attempts.
+  - Root unit tests passed 24/24; repository-wide type-check, lint, Prisma validation, and production build passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+  - `git diff --check` passed. The pre-existing `.idea/.name` modification remains untouched and excluded.
+- Remaining issues / blockers:
+  - `SEC-02` remains open for registration/notes/transfers, store/hotel, staff/vendors, badges/check-in, raffles/vouchers, API keys/webhooks, exports, and uploads. `SEC-03` unsigned Stripe webhook handling also remains open; do not deploy.
+  - Invitations/lifecycle, `/platform` surface separation, domain/payment boundaries, and the 42-model target schema remain later logical units.
+- Next session should:
+  - Remediate the registration/attendee-note/transfer mutation family using stored registration/event ownership and add equivalent Org A/Org B mutation tests. Keep store/hotel and later families for separate logical commits.
 
 ### 2026-07-14 - Phase 7, contain tenant provisioning and organizer access
 - Implemented the first managed-tenant containment unit:

@@ -75,17 +75,14 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
                 <small>{event.status}</small>
                 <div className="vf-inline-forms">
                   <form action={publishEvent}>
-                    <input type="hidden" name="orgId" value={org.id} />
                     <input type="hidden" name="eventId" value={event.id} />
                     <Button label="Publish" type="submit" size="sm" />
                   </form>
                   <form action={archiveEvent}>
-                    <input type="hidden" name="orgId" value={org.id} />
                     <input type="hidden" name="eventId" value={event.id} />
                     <Button label="Archive" type="submit" size="sm" />
                   </form>
                   <form action={deleteEvent}>
-                    <input type="hidden" name="orgId" value={org.id} />
                     <input type="hidden" name="eventId" value={event.id} />
                     <Button label="Delete" type="submit" size="sm" variant="destructive" />
                   </form>

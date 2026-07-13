@@ -50,12 +50,11 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
       <section className="vf-two-column">
         <div className="vf-section">
           <h2>Tier order</h2>
-          <SortableTierList tiers={event.registrationTypes.map((type) => ({ id: type.id, name: type.name }))} />
+          <SortableTierList eventId={event.id} tiers={event.registrationTypes.map((type) => ({ id: type.id, name: type.name }))} />
         </div>
         <div className="vf-section">
           <h2>Create tier</h2>
           <form action={createRegistrationType} className="vf-form">
-            <input type="hidden" name="orgId" value={event.orgId} />
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Name
@@ -101,15 +100,11 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
                   </p>
                 </div>
                 <form action={deleteRegistrationType}>
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="typeId" value={type.id} />
                   <Button label="Delete tier" type="submit" variant="destructive" size="sm" />
                 </form>
               </div>
               <form action={updateRegistrationType} className="vf-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="typeId" value={type.id} />
                 <div className="vf-subform-row">
                   <label>
@@ -145,9 +140,6 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
                 <h3>Add-ons</h3>
                 {type.addOns.map((addOn) => (
                   <form key={addOn.id} action={updateAddOnDefinition} className="vf-subform-row">
-                    <input type="hidden" name="orgId" value={event.orgId} />
-                    <input type="hidden" name="eventId" value={event.id} />
-                    <input type="hidden" name="typeId" value={type.id} />
                     <input type="hidden" name="addOnId" value={addOn.id} />
                     <label>
                       Name
@@ -170,15 +162,11 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
                 ))}
                 {type.addOns.map((addOn) => (
                   <form key={`${addOn.id}-delete`} action={deleteAddOnDefinition}>
-                    <input type="hidden" name="orgId" value={event.orgId} />
-                    <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="addOnId" value={addOn.id} />
                     <Button label={`Delete ${addOn.name}`} type="submit" size="sm" variant="destructive" />
                   </form>
                 ))}
                 <form action={createAddOnDefinition} className="vf-subform-row">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="typeId" value={type.id} />
                   <label>
                     Name

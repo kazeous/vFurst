@@ -1,7 +1,11 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { requireEventAccess } from "@/lib/dashboard-access";
+import {
+  requireAddOnDefinitionAccess,
+  requireEventAccess,
+  requireOrgAccess,
+  requireRegistrationTypeAccess
+} from "@/lib/dashboard-access";
 import { eventSettingsSchema, mergeCoreEventSettings } from "@/lib/event-settings";
 import { parseMoney } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
@@ -9,9 +13,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-const eventSchema = z.object({
-  orgId: z.string().uuid(),
-  eventId: z.string().uuid().optional(),
+const eventDetailsSchema = z.object({
   name: z.string().trim().min(2),
   description: z.string().trim().optional(),
   slug: z
@@ -23,36 +25,23 @@ const eventSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   venue: z.string().trim().optional(),
   startDate: z.coerce.date(),
-  endDate: z.coerce.date(),
+  endDate: z.coerce.date()
+});
+
+const createEventSchema = eventDetailsSchema.extend({
+  orgId: z.string().uuid(),
   currency: z.enum(["USD", "VND"]).default("USD"),
   requireApproval: z.coerce.boolean().optional(),
   allowTransfers: z.coerce.boolean().optional(),
   maxRegistrationsPerUser: z.coerce.number().int().min(1).max(20).optional()
 });
 
-async function requireOrgAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage events for this organization.");
-  }
-}
+const updateEventSchema = eventDetailsSchema.extend({
+  eventId: z.string().uuid()
+});
 
 export async function createEvent(formData: FormData) {
-  const parsed = eventSchema.safeParse({
+  const parsed = createEventSchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -90,8 +79,7 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(formData: FormData) {
-  const parsed = eventSchema.required({ eventId: true }).safeParse({
-    orgId: formData.get("orgId"),
+  const parsed = updateEventSchema.safeParse({
     eventId: formData.get("eventId"),
     name: formData.get("name"),
     description: formData.get("description"),
@@ -105,7 +93,7 @@ export async function updateEvent(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid event details.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
+  const { event: authorizedEvent } = await requireEventAccess(parsed.data.eventId);
 
   await prisma.event.update({
     where: {
@@ -121,7 +109,8 @@ export async function updateEvent(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${parsed.data.orgId}`);
+  revalidatePath(`/dashboard/organizations/${authorizedEvent.orgId}`);
+  revalidatePath(`/dashboard/events/${authorizedEvent.id}`);
 }
 
 export async function updateEventSettings(formData: FormData) {
@@ -184,7 +173,7 @@ export async function updateEventSettings(formData: FormData) {
 }
 
 export async function createEventWithRegistrationTypes(formData: FormData) {
-  const parsed = eventSchema.safeParse({
+  const parsed = createEventSchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
     description: formData.get("description"),
@@ -263,9 +252,6 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
 }
 
 const registrationTypeSchema = z.object({
-  orgId: z.string().uuid(),
-  eventId: z.string().uuid(),
-  typeId: z.string().uuid().optional(),
   name: z.string().trim().min(1),
   price: z.coerce.number().int().min(0),
   maxCapacity: z.coerce.number().int().min(1).optional().nullable(),
@@ -293,20 +279,16 @@ function scheduledPricingFromForm(formData: FormData, currency: "USD" | "VND") {
 }
 
 export async function createRegistrationType(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-  await requireOrgAccess(orgId);
+  const { event } = await requireEventAccess(eventId);
 
   const count = await prisma.registrationType.count({
     where: {
-      eventId
+      eventId: event.id
     }
   });
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
 
   const parsed = registrationTypeSchema.safeParse({
-    orgId,
-    eventId,
     name: formData.get("name"),
     price: parseMoney(formData.get("price"), event.currency),
     maxCapacity: formData.get("maxCapacity") ? Number(formData.get("maxCapacity")) : null,
@@ -319,8 +301,8 @@ export async function createRegistrationType(formData: FormData) {
 
   await prisma.registrationType.create({
     data: {
-      orgId,
-      eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       name: parsed.data.name,
       price: parsed.data.price,
       maxCapacity: parsed.data.maxCapacity,
@@ -329,16 +311,13 @@ export async function createRegistrationType(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 export async function updateRegistrationType(formData: FormData) {
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
-  const parsed = registrationTypeSchema.required({ typeId: true }).safeParse({
-    orgId: formData.get("orgId"),
-    eventId: formData.get("eventId"),
-    typeId: formData.get("typeId"),
+  const typeId = z.string().uuid().parse(formData.get("typeId"));
+  const { registrationType, event } = await requireRegistrationTypeAccess(typeId);
+  const parsed = registrationTypeSchema.safeParse({
     name: formData.get("name"),
     price: parseMoney(formData.get("price"), event.currency),
     maxCapacity: formData.get("maxCapacity") ? Number(formData.get("maxCapacity")) : null,
@@ -349,11 +328,9 @@ export async function updateRegistrationType(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration type.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
-
   await prisma.registrationType.update({
     where: {
-      id: parsed.data.typeId
+      id: registrationType.id
     },
     data: {
       name: parsed.data.name,
@@ -363,51 +340,56 @@ export async function updateRegistrationType(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 export async function deleteRegistrationType(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const typeId = z.string().uuid().parse(formData.get("typeId"));
-
-  await requireOrgAccess(orgId);
+  const { registrationType, event } = await requireRegistrationTypeAccess(typeId);
 
   await prisma.registrationType.delete({
     where: {
-      id: typeId
+      id: registrationType.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
-export async function updateRegistrationTypeOrder(order: Array<{ id: string; sortOrder: number }>) {
-  const ids = order.map((item) => item.id);
-  const types = await prisma.registrationType.findMany({
-    where: {
-      id: {
-        in: ids
-      }
-    },
-    select: {
-      id: true,
-      orgId: true,
-      eventId: true
-    }
-  });
+const registrationTypeOrderSchema = z
+  .array(z.object({ id: z.string().uuid(), sortOrder: z.number().int().min(0) }))
+  .max(100)
+  .refine((order) => new Set(order.map((item) => item.id)).size === order.length, "Registration tiers must be unique.");
 
-  if (types.length === 0) {
+export async function updateRegistrationTypeOrder(eventId: string, order: Array<{ id: string; sortOrder: number }>) {
+  const authorizedEventId = z.string().uuid().parse(eventId);
+  const parsedOrder = registrationTypeOrderSchema.parse(order);
+
+  if (parsedOrder.length === 0) {
     return;
   }
 
-  await requireOrgAccess(types[0]!.orgId);
+  const { event } = await requireEventAccess(authorizedEventId);
+  const ids = parsedOrder.map((item) => item.id);
+  const typeCount = await prisma.registrationType.count({
+    where: {
+      eventId: event.id,
+      id: {
+        in: ids
+      }
+    }
+  });
+
+  if (typeCount !== ids.length) {
+    throw new Error("One or more registration tiers do not belong to this event.");
+  }
 
   await prisma.$transaction(
-    order.map((item) =>
-      prisma.registrationType.update({
+    parsedOrder.map((item) =>
+      prisma.registrationType.updateMany({
         where: {
-          id: item.id
+          id: item.id,
+          eventId: event.id
         },
         data: {
           sortOrder: item.sortOrder
@@ -416,14 +398,10 @@ export async function updateRegistrationTypeOrder(order: Array<{ id: string; sor
     )
   );
 
-  revalidatePath(`/dashboard/events/${types[0]!.eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 const addOnSchema = z.object({
-  orgId: z.string().uuid(),
-  eventId: z.string().uuid(),
-  typeId: z.string().uuid(),
-  addOnId: z.string().uuid().optional(),
   name: z.string().trim().min(1),
   price: z.coerce.number().int().min(0),
   isComplimentary: z.coerce.boolean(),
@@ -431,12 +409,9 @@ const addOnSchema = z.object({
 });
 
 export async function createAddOnDefinition(formData: FormData) {
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
+  const typeId = z.string().uuid().parse(formData.get("typeId"));
+  const { registrationType, event } = await requireRegistrationTypeAccess(typeId);
   const parsed = addOnSchema.safeParse({
-    orgId: formData.get("orgId"),
-    eventId: formData.get("eventId"),
-    typeId: formData.get("typeId"),
     name: formData.get("name"),
     price: parseMoney(formData.get("price"), event.currency),
     isComplimentary: formData.get("isComplimentary") === "on",
@@ -447,18 +422,16 @@ export async function createAddOnDefinition(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid add-on.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
-
   const count = await prisma.addOnDefinition.count({
     where: {
-      registrationTypeId: parsed.data.typeId
+      registrationTypeId: registrationType.id
     }
   });
 
   await prisma.addOnDefinition.create({
     data: {
-      orgId: parsed.data.orgId,
-      registrationTypeId: parsed.data.typeId,
+      orgId: event.orgId,
+      registrationTypeId: registrationType.id,
       name: parsed.data.name,
       price: parsed.data.price,
       isComplimentary: parsed.data.isComplimentary,
@@ -467,17 +440,13 @@ export async function createAddOnDefinition(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 export async function updateAddOnDefinition(formData: FormData) {
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true } });
-  const parsed = addOnSchema.required({ addOnId: true }).safeParse({
-    orgId: formData.get("orgId"),
-    eventId: formData.get("eventId"),
-    typeId: formData.get("typeId"),
-    addOnId: formData.get("addOnId"),
+  const addOnId = z.string().uuid().parse(formData.get("addOnId"));
+  const { addOnDefinition, event } = await requireAddOnDefinitionAccess(addOnId);
+  const parsed = addOnSchema.safeParse({
     name: formData.get("name"),
     price: parseMoney(formData.get("price"), event.currency),
     isComplimentary: formData.get("isComplimentary") === "on",
@@ -488,11 +457,9 @@ export async function updateAddOnDefinition(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid add-on.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
-
   await prisma.addOnDefinition.update({
     where: {
-      id: parsed.data.addOnId
+      id: addOnDefinition.id
     },
     data: {
       name: parsed.data.name,
@@ -502,23 +469,20 @@ export async function updateAddOnDefinition(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 export async function deleteAddOnDefinition(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const addOnId = z.string().uuid().parse(formData.get("addOnId"));
-
-  await requireOrgAccess(orgId);
+  const { addOnDefinition, event } = await requireAddOnDefinitionAccess(addOnId);
 
   await prisma.addOnDefinition.delete({
     where: {
-      id: addOnId
+      id: addOnDefinition.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/registrations/types`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations/types`);
 }
 
 export async function publishEvent(formData: FormData) {
@@ -530,34 +494,31 @@ export async function archiveEvent(formData: FormData) {
 }
 
 export async function deleteEvent(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-
-  await requireOrgAccess(orgId);
+  const { event } = await requireEventAccess(eventId);
 
   await prisma.event.delete({
     where: {
-      id: eventId
+      id: event.id
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${orgId}`);
+  revalidatePath(`/dashboard/organizations/${event.orgId}`);
 }
 
 async function updateEventStatus(formData: FormData, status: "PUBLISHED" | "ARCHIVED") {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-
-  await requireOrgAccess(orgId);
+  const { event } = await requireEventAccess(eventId);
 
   await prisma.event.update({
     where: {
-      id: eventId
+      id: event.id
     },
     data: {
       status
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${orgId}`);
+  revalidatePath(`/dashboard/organizations/${event.orgId}`);
+  revalidatePath(`/dashboard/events/${event.id}`);
 }
