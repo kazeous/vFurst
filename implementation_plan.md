@@ -10,15 +10,17 @@ vFurst is a multi-tenant convention and event-management SaaS built as a Next.js
 | Phase | State | Authoritative plan |
 |---|---|---|
 | 0 — Foundation | Verified complete | [`phase-0-foundation.md`](docs/plan/phase-0-foundation.md) |
-| 1 — Core infrastructure | Verified complete | [`phase-1-core-infra.md`](docs/plan/phase-1-core-infra.md) |
-| 2 — Registration and hotel | Verified complete | [`phase-2-registration.md`](docs/plan/phase-2-registration.md) |
-| 3 — Store and add-ons | Verified complete | [`phase-3-store.md`](docs/plan/phase-3-store.md) |
-| 4 — Volunteers and vendors | Verified complete | [`phase-4-volunteers-vendors.md`](docs/plan/phase-4-volunteers-vendors.md) |
-| 5 — Advanced/event-day features | Verified complete | [`phase-5-advanced.md`](docs/plan/phase-5-advanced.md) |
-| 6 — SaaS layer | Verified complete | [`phase-6-saas.md`](docs/plan/phase-6-saas.md) |
-| 7 — Launch | In progress | [`phase-7-launch.md`](docs/plan/phase-7-launch.md) |
+| 1 — Core infrastructure | Audit reopened — RBAC remediation required | [`phase-1-core-infra.md`](docs/plan/phase-1-core-infra.md) |
+| 2 — Registration and hotel | Audit reopened — tenant/currency remediation required | [`phase-2-registration.md`](docs/plan/phase-2-registration.md) |
+| 3 — Store and add-ons | Audit reopened — tenant/upload remediation required | [`phase-3-store.md`](docs/plan/phase-3-store.md) |
+| 4 — Volunteers and vendors | Audit reopened — tenant/upload remediation required | [`phase-4-volunteers-vendors.md`](docs/plan/phase-4-volunteers-vendors.md) |
+| 5 — Advanced/event-day features | Audit reopened — cashier/printing/transfer remediation required | [`phase-5-advanced.md`](docs/plan/phase-5-advanced.md) |
+| 6 — SaaS layer | Audit reopened — mixed-currency/rate-limit remediation required | [`phase-6-saas.md`](docs/plan/phase-6-saas.md) |
+| 7 — Launch | Blocked by full-system audit and external evidence | [`phase-7-launch.md`](docs/plan/phase-7-launch.md) |
 
 `PROGRESS.md` and the repository are the ground truth for completion. A phase plan describes intent, not proof that the work exists.
+
+The July 13 full-system audit is recorded in [`docs/launch/full-system-audit-2026-07-13.md`](docs/launch/full-system-audit-2026-07-13.md). It supersedes earlier “security clean” completion claims until its blocking findings are fixed and retested.
 
 ## Resolved architecture
 

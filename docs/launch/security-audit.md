@@ -1,52 +1,53 @@
 # Phase 7 Security Audit
 
-Date: July 7, 2026
+Date: July 13, 2026
+
+## Status
+
+**Blocking finding. Public launch is blocked.** The dependency audit is clean, but the full-system review found broken organization-route authorization, cross-tenant mutation paths, and a fail-open Stripe webhook configuration path. Detailed evidence and broader findings are in `docs/launch/full-system-audit-2026-07-13.md`.
 
 ## Scope
 
 - Next.js app routes, middleware, API routes, and server actions.
 - Prisma schema and tenant scoping.
-- Stripe Connect payment paths.
+- Stripe Connect and SePay payment paths.
 - Public REST API and webhook delivery.
-- Authentication and organization role enforcement.
+- Authentication, organization RBAC, upload boundaries, and production configuration gates.
 
-## OWASP Top 10 review
+## OWASP review
 
 | Area | Status | Evidence |
-|------|--------|----------|
-| Broken access control | Clean in reviewed launch paths | Dashboard actions call membership checks before org/event mutation; public API requires scoped API keys; tenant routes resolve through organization slug/custom domain. |
-| Cryptographic failures | Clean in reviewed launch paths | Passwords use bcrypt; Stripe secrets remain env-driven; webhook secrets are generated per endpoint; card data stays in Stripe. |
-| Injection | Clean in reviewed launch paths | Database access uses Prisma query builders; form/API inputs are validated with Zod before mutation. |
-| Insecure design | No blocking finding | Stripe Connect destination charges are the single fee-collection path; reconciliation is read-only; launch docs include beta dry-run and rollback checks. |
-| Security misconfiguration | No blocking finding | `.env.example` documents Sentry, Auth, Stripe, Redis, S3/MinIO, SMTP, and rate-limit configuration; production secrets are not embedded in source. |
-| Vulnerable components | Clean after remediation | `npm audit --audit-level=moderate` reports 0 vulnerabilities after replacing vulnerable launch tooling, aliasing SMTP delivery to `nodemailer@9.0.3`, and overriding Next's internal PostCSS resolution to `8.5.16`. |
-| Identification/auth failures | Clean in reviewed launch paths | Auth.js credentials validation is Zod-backed; auth POSTs now have fixed-window rate limiting. |
-| Software/data integrity failures | Clean in reviewed launch paths | GitHub Actions exists; outbound webhooks are HMAC signed; generated service worker is build-produced and lint ignored. |
-| Logging/monitoring failures | Clean after Phase 7 | Sentry App Router instrumentation, request error capture, client replay sampling, and global error capture are configured. |
-| SSRF | No blocking finding | User-entered webhook URLs are used for outbound delivery; keep future allow/blocklist decisions in webhook worker scope before enterprise rollout. |
+|---|---|---|
+| Broken access control | **Blocking** | Three organization pages query arbitrary organization UUIDs without `requireOrgAccess`. Many single-record actions authorize a submitted organization ID, then mutate a bare foreign resource UUID without verifying ownership. |
+| Cryptographic failures | **Blocking when misconfigured** | SePay fails closed on missing/invalid HMAC, but Stripe accepts unsigned JSON when `STRIPE_WEBHOOK_SECRET` or the request signature is absent. |
+| Injection | No SQL-injection finding | Database access uses Prisma query builders. Boundary validation coverage is uneven for file uploads and must not be described as universal. |
+| Insecure design | **Blocking payment correctness findings** | Mixed-currency fee reporting, VND cashier conversion, and race-prone active-attempt locking violate the provider-neutral payment contract. |
+| Security misconfiguration | **Blocking** | Launch readiness checks Sentry but does not require Stripe/SePay webhook or checkout-token secrets. Production rate limits are process-local. |
+| Vulnerable components | Clean | `npm audit --audit-level=moderate` reports 0 vulnerabilities on July 13, 2026. |
+| Identification/auth failures | Partial | Auth.js credentials validation exists, but organization/member route authorization is incomplete. |
+| Software/data integrity failures | Partial | Outbound webhooks and SePay webhooks are HMAC protected; inbound Stripe verification must fail closed. |
+| Logging/monitoring failures | External blocker | Sentry wiring exists, but real production DSN/org/project/token evidence is absent. |
+| SSRF | Follow-up | User-entered outbound webhook URLs still need a production allow/blocklist policy before enterprise rollout. |
+| Unsafe uploads | **Blocking** | Store/vendor uploads have no size or type policy and buffer caller-controlled files in server memory. |
 
-## PCI posture
+## PCI and payment posture
 
-vFurst remains SAQ A-oriented: payment card data is collected by Stripe Checkout, not by vFurst forms, and the database stores Stripe object IDs, totals, fees, and order states rather than full card numbers or security codes.
+Card data remains hosted by Stripe Checkout and is not stored by vFurst. That SAQ A-oriented boundary does not compensate for forged webhook completion, cross-tenant mutations, mixed-currency reporting, or concurrent-attempt risks. SePay carries no cardholder data but still requires exact transfer matching, signed callbacks, exception review, ledger reconciliation, and controlled payout/refund evidence.
 
 ## Rate limiting
 
-- Auth.js POST route: fixed-window IP limit via `VFURST_AUTH_RATE_LIMIT_PER_MINUTE`.
-- Stripe webhook route: fixed-window IP limit via `VFURST_STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE`.
-- Checkout/refund server actions: fixed-window action limits via `VFURST_PAYMENT_RATE_LIMIT_PER_MINUTE`.
-- Public REST API keys: pre-existing per-key rate limiting with response headers.
+- Auth.js POST, Stripe webhook, payment actions, and public API keys have fixed-window limits.
+- Current stores are in-memory `Map` instances, so limits reset on process restart and multiply across replicas.
+- Move production counters to shared Redis before relying on these limits as a launch control.
 
-## Launch follow-up
+## Required remediation and proof
 
-The application-control review is clean for the listed Phase 7 code paths, and the dependency audit is clean after local dependency remediation.
+1. Add organization-route guards and resource-derived tenant authorization to every mutation family.
+2. Reject unsigned Stripe webhooks and require the secret in production/readiness checks.
+3. Add cross-tenant read/mutation and unsigned-webhook regression tests.
+4. Separate USD/VND reporting and repair VND organizer/cashier forms.
+5. Serialize payment-attempt creation.
+6. Constrain store/vendor uploads before reading them into memory.
+7. Rerun type-check, lint, unit, Prisma, build, dependency, E2E, security, and approved load gates.
 
-Current dependency-audit evidence:
-
-- `npm audit --audit-level=moderate` was rerun on July 7, 2026 after local remediation and reports 0 vulnerabilities.
-- The Docusaurus docs workspace was replaced with a dependency-free static Markdown builder, removing the `serialize-javascript` and `uuid` advisory paths from launch tooling.
-- SMTP delivery now imports `nodemailer-secure`, an npm alias for `nodemailer@9.0.3`, and the root `nodemailer` package is no longer installed. `npm ls nodemailer nodemailer-secure` shows only `nodemailer-secure@npm:nodemailer@9.0.3`.
-- `next-auth@5.0.0-beta.31` and `@auth/core@0.41.2` still declare optional `nodemailer@^7.0.7` peers, but they are not satisfied by a vulnerable package in the installed tree.
-- Current npm registry metadata still shows `next@15.5.20`, `next@15.6.0-canary.61`, and `next@16.2.10` declaring `postcss: 8.4.31`.
-- A scoped `next -> postcss@8.5.16` override was tested first, but npm left the dependency tree invalid. The final package-level `postcss` override removes `node_modules/next/node_modules/postcss`, dedupes Next to the patched root `postcss@8.5.16`, and `npm ls postcss` reports `next@15.5.20 -> postcss@8.5.16 overridden`.
-
-Public launch is no longer blocked by the dependency audit. The current Phase 7 k6 target is documented as passed in `docs/launch/performance-load-test.md`. The remaining Phase 7 launch blockers are external production evidence: real beta-convention onboarding, live marketing verification, production Sentry environment configuration, and a physical screen-reader pass.
+The launch security gate remains failed until these items are implemented and the audit is repeated.

@@ -19,17 +19,44 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Verified complete | Multi-tenant routing, auth/RBAC, dashboard shell, org CRUD, Stripe Connect onboarding, S3 helper, email service, and worker bootstrap are implemented and verified for Phase 1. |
-| 2 - Registration & Hotel | Verified complete | Event workspace, registration tiers/add-ons, public registration, Stripe Checkout/webhooks, admin registration management, confirmation emails, and hotel booking are implemented and verified locally. |
-| 3 - Store & Add-ons | Verified complete | Product catalog, DB-backed unified cart, storefront, vouchers/comps, store checkout fee handling, inventory fulfillment, and refunds are implemented and verified locally. |
-| 4 - Volunteers & Vendors | Verified complete | Volunteer departments/form builder, applications, approvals, shift scheduling/assignment, vendor applications, booth configuration, assistants, and vendor booth payment are implemented and verified locally. |
-| 5 - Advanced Features | Verified complete | Badge designer, badge queue/rendering, WebUSB/PDF print support, staff/cashier/express check-in with offline service worker, transfers, raffles, custom email templates, and staff notes are implemented and verified locally. |
-| 6 - SaaS Layer | Verified complete | Usage/billing dashboard, read-only fee reconciliation job, custom domains, public REST API, API key management, outbound webhooks, embedded docs, and event analytics are implemented and verified locally. |
-| 7 - Launch | In progress | The complete light-only “Operational Calm” UI/UX rebuild now covers the organizer shell, event operations, branding, public portal, registration, checkout, marketing, auth, docs, and specialist event-day surfaces without changing routes or backend contracts. Sentry wiring, rate limiting, load-test tooling, launch audit docs, DB indexes, critical-path/accessibility E2E coverage, functional organizer settings, and platform-controlled Stripe/SePay checkout and settlement operations remain implemented and locally verified. `npm audit --audit-level=moderate` is clean after a package-level PostCSS override for Next's internal dependency. Docker-backed k6 smoke, reduced production diagnostics, and the existing 500-registration/50-check-in Phase 7 load evidence pass. Not complete: real beta conventions are not onboarded; the rebuilt interface is not externally deployed/live; production Sentry env, real SePay Sandbox credentials/simulations, and physical screen-reader evidence are still missing. |
+| 1 - Core Infrastructure | Audit reopened | Core features exist, but organization overview/members/Stripe pages lack tenant guards and action authorization is not consistently resource-derived. |
+| 2 - Registration & Hotel | Audit reopened | Core flows exist, but cross-tenant single-record mutations and VND/admin payment correctness require remediation. |
+| 3 - Store & Add-ons | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained product uploads require remediation. |
+| 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
+| 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
+| 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but fee reports mix USD/VND and production rate limits are process-local. |
+| 7 - Launch | Blocked | Operational Calm and Stripe/SePay happy paths remain implemented; 95/95 artifacts, 41/41 models, build, 24/24 unit tests, 13/13 E2E tests, and dependency audit pass. The July 13 full-system audit found blocking tenant-access, unsigned Stripe webhook, mixed-currency, VND cashier/editor, payment-attempt locking, and upload-control findings. External beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains incomplete. |
 
-Legend: Not started - In progress - Verified complete
+Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-13 - Phase 7, plan reconciliation and full-system audit
+- Updated planning:
+  - Replaced the stale duplicated monolithic plan with a maintained architecture/status index pointing to the canonical split phase files.
+  - Reconciled the complete Operational Calm redesign, tenant-safe `(convention)/[orgSlug]` route contract, provider-neutral Stripe/SePay checkout, 41-model schema, scoped event-day PWA behavior, and current launch gates across `docs/plan/`.
+  - Verified 95/95 literal `[NEW]` artifact paths and 41/41 maintained Prisma models exist.
+  - Committed the planning update as `7bef1e0` (`docs(plan): reconcile ui and payment architecture`).
+- Audited:
+  - Recorded the complete evidence and remediation boundary in `docs/launch/full-system-audit-2026-07-13.md`.
+  - Reopened the prior clean security claim: three organization pages disclose cross-tenant data, and many single-record actions authorize a submitted organization before mutating an unscoped foreign UUID.
+  - Found the Stripe webhook fails open when its secret/signature is absent; launch readiness does not validate Stripe/SePay/checkout secrets.
+  - Found organization billing/reconciliation mixes USD cents with VND whole đồng, VND organizer editors/cashier use USD conversions, and active payment-attempt locking is not atomic.
+  - Found unbounded/type-unrestricted store/vendor uploads, badge PDF/ZPL/WebUSB output not wired to the UI, and no recipient accept/decline transfer workflow.
+  - Noted process-local rate limiting and the unimplemented Server-Sent Events architecture promise as follow-up decisions.
+- Verified:
+  - `npm run type-check`, `npm run lint`, `npm run db:validate`, and `npm run build` passed; build retained the known BullMQ dynamic-import warning.
+  - `npm run test` passed 24/24 web unit tests; DB/email/worker still have no test files.
+  - `npm run test:e2e` passed 13/13 Chromium tests.
+  - `npm audit --audit-level=moderate` passed with 0 vulnerabilities.
+  - A fresh k6 smoke rerun was not authorized because local k6 is absent and the Docker fallback would inject local test credentials into a public third-party container. Prior July 13 smoke evidence remains recorded.
+  - `npm run check:launch` failed as expected for missing Sentry values, beta evidence, physical screen-reader evidence, and live URL; the corrected security audit is now an additional blocker.
+- Remaining issues / blockers:
+  - Do not deploy. Remediate the P0 tenant authorization and fail-open Stripe webhook findings first, then the financial/payment/upload findings, and add regression tests before repeating the audit.
+  - Complete badge printing and recipient transfers before claiming the entire planned product is fulfilled.
+  - External Phase 7 blockers remain: two beta conventions, live verification, production Sentry, real SePay Sandbox evidence, and physical NVDA/VoiceOver evidence.
+- Next session should:
+  - Start with `SEC-01` through `SEC-03` in the full-system audit: add organization route guards, centralize resource-derived tenant authorization across actions, make Stripe signature verification fail closed, and add cross-tenant/unsigned-webhook tests. Do not deploy before those gates pass.
 
 ### 2026-07-13 - Phase 7, create-event navigation crash
 - Diagnosed:
@@ -1170,10 +1197,10 @@ Legend: Not started - In progress - Verified complete
 ## Blockers / open questions
 
 - No Phase 0 blockers remain.
-- No Phase 1 blockers remain.
-- No Phase 2 blockers remain.
-- No Phase 3 blockers remain.
-- No Phase 4 blockers remain.
-- No Phase 5 blockers remain.
-- No Phase 6 blockers remain.
-- Phase 7 remains in progress until beta-convention evidence, live marketing verification, production Sentry env, and physical screen-reader pass are complete.
+- Phase 1 is reopened by organization-route and cross-tenant authorization findings.
+- Phase 2 is reopened by tenant-scope and VND/payment correctness findings.
+- Phase 3 is reopened by tenant-scope and product-upload findings.
+- Phase 4 is reopened by tenant-scope and vendor-upload findings.
+- Phase 5 is reopened by cashier, badge-printing, and recipient-transfer findings.
+- Phase 6 is reopened by mixed-currency reporting and process-local production rate limiting.
+- Phase 7 is blocked by the full-system audit plus beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.
