@@ -2,10 +2,17 @@
 
 import { auth } from "@/lib/auth";
 import { badgeQueue } from "@/lib/badge-queue";
-import { requireRegistrationAccess } from "@/lib/dashboard-access";
+import {
+  requireBadgeAccess,
+  requireBadgeTemplateAccess,
+  requireEventAccess as requireStoredEventAccess,
+  requireRegistrationAccess,
+  requireRegistrationTypeAccess
+} from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
-import { dollarsToCents } from "@/lib/registration/pricing";
+import { parseMoney } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -58,9 +65,13 @@ async function requireEventAccess(orgId: string) {
   return session.user.id;
 }
 
-async function findOrCreateUser(email: string, name: string) {
+async function findOrCreateUser(
+  email: string,
+  name: string,
+  client: Pick<Prisma.TransactionClient, "user"> = prisma
+) {
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({
+  const existing = await client.user.findUnique({
     where: {
       email: normalizedEmail
     }
@@ -68,7 +79,7 @@ async function findOrCreateUser(email: string, name: string) {
 
   if (existing) {
     if (!existing.name && name) {
-      return prisma.user.update({
+      return client.user.update({
         where: {
           id: existing.id
         },
@@ -81,7 +92,7 @@ async function findOrCreateUser(email: string, name: string) {
     return existing;
   }
 
-  return prisma.user.create({
+  return client.user.create({
     data: {
       email: normalizedEmail,
       name
@@ -111,7 +122,6 @@ function badgeBarcode(registrationId: string) {
 export async function saveBadgeTemplate(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       templateId: z.string().uuid().optional(),
       name: z.string().trim().min(1),
@@ -119,7 +129,6 @@ export async function saveBadgeTemplate(formData: FormData) {
       defaultTypeIds: z.array(z.string().uuid())
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       templateId: formData.get("templateId") || undefined,
       name: formData.get("name"),
@@ -134,7 +143,24 @@ export async function saveBadgeTemplate(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid badge template.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
+  const authorized = parsed.data.templateId
+    ? await requireBadgeTemplateAccess(parsed.data.templateId)
+    : await requireStoredEventAccess(parsed.data.eventId);
+  const event = authorized.event;
+  const defaultTypeIds = [...new Set(parsed.data.defaultTypeIds)];
+  const validDefaultTypes = await prisma.registrationType.count({
+    where: {
+      id: {
+        in: defaultTypeIds
+      },
+      orgId: event.orgId,
+      eventId: event.id
+    }
+  });
+
+  if (validDefaultTypes !== defaultTypeIds.length) {
+    throw new Error("One or more badge defaults do not belong to this event.");
+  }
 
   const dimensions = {
     width: parsed.data.layout.width,
@@ -142,71 +168,78 @@ export async function saveBadgeTemplate(formData: FormData) {
     units: "pt"
   };
 
-  const template = parsed.data.templateId
-    ? await prisma.badgeTemplate.update({
-        where: {
-          id: parsed.data.templateId
-        },
-        data: {
-          name: parsed.data.name,
-          layout: parsed.data.layout as Prisma.InputJsonValue,
-          dimensions
-        }
-      })
-    : await prisma.badgeTemplate.create({
-        data: {
-          orgId: parsed.data.orgId,
-          eventId: parsed.data.eventId,
-          name: parsed.data.name,
-          layout: parsed.data.layout as Prisma.InputJsonValue,
-          dimensions
-        }
-      });
+  await prisma.$transaction(async (tx) => {
+    const template = parsed.data.templateId
+      ? await tx.badgeTemplate.update({
+          where: {
+            id: parsed.data.templateId
+          },
+          data: {
+            name: parsed.data.name,
+            layout: parsed.data.layout as Prisma.InputJsonValue,
+            dimensions
+          }
+        })
+      : await tx.badgeTemplate.create({
+          data: {
+            orgId: event.orgId,
+            eventId: event.id,
+            name: parsed.data.name,
+            layout: parsed.data.layout as Prisma.InputJsonValue,
+            dimensions
+          }
+        });
 
-  const event = await prisma.event.findUniqueOrThrow({
-    where: {
-      id: parsed.data.eventId
+    const storedEvent = await tx.event.findUniqueOrThrow({
+      where: {
+        id: event.id
+      }
+    });
+    const settings = parseEventSettings(storedEvent.settings);
+    const badgeDefaults = {
+      ...(typeof settings.badgeDefaults === "object" && settings.badgeDefaults && !Array.isArray(settings.badgeDefaults)
+        ? (settings.badgeDefaults as Record<string, string>)
+        : {})
+    };
+
+    for (const typeId of defaultTypeIds) {
+      badgeDefaults[typeId] = template.id;
     }
-  });
-  const settings = parseEventSettings(event.settings);
-  const badgeDefaults = {
-    ...(typeof settings.badgeDefaults === "object" && settings.badgeDefaults && !Array.isArray(settings.badgeDefaults)
-      ? (settings.badgeDefaults as Record<string, string>)
-      : {})
-  };
 
-  for (const typeId of parsed.data.defaultTypeIds) {
-    badgeDefaults[typeId] = template.id;
-  }
-
-  await prisma.event.update({
-    where: {
-      id: parsed.data.eventId
-    },
-    data: {
-      settings: {
-        ...settings,
-        defaultBadgeTemplateId: template.id,
-        badgeDefaults
-      } as Prisma.InputJsonValue
-    }
+    await tx.event.update({
+      where: {
+        id: event.id
+      },
+      data: {
+        settings: {
+          ...settings,
+          defaultBadgeTemplateId: template.id,
+          badgeDefaults
+        } as Prisma.InputJsonValue
+      }
+    });
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/badges`);
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/badges/designer`);
+  revalidatePath(`/dashboard/events/${event.id}/badges`);
+  revalidatePath(`/dashboard/events/${event.id}/badges/designer`);
 }
 
 export async function generateBadgesForEvent(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const templateId = z.string().uuid().parse(formData.get("templateId"));
+  const [{ event }, { badgeTemplate }] = await Promise.all([
+    requireStoredEventAccess(eventId),
+    requireBadgeTemplateAccess(templateId)
+  ]);
 
-  await requireEventAccess(orgId);
+  if (badgeTemplate.eventId !== event.id || badgeTemplate.orgId !== event.orgId) {
+    throw new Error("Badge template does not belong to this event.");
+  }
 
   const registrations = await prisma.registration.findMany({
     where: {
-      orgId,
-      eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       status: {
         in: ["CONFIRMED", "CHECKED_IN"]
       }
@@ -219,64 +252,104 @@ export async function generateBadgesForEvent(formData: FormData) {
     }
   });
 
-  for (const registration of registrations) {
-    if (registration.badges.length > 0) {
-      continue;
-    }
+  await prisma.$transaction(
+    registrations
+      .filter((registration) => registration.badges.length === 0)
+      .map((registration) =>
+        prisma.badge.create({
+          data: {
+            orgId: event.orgId,
+            registrationId: registration.id,
+            templateId: badgeTemplate.id,
+            barcodeData: badgeBarcode(registration.id)
+          }
+        })
+      )
+  );
 
-    await prisma.badge.create({
-      data: {
-        orgId,
-        registrationId: registration.id,
-        templateId,
-        barcodeData: badgeBarcode(registration.id)
+  const badges = await prisma.badge.findMany({
+    where: {
+      orgId: event.orgId,
+      templateId: badgeTemplate.id,
+      registration: {
+        eventId: event.id
       }
-    });
-  }
+    },
+    select: {
+      id: true
+    }
+  });
 
   try {
     await badgeQueue.add("generate-badges", {
-      orgId,
-      eventId,
-      templateId
+      orgId: event.orgId,
+      eventId: event.id,
+      templateId: badgeTemplate.id,
+      badgeIds: badges.map((badge) => badge.id)
     });
   } catch {
     // Badge rows are created synchronously; the worker render job can be retried from the queue once Redis is available.
   }
 
-  revalidatePath(`/dashboard/events/${eventId}/badges`);
+  revalidatePath(`/dashboard/events/${event.id}/badges`);
 }
 
-export async function reprintBadge(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
+export async function queueBadgeRender(formData: FormData) {
   const badgeId = z.string().uuid().parse(formData.get("badgeId"));
+  const { badge, event } = await requireBadgeAccess(badgeId);
 
-  await requireEventAccess(orgId);
+  try {
+    await badgeQueue.add("generate-badges", {
+      orgId: event.orgId,
+      eventId: event.id,
+      templateId: badge.templateId,
+      badgeIds: [badge.id]
+    });
+  } catch {
+    // The stored badge remains unmodified so operators can safely retry when Redis is available.
+  }
+
+  revalidatePath(`/dashboard/events/${event.id}/badges`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in`);
+}
+
+export async function confirmBadgePrinted(formData: FormData) {
+  const badgeId = z.string().uuid().parse(formData.get("badgeId"));
+  const { badge, event } = await requireBadgeAccess(badgeId);
+
+  if (!badge.generatedAt || (!badge.pdfUrl && !badge.zplData)) {
+    throw new Error("Generate badge output before confirming a print.");
+  }
 
   await prisma.badge.update({
     where: {
-      id: badgeId
+      id: badge.id
     },
     data: {
       printedAt: new Date()
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/badges`);
-  revalidatePath(`/dashboard/events/${eventId}/check-in`);
+  revalidatePath(`/dashboard/events/${event.id}/badges`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in/express`);
 }
 
 export async function checkInRegistration(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
+  const { registration, event } = await requireRegistrationAccess(registrationId);
 
-  await requireEventAccess(orgId);
+  if (registration.status === "CANCELLED" || registration.status === "TRANSFERRED") {
+    throw new Error("This registration is not eligible for check-in.");
+  }
+
+  if (registration.status === "CHECKED_IN") {
+    return;
+  }
 
   await prisma.registration.update({
     where: {
-      id: registrationId
+      id: registration.id
     },
     data: {
       status: "CHECKED_IN",
@@ -285,49 +358,59 @@ export async function checkInRegistration(formData: FormData) {
   });
 
   await queueWebhookEvent({
-    orgId,
-    eventId,
+    orgId: event.orgId,
+    eventId: event.id,
     type: "registration.checked_in",
     data: {
-      registrationId
+      registrationId: registration.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/check-in`);
-  revalidatePath(`/dashboard/events/${eventId}/check-in/express`);
-  revalidatePath(`/dashboard/events/${eventId}/registrations`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in/express`);
+  revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
 
 export async function createWalkInRegistration(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       typeId: z.string().uuid(),
       attendeeName: z.string().trim().min(1),
       attendeeEmail: z.string().email(),
-      paymentMode: z.enum(["cash", "card"]),
-      amount: z.coerce.number().min(0)
+      paymentMode: z.enum(["cash", "card"])
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       typeId: formData.get("typeId"),
       attendeeName: formData.get("attendeeName"),
       attendeeEmail: formData.get("attendeeEmail"),
-      paymentMode: formData.get("paymentMode"),
-      amount: dollarsToCents(formData.get("amount"))
+      paymentMode: formData.get("paymentMode")
     });
 
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid walk-in registration.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const attendee = await findOrCreateUser(parsed.data.attendeeEmail, parsed.data.attendeeName);
+  const [{ event: authorizedEvent }, { registrationType }] = await Promise.all([
+    requireStoredEventAccess(parsed.data.eventId),
+    requireRegistrationTypeAccess(parsed.data.typeId)
+  ]);
+
+  if (registrationType.eventId !== authorizedEvent.id || registrationType.event.orgId !== authorizedEvent.orgId) {
+    throw new Error("Registration type does not belong to this event.");
+  }
+
+  const amount = parseMoney(formData.get("amount"), authorizedEvent.currency);
+  const platformFee =
+    amount > 0
+      ? authorizedEvent.currency === "VND"
+        ? (await getSePaySettings()).registrationFeeVnd
+        : REGISTRATION_PLATFORM_FEE_CENTS
+      : 0;
   const event = await prisma.event.findUniqueOrThrow({
     where: {
-      id: parsed.data.eventId
+      id: authorizedEvent.id
     },
     include: {
       badgeTemplates: {
@@ -337,81 +420,108 @@ export async function createWalkInRegistration(formData: FormData) {
       }
     }
   });
-  const template = event.badgeTemplates[0];
+  const settings = parseEventSettings(event.settings);
+  const badgeDefaults =
+    typeof settings.badgeDefaults === "object" && settings.badgeDefaults && !Array.isArray(settings.badgeDefaults)
+      ? (settings.badgeDefaults as Record<string, string>)
+      : {};
+  const preferredTemplateId = badgeDefaults[registrationType.id] ??
+    (typeof settings.defaultBadgeTemplateId === "string" ? settings.defaultBadgeTemplateId : undefined);
+  const template = event.badgeTemplates.find((candidate) => candidate.id === preferredTemplateId) ?? event.badgeTemplates[0];
+  const checkedInAt = new Date();
+  const result = await prisma.$transaction(async (tx) => {
+    const attendee = await findOrCreateUser(parsed.data.attendeeEmail, parsed.data.attendeeName, tx);
+    const registration = await tx.registration.create({
+      data: {
+        orgId: event.orgId,
+        eventId: event.id,
+        userId: attendee.id,
+        typeId: registrationType.id,
+        status: "CHECKED_IN",
+        checkedInAt
+      }
+    });
 
-  const registration = await prisma.registration.create({
-    data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
-      userId: attendee.id,
-      typeId: parsed.data.typeId,
-      status: "CHECKED_IN",
-      checkedInAt: new Date()
-    }
-  });
-
-  await queueWebhookEvent({
-    orgId: parsed.data.orgId,
-    eventId: parsed.data.eventId,
-    type: "registration.created",
-    data: {
-      registrationId: registration.id,
-      userId: attendee.id,
-      typeId: parsed.data.typeId,
-      status: registration.status,
-      source: "cashier"
-    }
-  });
-
-  await queueWebhookEvent({
-    orgId: parsed.data.orgId,
-    eventId: parsed.data.eventId,
-    type: "registration.checked_in",
-    data: {
-      registrationId: registration.id,
-      source: "cashier"
-    }
-  });
-
-  await prisma.order.create({
-    data: {
-      orgId: parsed.data.orgId,
-      userId: attendee.id,
-      eventId: parsed.data.eventId,
-      total: parsed.data.amount,
-      platformFee: parsed.data.amount > 0 ? REGISTRATION_PLATFORM_FEE_CENTS : 0,
-      status: parsed.data.paymentMode === "cash" ? "PAID" : "PENDING",
-      items: {
-        create: {
-          orgId: parsed.data.orgId,
-          itemType: "REGISTRATION",
-          refId: registration.id,
-          registrationId: registration.id,
-          unitPrice: parsed.data.amount,
-          quantity: 1,
-          metadata: {
-            paymentMode: parsed.data.paymentMode,
-            source: "cashier"
+    const order = await tx.order.create({
+      data: {
+        orgId: event.orgId,
+        userId: attendee.id,
+        eventId: event.id,
+        total: amount,
+        platformFee,
+        currency: event.currency,
+        status: "PAID",
+        items: {
+          create: {
+            orgId: event.orgId,
+            itemType: "REGISTRATION",
+            refId: registration.id,
+            registrationId: registration.id,
+            unitPrice: amount,
+            quantity: 1,
+            metadata: {
+              paymentMode: parsed.data.paymentMode,
+              paymentConfirmedAt: checkedInAt.toISOString(),
+              source: "cashier"
+            }
           }
         }
       }
+    });
+
+    const badge = template
+      ? await tx.badge.create({
+          data: {
+            orgId: event.orgId,
+            registrationId: registration.id,
+            templateId: template.id,
+            barcodeData: badgeBarcode(registration.id)
+          }
+        })
+      : null;
+
+    return { attendee, badge, order, registration };
+  });
+
+  await queueWebhookEvent({
+    orgId: event.orgId,
+    eventId: event.id,
+    type: "registration.created",
+    data: {
+      registrationId: result.registration.id,
+      userId: result.attendee.id,
+      typeId: registrationType.id,
+      status: result.registration.status,
+      source: "cashier"
     }
   });
 
-  if (template) {
-    await prisma.badge.create({
-      data: {
-        orgId: parsed.data.orgId,
-        registrationId: registration.id,
-        templateId: template.id,
-        barcodeData: badgeBarcode(registration.id),
-        printedAt: new Date()
-      }
-    });
+  await queueWebhookEvent({
+    orgId: event.orgId,
+    eventId: event.id,
+    type: "registration.checked_in",
+    data: {
+      registrationId: result.registration.id,
+      source: "cashier"
+    }
+  });
+
+  if (result.badge) {
+    try {
+      await badgeQueue.add("generate-badges", {
+        orgId: event.orgId,
+        eventId: event.id,
+        templateId: result.badge.templateId,
+        badgeIds: [result.badge.id]
+      });
+    } catch {
+      // Registration and payment stay committed; staff can retry rendering from the badge queue.
+    }
   }
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/check-in`);
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/check-in/cashier`);
+  revalidatePath(`/dashboard/events/${event.id}/badges`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in`);
+  revalidatePath(`/dashboard/events/${event.id}/check-in/cashier`);
 }
 
 export async function requestRegistrationTransfer(formData: FormData) {

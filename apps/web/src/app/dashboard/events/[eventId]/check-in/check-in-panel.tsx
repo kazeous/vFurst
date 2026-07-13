@@ -1,6 +1,7 @@
 "use client";
 
-import { checkInRegistration, reprintBadge } from "@/actions/phase5-actions";
+import { checkInRegistration } from "@/actions/phase5-actions";
+import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { useServiceWorker } from "@/hooks/use-service-worker";
 import { Button } from "@/components/ui/button";
 import { BrowserQRCodeReader } from "@zxing/browser";
@@ -8,8 +9,6 @@ import { useMemo, useState } from "react";
 
 type CheckInRow = {
   id: string;
-  orgId: string;
-  eventId: string;
   attendee: string;
   email: string;
   type: string;
@@ -20,6 +19,9 @@ type CheckInRow = {
   badge: {
     id: string;
     barcodeData: string;
+    pdfUrl: string | null;
+    zplData: string | null;
+    generatedAt: string | null;
     printedAt: string | null;
   } | null;
   addOns: string[];
@@ -111,24 +113,31 @@ export function CheckInPanel({
                   {row.email} - {row.type} - {row.status}
                 </p>
                 <p className="vf-muted">
-                  Payment {row.paid ? "paid" : "unpaid"} - Badge {row.badge?.printedAt ? "printed" : row.badge ? "queued" : "not generated"}
+                  Payment {row.paid ? "paid" : "unpaid"} - Badge{" "}
+                  {row.badge?.printedAt
+                    ? "printed"
+                    : row.badge?.generatedAt
+                      ? "output ready"
+                      : row.badge
+                        ? "render queued"
+                        : "not generated"}
                 </p>
                 {row.addOns.length > 0 ? <p className="vf-muted">Add-ons: {row.addOns.join(", ")}</p> : null}
               </div>
               <div className="vf-inline-forms">
                 <form action={checkInRegistration}>
-                  <input type="hidden" name="orgId" value={row.orgId} />
-                  <input type="hidden" name="eventId" value={row.eventId} />
                   <input type="hidden" name="registrationId" value={row.id} />
                   <Button label={row.checkedInAt ? "Checked in" : "Check in"} type="submit" variant={row.checkedInAt ? "secondary" : "primary"} />
                 </form>
                 {row.badge ? (
-                  <form action={reprintBadge}>
-                    <input type="hidden" name="orgId" value={row.orgId} />
-                    <input type="hidden" name="eventId" value={row.eventId} />
-                    <input type="hidden" name="badgeId" value={row.badge.id} />
-                    <Button label="Reprint badge" type="submit" />
-                  </form>
+                  <BadgePrintControls
+                    badgeId={row.badge.id}
+                    label={row.attendee}
+                    pdfUrl={row.badge.pdfUrl}
+                    zplData={row.badge.zplData}
+                    generatedAt={row.badge.generatedAt}
+                    printedAt={row.badge.printedAt}
+                  />
                 ) : null}
               </div>
             </article>

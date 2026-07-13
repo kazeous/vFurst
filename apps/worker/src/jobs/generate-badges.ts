@@ -145,13 +145,21 @@ async function loadBadges(data: GenerateBadgesJob) {
     where: {
       orgId: data.orgId,
       templateId: data.templateId,
+      template: {
+        orgId: data.orgId,
+        eventId: data.eventId
+      },
       id: data.badgeIds
         ? {
             in: data.badgeIds
           }
         : undefined,
       registration: {
-        eventId: data.eventId
+        orgId: data.orgId,
+        eventId: data.eventId,
+        event: {
+          orgId: data.orgId
+        }
       }
     },
     include: {
@@ -240,17 +248,25 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
       zpl: toZpl(layout, badge)
     });
 
-    await prisma.badge.update({
-      where: {
-        id: badge.id
-      },
-      data: {
-        barcodeData: badge.barcodeData || `VF-${badge.registrationId.slice(0, 8).toUpperCase()}`
-      }
-    });
   }
 
   const pdfUrl = await uploadPdf(job.data.orgId, job.data.eventId, await pdf.save());
+  const generatedAt = new Date();
+
+  await prisma.$transaction(
+    zplOutput.map((output) =>
+      prisma.badge.update({
+        where: {
+          id: output.badgeId
+        },
+        data: {
+          generatedAt,
+          pdfUrl,
+          zplData: output.zpl
+        }
+      })
+    )
+  );
 
   return {
     generated: badges.length,

@@ -72,7 +72,6 @@ export default async function BadgeDesignerPage({ params }: { params: Promise<{ 
       </header>
 
       <form id="badge-template-form" action={saveBadgeTemplate} className="vf-section">
-        <input type="hidden" name="orgId" value={event.orgId} />
         <input type="hidden" name="eventId" value={event.id} />
         <div className="vf-form-grid">
           {event.registrationTypes.map((type) => (

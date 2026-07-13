@@ -19,17 +19,40 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks/bookings, departments, staff roles/assignments, volunteer applications, and vendor applications. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
-| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, and hotel block/booking mutations now derive tenant access from stored resources and pass cross-tenant regression tests. Remaining VND/admin payment correctness still requires remediation. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks/bookings, departments, staff roles/assignments, volunteer applications, vendor applications, badge templates, and badges. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
+| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, VND product inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
-| 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
+| 5 - Advanced Features | Audit reopened | Badge render artifacts are now persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, and cashier payment/currency behavior is remediated. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order, hotel, and staff/volunteer/vendor authorization units now pass the full 37-test E2E suite and 43 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order, hotel, staff/volunteer/vendor, and badge/check-in authorization units now pass the full 41-test E2E suite, 43 web unit tests, and one worker artifact test, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, secure badge/check-in resources and expose real print artifacts
+- Remediated the badge/check-in `SEC-02`, cashier `FIN-02`, and reachable-output portion of `FUNC-01`:
+  - Added shared badge-template and badge guards that derive organization/event access through stored relationships and reject inconsistent badge, template, registration, type, or event tenant links. Template save, batch generation, per-badge rendering, print confirmation, and check-in no longer trust submitted organization IDs.
+  - Badge template defaults accept only registration types stored under the same event. Batch generation requires the stored template and event to match, and worker jobs filter through consistent organization/template/registration/event relationships before rendering or persisting anything.
+  - Added persisted `pdfUrl`, `zplData`, and `generatedAt` badge fields. The worker now stores its uploaded PDF URL and per-badge ZPL output in the database, with unit coverage proving those artifacts are written after rendering.
+  - Added reusable dashboard print controls: Chrome/Edge can send stored ZPL through WebUSB; every supported browser can open the generated PDF; `printedAt` is written only after direct printer success or an explicit "Confirm PDF printed" action. Removed the old reprint action that merely wrote a timestamp without printer output.
+  - Staff, cashier, and express check-in surfaces show render/print state and use the same output controls. Express lookup no longer matches an empty scan, and check-in rejects cancelled/transferred registrations while avoiding duplicate check-in webhooks.
+  - Rebuilt walk-in cashier as one database transaction covering attendee, checked-in registration, paid order/order item, and unprinted badge. Event/type/tenant/currency are stored-resource-derived, USD uses cents, VND uses whole dong and the configured VND registration fee, and both cash and external-card-terminal options explicitly represent already-collected payment rather than leaving a checked-in attendee on a pending card order.
+  - Applied the additive badge artifact fields to the local PostgreSQL schema with Prisma DB push.
+- Added regression evidence:
+  - Added Org A/Org B browser fixtures for foreign registration check-in, foreign badge-template save and batch generation, foreign print confirmation, foreign cashier tier injection, successful local PDF confirmation, and a valid VND external-card-terminal walk-in whose order is paid/whole-dong while the badge remains unprinted.
+  - Added a worker unit test that verifies tenant-consistent loading, PDF upload URL persistence, per-badge ZPL persistence, and generated timestamp storage.
+- Verified:
+  - Focused badge/check-in E2E passed 4/4 in development mode.
+  - Full production-mode Chromium E2E passed 41/41 with four workers; expected server logs record the deliberately rejected cross-tenant mutation attempts.
+  - Root tests passed 43/43 web unit tests plus 1/1 worker test; repository-wide type-check, lint, Prisma validation, `git diff --check`, and production build passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+- Remaining issues / blockers:
+  - `SEC-02` remains open for raffles/vouchers, API keys/webhooks, exports, and other unremediated upload/action families. `SEC-03` unsigned Stripe webhook handling also remains open; do not deploy.
+  - Badge image layers still render placeholders, recipient transfer accept/decline and physical WebUSB/PDF printer evidence remain incomplete, and no deployment was attempted.
+  - Invitations/lifecycle, `/platform` surface separation, domain/payment boundaries, mixed-currency reporting, production rate limiting, and the 42-model target schema remain later logical units.
+- Next session should:
+  - Inventory and remediate raffles/vouchers as the next stored-resource authorization unit. Keep API keys/webhooks, exports, image-layer rendering, and recipient transfer acceptance as separate logical units.
 
 ### 2026-07-14 - Phase 7, derive staff, volunteer, and vendor authorization from stored resources
 - Remediated the staff/vendor `SEC-02`, vendor-upload `SEC-04`, and related `FIN-02` family:

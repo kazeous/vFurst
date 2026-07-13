@@ -47,13 +47,19 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
       <ExpressKiosk
         rows={event.registrations.map((registration) => ({
           id: registration.id,
-          orgId: registration.orgId,
-          eventId: registration.eventId,
           attendee: registration.user.name ?? registration.user.email,
           email: registration.user.email,
           code: registration.badges[0]?.barcodeData ?? registration.badgeNumber ?? registration.id,
           status: registration.status,
-          badgePrinted: Boolean(registration.badges[0]?.printedAt)
+          badge: registration.badges[0]
+            ? {
+                id: registration.badges[0].id,
+                pdfUrl: registration.badges[0].pdfUrl,
+                zplData: registration.badges[0].zplData,
+                generatedAt: registration.badges[0].generatedAt?.toISOString() ?? null,
+                printedAt: registration.badges[0].printedAt?.toISOString() ?? null
+              }
+            : null
         }))}
       />
     </div>

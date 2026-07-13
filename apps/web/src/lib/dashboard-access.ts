@@ -57,6 +57,7 @@ async function getRegistrationTypeTenant(typeId: string) {
     },
     select: {
       id: true,
+      orgId: true,
       eventId: true,
       event: {
         select: {
@@ -99,15 +100,82 @@ async function getRegistrationTenant(registrationId: string) {
     },
     select: {
       id: true,
+      orgId: true,
       eventId: true,
       typeId: true,
       userId: true,
       status: true,
+      type: {
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true
+        }
+      },
       event: {
         select: {
           id: true,
           orgId: true,
           currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getBadgeTemplateTenant(templateId: string) {
+  return prisma.badgeTemplate.findUnique({
+    where: {
+      id: templateId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getBadgeTenant(badgeId: string) {
+  return prisma.badge.findUnique({
+    where: {
+      id: badgeId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      registrationId: true,
+      templateId: true,
+      pdfUrl: true,
+      zplData: true,
+      generatedAt: true,
+      printedAt: true,
+      registration: {
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true,
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      },
+      template: {
+        select: {
+          id: true,
+          orgId: true,
+          eventId: true
         }
       }
     }
@@ -454,7 +522,11 @@ export async function requireRegistrationTypeAccess(typeId: string, allowedRoles
   const userId = await requireDashboardUser();
   const registrationType = await getRegistrationTypeTenant(typeId);
 
-  if (!registrationType) {
+  if (
+    !registrationType ||
+    registrationType.orgId !== registrationType.event.orgId ||
+    registrationType.eventId !== registrationType.event.id
+  ) {
     throw new Error("Registration type not found.");
   }
 
@@ -499,7 +571,14 @@ export async function requireRegistrationAccess(registrationId: string, allowedR
   const userId = await requireDashboardUser();
   const registration = await getRegistrationTenant(registrationId);
 
-  if (!registration) {
+  if (
+    !registration ||
+    registration.orgId !== registration.event.orgId ||
+    registration.eventId !== registration.event.id ||
+    registration.type.orgId !== registration.event.orgId ||
+    registration.type.eventId !== registration.event.id ||
+    registration.typeId !== registration.type.id
+  ) {
     throw new Error("Registration not found.");
   }
 
@@ -514,6 +593,65 @@ export async function requireRegistrationAccess(registrationId: string, allowedR
     membership,
     registration,
     event: registration.event
+  };
+}
+
+export async function requireBadgeTemplateAccess(templateId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const badgeTemplate = await getBadgeTemplateTenant(templateId);
+
+  if (
+    !badgeTemplate ||
+    badgeTemplate.orgId !== badgeTemplate.event.orgId ||
+    badgeTemplate.eventId !== badgeTemplate.event.id
+  ) {
+    throw new Error("Badge template not found.");
+  }
+
+  const event = badgeTemplate.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this badge template.");
+  }
+
+  return {
+    userId,
+    membership,
+    badgeTemplate,
+    event
+  };
+}
+
+export async function requireBadgeAccess(badgeId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const badge = await getBadgeTenant(badgeId);
+
+  if (
+    !badge ||
+    badge.orgId !== badge.registration.orgId ||
+    badge.orgId !== badge.template.orgId ||
+    badge.registration.orgId !== badge.registration.event.orgId ||
+    badge.registration.eventId !== badge.registration.event.id ||
+    badge.template.eventId !== badge.registration.event.id
+  ) {
+    throw new Error("Badge not found.");
+  }
+
+  const event = badge.registration.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this badge.");
+  }
+
+  return {
+    userId,
+    membership,
+    badge,
+    registration: badge.registration,
+    badgeTemplate: badge.template,
+    event
   };
 }
 

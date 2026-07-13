@@ -101,6 +101,9 @@ const getCheckInData = unstable_cache(
             select: {
               id: true,
               barcodeData: true,
+              pdfUrl: true,
+              zplData: true,
+              generatedAt: true,
               printedAt: true
             }
           },
@@ -174,8 +177,6 @@ export default async function CheckInPage({
         totalCount={checkInData.totalRegistrations}
         rows={checkInData.registrations.map((registration) => ({
           id: registration.id,
-          orgId: registration.orgId,
-          eventId: registration.eventId,
           attendee: registration.user.name ?? registration.user.email,
           email: registration.user.email,
           type: registration.type.name,
@@ -187,6 +188,11 @@ export default async function CheckInPage({
             ? {
                 id: registration.badges[0].id,
                 barcodeData: registration.badges[0].barcodeData,
+                pdfUrl: registration.badges[0].pdfUrl,
+                zplData: registration.badges[0].zplData,
+                generatedAt: registration.badges[0].generatedAt
+                  ? new Date(registration.badges[0].generatedAt).toISOString()
+                  : null,
                 printedAt: registration.badges[0].printedAt ? new Date(registration.badges[0].printedAt).toISOString() : null
               }
             : null,

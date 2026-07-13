@@ -137,103 +137,103 @@ enum RaffleEntryMethod {
 }
 
 model User {
-  id                         String                 @id @default(uuid()) @db.Uuid
-  email                      String                 @unique
-  name                       String?
-  avatar                     String?
-  image                      String?
+  id                        String                  @id @default(uuid()) @db.Uuid
+  email                     String                  @unique
+  name                      String?
+  avatar                    String?
+  image                     String?
   emailVerified             DateTime?
-  passwordHash               String?
-  platformRole               PlatformRole           @default(USER)
-  createdAt                  DateTime               @default(now())
-  updatedAt                  DateTime               @updatedAt
-  accounts                   Account[]
-  attendeeNotes              AttendeeNote[]         @relation("AttendeeNoteAuthor")
-  authenticators             Authenticator[]
-  carts                      Cart[]
-  hotelBookings              HotelBooking[]
-  ledDepartments             Department[]           @relation("DepartmentLead")
-  orders                     Order[]
-  orgMemberships             OrgMember[]
-  raffleEntries              RaffleEntry[]
-  registrations              Registration[]
-  reviewedApplications       VolunteerApplication[] @relation("VolunteerApplicationReviewer")
-  sessions                   Session[]
-  staffAssignments           StaffAssignment[]
-  vendorApplications         VendorApplication[]
-  volunteerApplications      VolunteerApplication[]
-  paymentProviderUpdates     PaymentProviderConfig[] @relation("PaymentProviderUpdatedBy")
-  organizerPayoutsCreated    OrganizerPayout[]       @relation("OrganizerPayoutCreatedBy")
-  paymentRefundsCreated      PaymentRefund[]         @relation("PaymentRefundCreatedBy")
-  paymentExceptionsResolved  PaymentException[]      @relation("PaymentExceptionResolvedBy")
+  passwordHash              String?
+  platformRole              PlatformRole            @default(USER)
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  accounts                  Account[]
+  attendeeNotes             AttendeeNote[]          @relation("AttendeeNoteAuthor")
+  authenticators            Authenticator[]
+  carts                     Cart[]
+  hotelBookings             HotelBooking[]
+  ledDepartments            Department[]            @relation("DepartmentLead")
+  orders                    Order[]
+  orgMemberships            OrgMember[]
+  raffleEntries             RaffleEntry[]
+  registrations             Registration[]
+  reviewedApplications      VolunteerApplication[]  @relation("VolunteerApplicationReviewer")
+  sessions                  Session[]
+  staffAssignments          StaffAssignment[]
+  vendorApplications        VendorApplication[]
+  volunteerApplications     VolunteerApplication[]
+  paymentProviderUpdates    PaymentProviderConfig[] @relation("PaymentProviderUpdatedBy")
+  organizerPayoutsCreated   OrganizerPayout[]       @relation("OrganizerPayoutCreatedBy")
+  paymentRefundsCreated     PaymentRefund[]         @relation("PaymentRefundCreatedBy")
+  paymentExceptionsResolved PaymentException[]      @relation("PaymentExceptionResolvedBy")
 
   @@map("users")
 }
 
 model Organization {
-  id               String            @id @default(uuid()) @db.Uuid
-  name             String
-  slug             String            @unique
-  subdomain        String            @unique
-  logo             String?
-  contactEmail     String
-  customDomain     String?           @unique
-  emailProvider    EmailProviderType @default(SMTP)
-  emailSettings    Json              @default("{}")
-  payoutBankCode   String?
-  payoutAccountNumber String?
-  payoutAccountHolder String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  addOnDefinitions AddOnDefinition[]
-  apiKeys          ApiKey[]
-  attendeeNotes    AttendeeNote[]
-  badgeTemplates   BadgeTemplate[]
-  badges           Badge[]
-  cartItems        CartItem[]
-  carts            Cart[]
-  departments      Department[]
-  events           Event[]
-  hotelBlocks      HotelBlock[]
-  hotelBookings    HotelBooking[]
-  members          OrgMember[]
-  orderItems       OrderItem[]
-  orders           Order[]
-  raffleEntries    RaffleEntry[]
-  raffles          Raffle[]
-  registrationTypes RegistrationType[]
-  registrationAddOns RegistrationAddOn[]
-  registrations    Registration[]
-  staffAssignments StaffAssignment[]
-  staffRoles       StaffRole[]
-  storeProducts    StoreProduct[]
-  stripeConnect    StripeConnect?
-  vendorApplications VendorApplication[]
-  volunteerApplications VolunteerApplication[]
-  vouchers         Voucher[]
-  webhookEndpoints WebhookEndpoint[]
+  id                     String                 @id @default(uuid()) @db.Uuid
+  name                   String
+  slug                   String                 @unique
+  subdomain              String                 @unique
+  logo                   String?
+  contactEmail           String
+  customDomain           String?                @unique
+  emailProvider          EmailProviderType      @default(SMTP)
+  emailSettings          Json                   @default("{}")
+  payoutBankCode         String?
+  payoutAccountNumber    String?
+  payoutAccountHolder    String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  addOnDefinitions       AddOnDefinition[]
+  apiKeys                ApiKey[]
+  attendeeNotes          AttendeeNote[]
+  badgeTemplates         BadgeTemplate[]
+  badges                 Badge[]
+  cartItems              CartItem[]
+  carts                  Cart[]
+  departments            Department[]
+  events                 Event[]
+  hotelBlocks            HotelBlock[]
+  hotelBookings          HotelBooking[]
+  members                OrgMember[]
+  orderItems             OrderItem[]
+  orders                 Order[]
+  raffleEntries          RaffleEntry[]
+  raffles                Raffle[]
+  registrationTypes      RegistrationType[]
+  registrationAddOns     RegistrationAddOn[]
+  registrations          Registration[]
+  staffAssignments       StaffAssignment[]
+  staffRoles             StaffRole[]
+  storeProducts          StoreProduct[]
+  stripeConnect          StripeConnect?
+  vendorApplications     VendorApplication[]
+  volunteerApplications  VolunteerApplication[]
+  vouchers               Voucher[]
+  webhookEndpoints       WebhookEndpoint[]
   organizerLedgerEntries OrganizerLedgerEntry[]
-  organizerPayouts OrganizerPayout[]
+  organizerPayouts       OrganizerPayout[]
 
   @@map("organizations")
 }
 
 model Account {
-  id                String  @id @default(uuid()) @db.Uuid
-  userId            String  @db.Uuid
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?  @db.Text
   session_state     String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -307,32 +307,32 @@ model StripeConnect {
 }
 
 model Event {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  orgId              String                 @db.Uuid
-  name               String
-  slug               String
-  description        String?
-  startDate          DateTime
-  endDate            DateTime
-  venue              String?
-  status             EventStatus            @default(DRAFT)
-  currency           CurrencyCode            @default(USD)
-  settings           Json                   @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":1}")
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-  badgeTemplates     BadgeTemplate[]
-  carts              Cart[]
-  departments        Department[]
-  hotelBlocks        HotelBlock[]
-  orders             Order[]
-  org                Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  raffles            Raffle[]
-  registrationTypes  RegistrationType[]
-  registrations      Registration[]
-  storeProducts      StoreProduct[]
-  vendorApplications VendorApplication[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  orgId                 String                 @db.Uuid
+  name                  String
+  slug                  String
+  description           String?
+  startDate             DateTime
+  endDate               DateTime
+  venue                 String?
+  status                EventStatus            @default(DRAFT)
+  currency              CurrencyCode           @default(USD)
+  settings              Json                   @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":1}")
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  badgeTemplates        BadgeTemplate[]
+  carts                 Cart[]
+  departments           Department[]
+  hotelBlocks           HotelBlock[]
+  orders                Order[]
+  org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  raffles               Raffle[]
+  registrationTypes     RegistrationType[]
+  registrations         Registration[]
+  storeProducts         StoreProduct[]
+  vendorApplications    VendorApplication[]
   volunteerApplications VolunteerApplication[]
-  vouchers           Voucher[]
+  vouchers              Voucher[]
 
   @@unique([orgId, slug])
   @@index([orgId])
@@ -443,6 +443,9 @@ model Badge {
   templateId     String        @db.Uuid
   barcodeData    String        @unique
   nfcTag         String?       @unique
+  pdfUrl         String?       @db.Text
+  zplData        String?       @db.Text
+  generatedAt    DateTime?
   printedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -496,24 +499,24 @@ model Department {
 }
 
 model VolunteerApplication {
-  id            String                     @id @default(uuid()) @db.Uuid
-  orgId         String                     @db.Uuid
-  userId        String                     @db.Uuid
-  departmentId  String                     @db.Uuid
-  eventId       String                     @db.Uuid
-  formResponses Json                       @default("{}")
-  availability  Json                       @default("[]")
-  status        VolunteerApplicationStatus @default(PENDING)
-  reviewedById  String?                    @db.Uuid
-  reviewedAt    DateTime?
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
-  department    Department                 @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  event         Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  org           Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  reviewedBy    User?                      @relation("VolunteerApplicationReviewer", fields: [reviewedById], references: [id])
+  id               String                     @id @default(uuid()) @db.Uuid
+  orgId            String                     @db.Uuid
+  userId           String                     @db.Uuid
+  departmentId     String                     @db.Uuid
+  eventId          String                     @db.Uuid
+  formResponses    Json                       @default("{}")
+  availability     Json                       @default("[]")
+  status           VolunteerApplicationStatus @default(PENDING)
+  reviewedById     String?                    @db.Uuid
+  reviewedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  department       Department                 @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  event            Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org              Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  reviewedBy       User?                      @relation("VolunteerApplicationReviewer", fields: [reviewedById], references: [id])
   staffAssignments StaffAssignment[]
-  user          User                       @relation(fields: [userId], references: [id])
+  user             User                       @relation(fields: [userId], references: [id])
 
   @@index([orgId])
   @@index([eventId])
@@ -524,17 +527,17 @@ model VolunteerApplication {
 }
 
 model StaffRole {
-  id               String            @id @default(uuid()) @db.Uuid
-  orgId            String            @db.Uuid
-  departmentId     String            @db.Uuid
-  roleName         String
-  shifts           Json              @default("[]")
-  maxVolunteers    Int?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  assignments      StaffAssignment[]
-  department       Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id            String            @id @default(uuid()) @db.Uuid
+  orgId         String            @db.Uuid
+  departmentId  String            @db.Uuid
+  roleName      String
+  shifts        Json              @default("[]")
+  maxVolunteers Int?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assignments   StaffAssignment[]
+  department    Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  org           Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([departmentId])
@@ -542,19 +545,19 @@ model StaffRole {
 }
 
 model StaffAssignment {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  orgId                  String                  @db.Uuid
-  userId                 String                  @db.Uuid
-  roleId                 String                  @db.Uuid
-  volunteerApplicationId String?                 @db.Uuid
+  id                     String                @id @default(uuid()) @db.Uuid
+  orgId                  String                @db.Uuid
+  userId                 String                @db.Uuid
+  roleId                 String                @db.Uuid
+  volunteerApplicationId String?               @db.Uuid
   shiftSlot              Json
-  status                 StaffAssignmentStatus   @default(ASSIGNED)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  org                    Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  role                   StaffRole               @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  user                   User                    @relation(fields: [userId], references: [id])
-  volunteerApplication   VolunteerApplication?   @relation(fields: [volunteerApplicationId], references: [id])
+  status                 StaffAssignmentStatus @default(ASSIGNED)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  org                    Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role                   StaffRole             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user                   User                  @relation(fields: [userId], references: [id])
+  volunteerApplication   VolunteerApplication? @relation(fields: [volunteerApplicationId], references: [id])
 
   @@index([orgId])
   @@index([roleId])
@@ -598,20 +601,20 @@ model VendorApplication {
 }
 
 model StoreProduct {
-  id          String      @id @default(uuid()) @db.Uuid
-  orgId       String      @db.Uuid
-  eventId     String      @db.Uuid
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @db.Uuid
+  eventId     String       @db.Uuid
   name        String
   description String?
   price       Int
   stock       Int
-  images      Json        @default("[]")
+  images      Json         @default("[]")
   category    String?
-  surcharges  Json        @default("[]")
-  options     Json        @default("[]")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  surcharges  Json         @default("[]")
+  options     Json         @default("[]")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   cartItems   CartItem[]
   orderItems  OrderItem[]
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -644,20 +647,20 @@ model Cart {
 }
 
 model CartItem {
-  id        String       @id @default(uuid()) @db.Uuid
-  orgId     String       @db.Uuid
-  cartId    String       @db.Uuid
-  itemType  CartItemType
-  refId     String       @db.Uuid
-  unitPrice Int
-  quantity  Int          @default(1)
-  metadata  Json         @default("{}")
-  storeProductId String? @db.Uuid
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  cart      Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  product   StoreProduct? @relation(fields: [storeProductId], references: [id])
+  id             String        @id @default(uuid()) @db.Uuid
+  orgId          String        @db.Uuid
+  cartId         String        @db.Uuid
+  itemType       CartItemType
+  refId          String        @db.Uuid
+  unitPrice      Int
+  quantity       Int           @default(1)
+  metadata       Json          @default("{}")
+  storeProductId String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  cart           Cart          @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  org            Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product        StoreProduct? @relation(fields: [storeProductId], references: [id])
 
   @@index([orgId])
   @@index([cartId])
@@ -667,33 +670,33 @@ model CartItem {
 }
 
 model Order {
-  id                    String        @id @default(uuid()) @db.Uuid
-  orgId                 String        @db.Uuid
-  userId                String        @db.Uuid
-  eventId               String        @db.Uuid
-  cartId                String?       @db.Uuid
+  id                    String                 @id @default(uuid()) @db.Uuid
+  orgId                 String                 @db.Uuid
+  userId                String                 @db.Uuid
+  eventId               String                 @db.Uuid
+  cartId                String?                @db.Uuid
   total                 Int
   platformFee           Int
-  currency              CurrencyCode   @default(USD)
-  status                OrderStatus   @default(PENDING)
+  currency              CurrencyCode           @default(USD)
+  status                OrderStatus            @default(PENDING)
   paymentProvider       PaymentProvider?
   paymentReference      String?
-    checkoutTokenHash     String?
+  checkoutTokenHash     String?
   checkoutSuccessPath   String?
   checkoutCancelPath    String?
   checkoutExpiresAt     DateTime?
-  inventoryReservedAt  DateTime?
+  inventoryReservedAt   DateTime?
   reservationReleasedAt DateTime?
-  stripePaymentIntentId String?       @unique
-  voucherId             String?       @db.Uuid
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  cart                  Cart?         @relation(fields: [cartId], references: [id])
-  event                 Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  stripePaymentIntentId String?                @unique
+  voucherId             String?                @db.Uuid
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  cart                  Cart?                  @relation(fields: [cartId], references: [id])
+  event                 Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   items                 OrderItem[]
-  org                   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user                  User          @relation(fields: [userId], references: [id])
-  voucher               Voucher?      @relation(fields: [voucherId], references: [id])
+  org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user                  User                   @relation(fields: [userId], references: [id])
+  voucher               Voucher?               @relation(fields: [voucherId], references: [id])
   paymentAttempts       PaymentAttempt[]
   paymentExceptions     PaymentException[]
   ledgerEntries         OrganizerLedgerEntry[]
@@ -706,8 +709,8 @@ model Order {
   @@index([voucherId])
   @@index([eventId, status, createdAt])
   @@index([orgId, status, createdAt])
-    @@index([paymentProvider, paymentReference])
-    @@index([checkoutTokenHash])
+  @@index([paymentProvider, paymentReference])
+  @@index([checkoutTokenHash])
   @@index([checkoutExpiresAt])
   @@map("orders")
 }
@@ -748,11 +751,11 @@ model PaymentAttempt {
 }
 
 model SePayWebhookEvent {
-  id                 String   @id @default(uuid()) @db.Uuid
-  sepayTransactionId String   @unique
+  id                 String    @id @default(uuid()) @db.Uuid
+  sepayTransactionId String    @unique
   payload            Json
   processedAt        DateTime?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
   @@index([processedAt, createdAt])
   @@map("sepay_webhook_events")
@@ -815,16 +818,16 @@ model OrganizerLedgerEntry {
 }
 
 model OrganizerPayout {
-  id          String        @id @default(uuid()) @db.Uuid
-  orgId       String        @db.Uuid
+  id          String                 @id @default(uuid()) @db.Uuid
+  orgId       String                 @db.Uuid
   currency    CurrencyCode
   amount      Int
   reference   String
   paidAt      DateTime
-  createdById String        @db.Uuid
-  createdAt   DateTime      @default(now())
-  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  createdBy   User          @relation("OrganizerPayoutCreatedBy", fields: [createdById], references: [id])
+  createdById String                 @db.Uuid
+  createdAt   DateTime               @default(now())
+  org         Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy   User                   @relation("OrganizerPayoutCreatedBy", fields: [createdById], references: [id])
   entries     OrganizerLedgerEntry[]
 
   @@index([orgId, currency, paidAt])
@@ -833,17 +836,17 @@ model OrganizerPayout {
 }
 
 model PaymentRefund {
-  id          String          @id @default(uuid()) @db.Uuid
-  orderId     String          @unique @db.Uuid
-  provider    PaymentProvider
-  amount      Int
-  reference   String
-  reason      String?
-  processedAt DateTime
-  createdById String          @db.Uuid
-  createdAt   DateTime        @default(now())
-  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdBy   User            @relation("PaymentRefundCreatedBy", fields: [createdById], references: [id])
+  id            String                 @id @default(uuid()) @db.Uuid
+  orderId       String                 @unique @db.Uuid
+  provider      PaymentProvider
+  amount        Int
+  reference     String
+  reason        String?
+  processedAt   DateTime
+  createdById   String                 @db.Uuid
+  createdAt     DateTime               @default(now())
+  order         Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy     User                   @relation("PaymentRefundCreatedBy", fields: [createdById], references: [id])
   ledgerEntries OrganizerLedgerEntry[]
 
   @@index([createdById])
@@ -901,17 +904,17 @@ model Voucher {
 }
 
 model HotelBlock {
-  id            String         @id @default(uuid()) @db.Uuid
-  orgId         String         @db.Uuid
-  eventId       String         @db.Uuid
-  hotelName     String
-  roomTypes     Json
-  cutoffDate    DateTime
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  bookings      HotelBooking[]
-  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id         String         @id @default(uuid()) @db.Uuid
+  orgId      String         @db.Uuid
+  eventId    String         @db.Uuid
+  hotelName  String
+  roomTypes  Json
+  cutoffDate DateTime
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  bookings   HotelBooking[]
+  event      Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org        Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([eventId])
