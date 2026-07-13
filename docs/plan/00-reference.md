@@ -1,4 +1,4 @@
-# vFurst — Convention Management SaaS Platform
+# vFurst — Managed Convention Management SaaS Platform
 
 A full-featured convention/event management SaaS platform inspired by [ConCat](https://concat.app), built with **Next.js App Router** and **shadcn/ui-style local components**.
 
@@ -12,10 +12,68 @@ A full-featured convention/event management SaaS platform inspired by [ConCat](h
 
 | Question | Decision |
 |----------|----------|
-| **Multi-tenancy** | **Subdomain-based** — each org gets `{slug}.vfurst.reyuugames.com`. Custom domains (CNAME) added in Phase 6. |
+| **Tenant model** | **Managed, invite-only B2B SaaS** — only a `PLATFORM_ADMIN` can provision, activate, suspend, or retire an organization. Creating a normal user account never creates a tenant or grants organizer access. |
+| **Multi-tenancy** | **Shared platform with strict tenant isolation** — each organization is a tenant and owns events beneath it. Public portals use `{slug}.vfurst.reyuugames.com`; verified custom domains are activated by the platform in Phase 6. |
+| **Application surfaces** | **Separated control plane and tenant plane** — `/platform/*` is the vFurst operator console, `/dashboard/*` is the membership-scoped organizer workspace, and organization subdomains/custom domains serve public attendee/vendor/volunteer flows. |
+| **Account onboarding** | Public users may register for tickets, applications, and account history. The platform provisions an organization and emails a time-limited invitation to its initial owner; organization owners/admins may invite additional members into that organization only. |
 | **UI theme** | **Light-only “Operational Calm”** — Geist typography, warm canvas, teal semantic accent, compact operational density, responsive layouts, reduced motion, and accessible local shadcn/Radix primitives. |
 | **Mobile/event day** | **Responsive web/PWA surfaces** — check-in, cashier, express kiosk, and monitoring remain in the web app with scoped offline support. A separate React Native app is not part of the current phase plan. |
 | **Email provider** | **Dual support**: AWS SES (production scale) + SMTP manual setup (self-hosted/dev). Configurable per-org. |
+
+---
+
+## Product and Access Model
+
+vFurst is multi-tenant, but it is not a self-service workspace builder. Platform ownership, organization membership, and public participation are separate grants:
+
+```text
+vFurst platform
+├── Platform administrators
+│   ├── Provision and suspend organizations
+│   ├── Assign the initial owner and activate domains
+│   └── Operate payment providers, fees, reconciliation, payouts, and infrastructure
+├── Organization tenant
+│   ├── OWNER / ADMIN / MEMBER memberships
+│   └── Events, registrations, commerce, staff, vendors, and event-day operations
+└── Public users
+    └── Registrations, orders, hotel bookings, volunteer applications, and vendor applications
+```
+
+### Non-negotiable authorization rules
+
+- A `User` is only an identity. Self-registration grants no organization membership and no organizer-dashboard access.
+- Only a `PLATFORM_ADMIN` may create an `Organization`, choose its platform subdomain, assign its initial owner, change platform payment configuration, activate a custom domain, or change tenant lifecycle status.
+- An organization `OWNER` or `ADMIN` may create and operate events only inside organizations where that membership exists. They can never create another organization.
+- Additional organizer access is granted through expiring, single-use organization invitations. Invitation acceptance creates the `OrgMember`; creating or upserting a bare user record does not grant access.
+- Organizer queries only return memberships and resources accessible to the current user. There is no organizer-facing “all organizations” scope.
+- Authorization is derived from the resource stored in the database. Server actions must not authorize a submitted `orgId` and then mutate an unrelated submitted resource ID.
+- Cross-tenant reads and writes return a controlled not-found/forbidden result and must be covered by regression tests.
+- Platform suspension stops new tenant activity without preventing signed payment callbacks, reconciliation, refunds, or other work needed to settle already-created orders safely.
+
+### Surface and domain boundaries
+
+| Surface | Canonical location | Audience | Responsibility |
+|---------|--------------------|----------|----------------|
+| Platform control plane | `/platform/*` on the central vFurst app domain | `PLATFORM_ADMIN` only | Tenant provisioning, lifecycle, domain activation, provider configuration, fees, payment exceptions, reconciliation, payouts, and support visibility |
+| Organizer workspace | `/dashboard/*` on the central vFurst app domain | Authorized `OrgMember` users | Events, ticketing, store, hotel, vendors, volunteers, badges, check-in, reporting, and organization-scoped settings |
+| Public tenant portal | `{orgSubdomain}.vfurst.reyuugames.com` or an activated custom domain | Attendees, vendors, volunteers, and public users | Event discovery, registration, checkout, store, hotel, and applications |
+| Public account area | Central vFurst account/auth routes | Any authenticated user | Identity, orders, registrations, applications, and invitation acceptance; no organizer capabilities without membership |
+
+Custom domains are public portal aliases by default. Organizer authentication remains on the central app domain so cookies, support, and authorization do not depend on customer-controlled DNS.
+
+### Minimum role matrix
+
+| Capability | Platform admin | Org owner | Org admin | Org member | Public user |
+|------------|----------------|-----------|-----------|------------|-------------|
+| Provision/suspend organization, activate domain | Yes | No | No | No | No |
+| Configure global providers, fees, reconciliation, payouts | Yes | No | No | No | No |
+| Manage organization identity, payout destination, owner transfer | Support/oversight | Yes | Limited | No | No |
+| Invite organization members | Support/oversight | Yes | Admin/member only | No | No |
+| Create and configure events | Only through explicit tenant support flow | Yes | Yes | No | No |
+| Run allowed event operations | Only through explicit tenant support flow | Yes | Yes | Yes, for routes/actions explicitly permitted to `MEMBER` | No |
+| Register, order, apply, view own public records | Yes | Yes | Yes | Yes | Yes |
+
+Platform administration does not silently become an `OrgMember`. Support mutations inside a tenant must be explicit, tenant-scoped, and auditable; normal organizer actions continue to require membership.
 
 ---
 
@@ -99,8 +157,10 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 erDiagram
     Organization ||--o{ Event : "hosts"
     Organization ||--o{ OrgMember : "has"
+    Organization ||--o{ OrgInvitation : "invites"
     Organization ||--o{ StripeConnect : "connected"
     User ||--o{ OrgMember : "belongs to"
+    User ||--o{ OrgInvitation : "sends"
     Event ||--o{ RegistrationType : "defines"
     Event ||--o{ Registration : "receives"
     Event ||--o{ Department : "has"
@@ -151,9 +211,9 @@ erDiagram
 
 | Entity | Key Fields | Purpose |
 |--------|-----------|---------|
-| **User** | id, email, name, avatar, emailVerified, platformRole | Platform-wide account; platform administration is separate from organization RBAC |
-| **Organization** | id, name, slug, subdomain, logo, contactEmail, customDomain, payoutBankCode, payoutAccountNumber, payoutAccountHolder | Convention organizing body and SePay payout destination |
-| **OrgMember** | userId, orgId, role (OWNER/ADMIN/MEMBER) | Org membership + role |
+| **User** | id, email, name, avatar, emailVerified, platformRole | Platform-wide identity for public participation and optional organization memberships; a normal account has no organizer privileges by default |
+| **Organization** | id, name, slug, subdomain, status (PROVISIONING/ACTIVE/SUSPENDED/RETIRED), statusUpdatedBy/At, logo, contactEmail, requestedCustomDomain, customDomain, customDomainStatus, customDomainVerified/ActivatedBy/At, payoutBankCode, payoutAccountNumber, payoutAccountHolder | Platform-provisioned tenant, convention organizing body, and SePay payout destination; `customDomain` is only the active routed hostname, while requests/verification are staged separately; retirement is non-destructive |
+| **OrgMember** | userId, orgId, role (OWNER/ADMIN/MEMBER) | Explicit tenant membership and role; this is the organizer-access grant |
 | **StripeConnect** | orgId, stripeAccountId, onboardingComplete | Stripe Connect account link |
 | **Event** | id, orgId, name, slug, startDate, endDate, venue, status, currency, settings | A convention with immutable USD/VND monetary context |
 | **RegistrationType** | id, eventId, name, price, maxCapacity, scheduledPricing (JSON) | Attendance tiers (General, VIP, Sponsor) |
@@ -181,13 +241,14 @@ erDiagram
 | **ApiKey** | id, orgId, name, keyHash, scopes, lastUsedAt | Public API authentication |
 | **WebhookEndpoint** | id, orgId, url, events, secret, active | Outbound webhook config |
 
-### Infrastructure and payment operations (12)
+### Infrastructure, access, and payment operations (13)
 
-These models supplement the original 29 product/tenant entities. The Prisma schema therefore contains **41 models** in total.
+These models supplement the original 29 product/tenant entities. The managed-provisioning target schema therefore contains **42 models** in total. Until the invitation migration is implemented, `PROGRESS.md` and the actual Prisma schema remain the ground truth for the current model count.
 
 | Entity | Purpose |
 |---|---|
 | **Account**, **Session**, **VerificationToken**, **Authenticator** | Auth.js persistence and provider/session infrastructure |
+| **OrgInvitation** | Expiring, single-use invitation with organization, normalized email, requested role, token hash, inviter, acceptance, and revocation state; acceptance creates the membership |
 | **PaymentProviderConfig** | Platform-admin Stripe/SePay enablement plus non-secret provider settings |
 | **PaymentAttempt** | Provider, amount, currency, unique SePay memo/reference, lifecycle, and expiry for an order attempt |
 | **SePayWebhookEvent** | Raw webhook deduplication and processing record |
@@ -243,11 +304,12 @@ d:\GitHub\vFurst\
 │   │   ├── public/                    # Static assets + compiled SW (sw.js)
 │   │   └── src/
 │   │       ├── app/                   # Next.js App Router pages
-│   │       │   ├── (auth)/            # Login, register
+│   │       │   ├── (auth)/            # Login, public-account registration, invitation acceptance
 │   │       │   ├── (marketing)/       # Landing, pricing, features, legal
 │   │       │   ├── (convention)/[orgSlug]/ # Public tenant portal
 │   │       │   ├── checkout/[orderId]/ # Shared Stripe/SePay checkout
-│   │       │   ├── dashboard/         # Organizer and platform operations
+│   │       │   ├── dashboard/         # Membership-scoped organizer operations
+│   │       │   ├── platform/          # Platform-admin control plane
 │   │       │   ├── docs/              # Embedded product/API docs
 │   │       │   └── api/               # Auth, v1, payment status, webhooks
 │   │       ├── components/            # UI, organizer shell, portal, marketing
@@ -270,7 +332,8 @@ d:\GitHub\vFurst\
 
 | Feature Area | Local shadcn/ui Components |
 |-------------|----------------------------|
-| **Dashboard Shell** | Responsive app shell, org/event switchers, breadcrumbs, collapsible rail, mobile drawer, user menu, command menu |
+| **Organizer Shell** | Membership-scoped org/event switchers, breadcrumbs, collapsible rail, mobile drawer, user menu, and command menu; never exposes tenant creation or an all-tenant scope |
+| **Platform Shell** | Separate platform-admin navigation for tenant provisioning/lifecycle, domains, provider configuration, reconciliation, exceptions, payouts, and support visibility |
 | **Data Tables** | `Table`, `PowerSearch`, `Badge` |
 | **Forms** | `FormLayout`, `TextInput`, native inputs/selects/textareas styled by tokens |
 | **Cards & Stats** | `Card`, `ProgressBar`, semantic headings/text |

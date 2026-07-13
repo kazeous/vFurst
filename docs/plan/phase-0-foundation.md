@@ -5,7 +5,7 @@
 | Task | Files / Actions |
 |------|----------------|
 | Define MVP feature scope | This document ✅ |
-| Database schema design | [NEW] `packages/db/prisma/schema.prisma` — all 29 product/tenant entities from the reference table, enums, indexes, and tenant isolation via `orgId`. Auth.js persistence and provider-neutral payment/settlement models are supplemental infrastructure added when those systems are built; the maintained reference records the current 41-model total. JSON fields must conform to the JSON Field Contracts section above. |
+| Database schema design | [NEW] `packages/db/prisma/schema.prisma` — all 29 product/tenant entities from the reference table, enums, indexes, and tenant isolation via `orgId`. Auth.js persistence, managed organization invitations, and provider-neutral payment/settlement models are supplemental infrastructure added when those systems are built; the maintained reference records the 42-model managed-provisioning target, while `PROGRESS.md` records the currently implemented count. JSON fields must conform to the JSON Field Contracts section above. |
 | API contract design | [NEW] `docs/api-contracts/` — OpenAPI spec for REST endpoints + webhook event schemas |
 | Set up monorepo | [NEW] `turbo.json`, root `package.json` with workspaces: `apps/*`, `packages/*` |
 | CI/CD pipeline | [NEW] `.github/workflows/ci.yml` — lint, type-check, test, build on PR. Runs on GitHub's own runners, no cloud account needed beyond a GitHub repo. |

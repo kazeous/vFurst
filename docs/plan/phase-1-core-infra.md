@@ -1,6 +1,6 @@
 # Phase 1 — Core Infrastructure (Weeks 4–9)
 
-> **Goal**: Multi-tenant architecture, auth, RBAC, convention CRUD, Stripe Connect onboarding, dashboard shell, email service, and subdomain routing.
+> **Goal**: Managed multi-tenant architecture, public identity, invitation-based organization RBAC, platform-controlled tenant provisioning, Stripe Connect onboarding, separated platform/organizer shells, email service, and subdomain routing.
 
 ---
 
@@ -10,13 +10,15 @@
 Next.js middleware for subdomain-based routing:
 - Parse `{slug}.vfurst.reyuugames.com` from `Host` header
 - Rewrite to `/(convention)` route group with org context
-- Pass-through for `app.vfurst.reyuugames.com` (dashboard) and `vfurst.reyuugames.com` (marketing)
+- Pass-through for the central app routes (`/platform`, `/dashboard`, auth/account) and the marketing root
 - Handle custom domains (Phase 6) via database lookup
+- Resolve public portals only for active organizations and platform-activated domains; a customer-controlled hostname never grants organizer access
 
 ##### [NEW] `apps/web/src/lib/subdomain.ts`
 Subdomain resolution helpers:
 - `resolveOrganization(hostname)` — lookup org by subdomain or custom domain
 - `getConventionUrl(org)` — generate subdomain URL for an org
+- Resolution includes tenant lifecycle/domain activation checks and never acts as an authorization substitute for dashboard routes
 
 ---
 
@@ -32,7 +34,7 @@ AWS S3 client and upload helpers using `@aws-sdk/client-s3` and `@aws-sdk/s3-req
 - Key structure: `{orgId}/{context}/{filename}` (e.g., `org_123/logos/logo.png`, `org_123/products/img_456.webp`, `org_123/vendor-files/license.pdf`)
 
 > [!NOTE]
-> This file is created in Phase 1 because org logo upload (`organizations/new` and `organizations/[orgId]/settings`) is the first feature requiring S3. Subsequent phases (Phase 3: product images, Phase 4: vendor file uploads, Phase 5: badge template images) all import from this same helper.
+> This file is created in Phase 1 because the platform provisioning form and organization settings are the first features requiring org logo storage. Subsequent phases (Phase 3: product images, Phase 4: vendor file uploads, Phase 5: badge template images) all import from this same helper.
 
 ---
 
@@ -44,44 +46,66 @@ NextAuth v5 configuration:
 - Google OAuth provider
 - Prisma adapter for session persistence
 - Custom session callback to include `orgMemberships` with roles
+- `platformRole` is independent from organization membership
 - JWT strategy for API route authentication
 
 ##### [NEW] `apps/web/src/app/(auth)/login/page.tsx`
 Login page using shadcn/ui `Card`, `TextInput`, `Button`, `FormLayout`, `Divider`.
 
 ##### [NEW] `apps/web/src/app/(auth)/register/page.tsx`
-Registration page with email/password + OAuth buttons.
+Public-account registration with email/password + OAuth buttons. The page must not promise a workspace, create an organization, or grant dashboard access.
+
+##### [NEW] `apps/web/src/app/(auth)/invitations/[token]/page.tsx`
+Single-use invitation acceptance for an existing or newly created account. A valid, unexpired, non-revoked invitation is required before creating `OrgMember`.
+
+##### [NEW] `apps/web/src/actions/invitation-actions.ts`
+Create, resend, revoke, and accept organization invitations. Store only a token hash, normalize the invited email, enforce expiry and one-time use, and create membership transactionally on acceptance.
 
 ##### [NEW] `apps/web/src/app/(auth)/layout.tsx`
 Centered auth layout — no AppShell, minimal branding.
 
 ---
 
-#### Convention CRUD
+#### Platform-Controlled Tenant Provisioning
 
-##### [NEW] `apps/web/src/app/dashboard/organizations/page.tsx`
-Org list using shadcn/ui `Table`, `EmptyState`, `Button`.
+##### [NEW] `apps/web/src/app/platform/layout.tsx`
+Platform control-plane boundary and shell. Every route requires `PLATFORM_ADMIN`; organization membership alone never grants access.
 
-##### [NEW] `apps/web/src/app/dashboard/organizations/new/page.tsx`
-Create org form: name, slug (auto-generated, editable), logo upload, contact email.
+##### [NEW] `apps/web/src/app/platform/organizations/page.tsx`
+All-tenant inventory for platform administrators with lifecycle status, subdomain/domain readiness, owner/invitation state, event count, and support links.
+
+##### [NEW] `apps/web/src/app/platform/organizations/new/page.tsx`
+Provisioning form for `PLATFORM_ADMIN`: organization name, platform subdomain, contact/initial-owner email, logo, and lifecycle status. Creation sends an owner invitation; it does not make the current public user an owner.
+
+##### [NEW] `apps/web/src/app/platform/organizations/[orgId]/page.tsx`
+Platform tenant overview: lifecycle controls, owner/invitation state, domains, provider readiness, ledger/support summary, and links into tenant-scoped diagnostics.
+
+##### [NEW] `apps/web/src/actions/platform-organization-actions.ts`
+Platform-only actions for provision, activate, suspend, and retire. Every action rechecks `PLATFORM_ADMIN` server-side and records the acting administrator.
+
+#### Organization-Scoped Management
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/page.tsx`
-Org overview: member list, events list, quick stats.
+Membership-scoped organization overview: events and operational summary. The `[orgId]` parent layout performs one shared organization access check before any child page loads.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/settings/page.tsx`
-Org settings: name, logo, subdomain slug, email provider config (SES vs SMTP).
+Organization settings allowed by role: brand/contact details, organizer payout destination, and email-provider details. Platform subdomain, lifecycle, provider enablement, and custom-domain activation remain platform-controlled.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/members/page.tsx`
-Member management: invite by email, assign roles (OWNER/ADMIN/MEMBER), remove.
+Member management inside the current organization: invite by email, assign permitted roles (OWNER/ADMIN/MEMBER), resend/revoke pending invitations, and remove. These actions can never create or grant access to another organization.
 
 ##### [NEW] `apps/web/src/app/dashboard/organizations/[orgId]/stripe-connect/page.tsx`
 Stripe Connect onboarding:
 - Stripe-hosted Account Links in test/live mode (not classic OAuth)
 - Account status dashboard
 - Truthful environment-derived mode indicator; no fake per-organization mode toggle
+- The organizer supplies required legal/business information through Stripe-hosted onboarding; only the platform controls whether Stripe is available globally and which fee policy applies
+
+##### [NEW] `apps/web/src/lib/dashboard-access.ts`
+Central access layer for `requirePlatformAdmin`, `requireOrgAccess`, `requireEventAccess`, and resource-scoped loaders. Authorization scope is derived from stored relationships, not hidden `orgId` form fields.
 
 ##### [NEW] `apps/web/src/actions/event-actions.ts`
-Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `deleteEvent`.
+Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `deleteEvent`. Organization owners/admins may create events only beneath their memberships; mutations derive the organization from the stored event instead of trusting a submitted tenant ID.
 
 ---
 
@@ -90,7 +114,7 @@ Server Actions: `createEvent`, `updateEvent`, `publishEvent`, `archiveEvent`, `d
 ##### [NEW] `apps/web/src/app/dashboard/layout.tsx`
 Dashboard layout using the responsive Operational Calm organizer shell:
 ```
-├── Organization and event switchers
+├── Membership-scoped organization and event switchers
 ├── Grouped organization/event navigation
 ├── Breadcrumbs + active states
 ├── Collapsible desktop rail / accessible mobile drawer
@@ -98,11 +122,13 @@ Dashboard layout using the responsive Operational Calm organizer shell:
 └── User menu / logout
 ```
 
+There is no organizer-facing “all organizations” option or “create organization” action. A public user with no organization membership is redirected to the public account area (or shown a no-organizer-access state), never an empty organizer console. A user with one membership enters that tenant directly; a user with multiple memberships may switch only among those memberships.
+
 ##### [NEW] `apps/web/src/app/dashboard/page.tsx`
-Dashboard home: recent events, quick stats (total attendees, revenue), quick action buttons.
+Dashboard home: recent accessible events, quick stats (total attendees, revenue), and event-level quick actions. It never contains tenant provisioning actions.
 
 ##### [NEW] `apps/web/src/components/dashboard/app-shell.tsx`
-Reusable organizer shell with route-context parsing, navigation state, focus restoration, responsive drawer/rail behavior, and reserved create-route protection.
+Reusable organizer shell with membership-scoped navigation data, route-context parsing, focus restoration, responsive drawer/rail behavior, and reserved create-route protection. Platform navigation is a separate shell and command scope.
 
 ##### [NEW] `apps/web/src/components/dashboard/stat-card.tsx`
 Metric card component using shadcn/ui `Card`, `ProgressBar`, and semantic headings/text.

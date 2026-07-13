@@ -19,17 +19,36 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Audit reopened | Core features exist, but organization overview/members/Stripe pages lack tenant guards and action authorization is not consistently resource-derived. |
+| 1 - Core Infrastructure | Audit reopened | Core features exist, but the implemented self-service organization creation contradicts the new managed/invite-only tenant contract; organization guards, invitations, lifecycle, separated platform routes, and resource-derived authorization are not implemented. |
 | 2 - Registration & Hotel | Audit reopened | Core flows exist, but cross-tenant single-record mutations and VND/admin payment correctness require remediation. |
 | 3 - Store & Add-ons | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained product uploads require remediation. |
 | 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
 | 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
-| 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but fee reports mix USD/VND and production rate limits are process-local. |
-| 7 - Launch | Blocked | Operational Calm and Stripe/SePay happy paths remain implemented; 95/95 artifacts, 41/41 models, build, 24/24 unit tests, 13/13 E2E tests, and dependency audit pass. The July 13 full-system audit found blocking tenant-access, unsigned Stripe webhook, mixed-currency, VND cashier/editor, payment-attempt locking, and upload-control findings. External beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains incomplete. |
+| 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
+| 7 - Launch | Blocked | Operational Calm and Stripe/SePay happy paths remain implemented; the code still has 41 models and the prior passing test evidence. The maintained plan now targets managed provisioning with `Organization.status`, `OrgInvitation`, separated `/platform` and `/dashboard` surfaces, and a 42-model schema. None of that remediation is implemented yet. The July 13 audit blockers and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, replace self-service SaaS plan with managed tenant provisioning
+- Replaced the incorrect product contract:
+  - Defined vFurst as managed/invite-only multi-tenant B2B SaaS: public accounts are identities only, organizations are platform-provisioned tenants, and organizer access requires explicit membership.
+  - Separated the platform control plane (`/platform/*`), membership-scoped organizer workspace (`/dashboard/*`), public account area, and public tenant subdomain/custom-domain portal.
+  - Added the target role matrix, organization lifecycle, single-use owner/member invitations, resource-derived authorization rules, suspension/settlement behavior, and 42-model target schema to `docs/plan/00-reference.md`.
+- Reconciled cross-phase planning:
+  - Replaced self-service organization CRUD in Phase 1 with platform provisioning, owner invitation acceptance, organization-scoped member management, and central authorization helpers.
+  - Changed Phase 6 custom domains from organizer activation to organizer request plus platform verification/activation; tenant-bound API/webhook authorization is explicit.
+  - Added the Phase 7 P0 remediation boundary, separated payment control plane, managed-sales marketing, beta onboarding, persona matrix, and completion gates.
+  - Updated the verification plan, beta runbook, and go-live checklist so public signup, cross-tenant isolation, invitations, lifecycle, domains, payments, and suspension behavior are mandatory gates.
+- Verified:
+  - Searched maintained docs for the superseded organizer self-service assumptions and reconciled the remaining historical audit references without rewriting past evidence.
+  - `git diff --check` passed for the documentation update.
+  - No application code, database schema, or tests were changed or run in this documentation-only session.
+- Remaining issues / blockers:
+  - The running code still allows any authenticated user to create an organization and still mixes platform/organizer surfaces. The plan change does not mitigate the vulnerability by itself; deployment remains blocked.
+- Next session should:
+  - Implement the first containment unit only: require `PLATFORM_ADMIN` for organization provisioning/list routes, remove organizer tenant-creation UI, scope event creation options to memberships, add the shared organization route guard, and add direct-URL/persona regression tests before moving to invitations or route migration.
 
 ### 2026-07-13 - Phase 7, plan reconciliation and full-system audit
 - Updated planning:

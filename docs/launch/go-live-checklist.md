@@ -18,6 +18,16 @@ The checker verifies:
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence is recorded before SePay is enabled.
 - `VFURST_LAUNCH_URL` returns live marketing/legal routes with expected vFurst launch content.
 
+The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
+
+- Public registration creates an identity only and cannot enter `/dashboard`, create an organization, or create an event.
+- `/platform/*` requires `PLATFORM_ADMIN`; `/dashboard/*` requires an explicit organization membership and returns only membership-scoped tenants/events.
+- Platform provisioning → single-use initial-owner invitation → acceptance → tenant activation → first event creation passes end to end.
+- Org A cannot enumerate, read, mutate, export, upload into, or trigger an operation for Org B across every action/API family recorded in the full-system audit.
+- Organization lifecycle, custom-domain activation, payment-provider configuration, platform fees, reconciliation, exceptions, and payouts are platform-only operations.
+- Suspending an organization blocks new tenant activity while signed callbacks, reconciliation, refunds, and settlement of existing orders continue safely.
+- The organizer UI contains no “create organization”, “all organizations”, or platform payment controls; marketing contains no self-service “create your workspace” promise.
+
 Required environment:
 
 ```bash

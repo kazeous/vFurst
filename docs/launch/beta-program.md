@@ -8,21 +8,24 @@ Onboard 2-3 real conventions before public launch, offer discounted or free usag
 
 | Slot | Convention | Status | Required evidence |
 |------|------------|--------|-------------------|
-| 1 | TBD | Not externally verified | Signed beta agreement, org created, Stripe Connect test/live readiness checked, first event configured |
-| 2 | TBD | Not externally verified | Signed beta agreement, org created, Stripe Connect test/live readiness checked, first event configured |
-| 3 | TBD | Optional | Signed beta agreement, org created, Stripe Connect test/live readiness checked, first event configured |
+| 1 | TBD | Not externally verified | Signed beta agreement, platform-provisioned org, owner invitation accepted, tenant activated, Stripe Connect test/live readiness checked, first event configured |
+| 2 | TBD | Not externally verified | Signed beta agreement, platform-provisioned org, owner invitation accepted, tenant activated, Stripe Connect test/live readiness checked, first event configured |
+| 3 | TBD | Optional | Signed beta agreement, platform-provisioned org, owner invitation accepted, tenant activated, Stripe Connect test/live readiness checked, first event configured |
 
 Completion rule: slots 1 and 2 must name real conventions and use `Externally verified` status before Phase 7 can be marked complete.
 
 ## Onboarding checklist
 
-- Create the organization in vFurst.
-- Add at least one owner/admin user from the convention team.
+- A platform administrator provisions the organization, reserves its platform subdomain, and keeps it in `PROVISIONING` until the required setup is ready.
+- Send the single-use initial-owner invitation and record evidence that the intended organizer accepted it. Do not onboard the beta through public account registration or a self-created workspace.
+- Confirm the owner can enter only the provisioned tenant, cannot create another organization, and can invite permitted admin/member roles only into that tenant.
+- Activate the tenant after its owner, subdomain, and required provider/domain readiness checks pass.
 - Configure event basics, registration tiers, hotel blocks, store products, vendor settings, volunteer departments, badge template, and check-in roles.
 - Complete Stripe Connect onboarding in test mode first; switch to production credentials only after deployment.
 - Configure SMTP or SES sender settings.
 - Enable Sentry with `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN`.
 - Run the Phase 7 Playwright suite against the beta event.
+- Run the cross-tenant persona matrix with the beta organization and an unrelated test organization before importing or accepting real attendee data.
 - Run the k6 registration and check-in load test with beta-sized seed data.
 - Review feedback weekly and record UX issues in the session log or issue tracker.
 
