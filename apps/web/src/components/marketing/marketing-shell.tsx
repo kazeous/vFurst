@@ -12,7 +12,8 @@ export function MarketingNav() {
   return (
     <nav className="vf-marketing-nav" aria-label="Marketing navigation">
       <Link className="vf-marketing-brand" href="/">
-        vFurst
+        <span className="vf-marketing-brand-mark">vF</span>
+        <span>vFurst</span>
       </Link>
       <div className="vf-marketing-nav-links">
         <Link href="/features">Features</Link>
@@ -20,10 +21,21 @@ export function MarketingNav() {
         <Link href="/docs">Docs</Link>
         <Link href="/login">Log in</Link>
         <Link className="vf-marketing-cta" href="/register">
-          Start
+          Start organizing
         </Link>
       </div>
     </nav>
+  );
+}
+
+export function MarketingFooter() {
+  return (
+    <footer className="vf-marketing-footer">
+      <div><Link className="vf-marketing-brand" href="/"><span className="vf-marketing-brand-mark">vF</span><span>vFurst</span></Link><p>Convention operations, minus the chaos.</p></div>
+      <div><strong>Product</strong><Link href="/features">Features</Link><Link href="/pricing">Pricing</Link><Link href="/docs">Documentation</Link></div>
+      <div><strong>Legal</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/dmca">DMCA</Link></div>
+      <small>© {new Date().getFullYear()} vFurst. Built for the people running the room.</small>
+    </footer>
   );
 }
 
@@ -39,6 +51,7 @@ export function MarketingShell({ children, eyebrow, title, description }: Market
         </header>
       ) : null}
       {children}
+      <MarketingFooter />
     </main>
   );
 }

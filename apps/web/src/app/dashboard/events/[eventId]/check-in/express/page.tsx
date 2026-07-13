@@ -34,7 +34,7 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
   }
 
   return (
-    <div className="vf-page">
+    <div className="vf-page vf-focus-page">
       <header className="vf-page-header">
         <div>
           <p className="vf-label">Check-in</p>

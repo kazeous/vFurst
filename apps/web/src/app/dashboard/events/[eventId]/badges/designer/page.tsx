@@ -59,7 +59,7 @@ export default async function BadgeDesignerPage({ params }: { params: Promise<{ 
   const activeTemplate = event.badgeTemplates[0];
 
   return (
-    <div className="vf-page">
+    <div className="vf-page vf-focus-page">
       <header className="vf-page-header">
         <div>
           <p className="vf-label">Badges</p>

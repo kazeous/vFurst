@@ -1,135 +1,62 @@
-﻿import Link from "next/link";
-import { MarketingNav } from "@/components/marketing/marketing-shell";
+import { MarketingFooter, MarketingNav } from "@/components/marketing/marketing-shell";
+import { ArrowRight, BadgeCheck, BarChart3, Hotel, ScanLine, Store, TicketCheck, Users } from "lucide-react";
+import Link from "next/link";
 
-const features = [
-  {
-    index: "01",
-    title: "Registration that stays connected",
-    body: "Tier pricing, add-ons, vouchers, hotel rooms, and store orders all settle into one attendee record."
-  },
-  {
-    index: "02",
-    title: "Launch-day check-in",
-    body: "Badge queues, QR scanning, cashier flow, express kiosk, and offline replay keep doors moving when the lobby gets loud."
-  },
-  {
-    index: "03",
-    title: "Vendor and volunteer operations",
-    body: "Custom applications, approvals, shift boards, booth assignment, assistants, and booth payment live in the event workspace."
-  },
-  {
-    index: "04",
-    title: "Platform controls",
-    body: "Stripe Connect, embedded SePay VietQR, API keys, webhooks, analytics, custom domains, and reconciliation give organizers production visibility."
-  }
+const capabilities = [
+  { icon: TicketCheck, title: "Registration stays connected", body: "Ticket tiers, add-ons, vouchers, hotels, and orders resolve into one attendee record." },
+  { icon: ScanLine, title: "Doors open without drama", body: "QR scanning, badge queues, cashier flow, express kiosk, and offline replay keep lines moving." },
+  { icon: Users, title: "People operations in context", body: "Volunteer applications, shift assignments, vendor reviews, booths, and assistants share the event workspace." },
+  { icon: BarChart3, title: "Money and signals reconcile", body: "Stripe, SePay, analytics, platform fees, ledgers, APIs, and webhooks stay visible to the right team." }
 ];
 
-const proofPoints = [
-  "Stripe Connect and embedded SePay VietQR payments",
-  "Public REST API and outbound webhooks",
-  "WCAG-minded shadcn/ui primitives",
-  "Local-first Docker stack with cloud migration path"
+const workflow = [
+  { number: "01", title: "Plan", body: "Create the event, ticket inventory, hotel blocks, staff departments, vendor products, and store catalog." },
+  { number: "02", title: "Sell", body: "Publish one branded portal for registration, hotel, shop, volunteer, and vendor journeys." },
+  { number: "03", title: "Operate", body: "Run check-in, badge printing, cashier desks, shift coordination, and live analytics from one console." }
 ];
 
 export default function HomePage() {
   return (
-    <main className="vf-marketing-home">
-      <section className="vf-marketing-hero" aria-labelledby="home-title">
+    <main className="vf-marketing-home vf-home-v2">
+      <section className="vf-home-hero" aria-labelledby="home-title">
         <MarketingNav />
-        <div className="vf-marketing-hero-inner">
-          <div className="vf-marketing-hero-copy">
-            <p className="vf-label">Convention management SaaS</p>
-            <h1 id="home-title">vFurst</h1>
-            <p className="vf-marketing-hero-kicker">Convention operations, minus the chaos.</p>
-            <p>Manage registration, hotels, stores, vendors, volunteers, badges, check-in, APIs, and fees from one launch-ready workspace.</p>
-            <div className="vf-marketing-hero-actions">
-              <Link className="vf-marketing-button vf-marketing-button-primary" href="/register">
-                Start setup
-              </Link>
-              <Link className="vf-marketing-button" href="/features">
-                Explore features
-              </Link>
-            </div>
+        <div className="vf-home-hero-inner">
+          <div className="vf-home-hero-copy">
+            <p className="vf-home-eyebrow"><span /> Convention operations platform</p>
+            <h1 id="home-title">Run the whole convention from one calm workspace.</h1>
+            <p>Manage registration, hotels, stores, vendors, volunteers, badges, check-in, APIs, and fees without stitching together spreadsheets and point tools.</p>
+            <div className="vf-home-actions"><Link className="vf-home-button vf-home-button-primary" href="/register">Start organizing <ArrowRight size={17} /></Link><Link className="vf-home-button" href="/features">See how it works</Link></div>
+            <div className="vf-home-trust"><span><BadgeCheck size={16} />Built for live event pressure</span><span><BadgeCheck size={16} />WCAG-minded workflows</span></div>
           </div>
-          <div
-            className="vf-hero-operations-preview"
-            role="img"
-            aria-label="Live convention operations dashboard showing registration, check-in, and volunteer staffing"
-          >
-            <div className="vf-hero-preview-topbar">
-              <span className="vf-hero-preview-brand">Launch overview</span>
-              <span className="vf-hero-live-status"><i /> Live</span>
-            </div>
-            <div className="vf-hero-preview-event">
-              <div>
-                <small>Reyuu Summer Con · Day 1</small>
-                <strong>Doors are open</strong>
-              </div>
-              <span>09:42</span>
-            </div>
-            <div className="vf-hero-preview-metrics">
-              <div>
-                <small>Registered</small>
-                <strong>1,284</strong>
-                <span>+86 today</span>
-              </div>
-              <div>
-                <small>Checked in</small>
-                <strong>63%</strong>
-                <span>812 guests</span>
-              </div>
-              <div>
-                <small>Open shifts</small>
-                <strong>9</strong>
-                <span>3 departments</span>
+
+          <div className="vf-hero-operations-preview vf-home-product-preview" role="img" aria-label="Live convention operations dashboard showing registration, check-in, and volunteer staffing">
+            <div className="vf-home-preview-chrome"><span><i /><i /><i /></span><small>Operations · Reyuu Summer Con</small><b>Live</b></div>
+            <div className="vf-home-preview-layout">
+              <aside><strong>vF</strong><span /><span /><span data-active="true" /><span /><span /></aside>
+              <div className="vf-home-preview-content">
+                <header><div><small>Saturday, July 18</small><h2>Doors are open</h2></div><span>09:42</span></header>
+                <div className="vf-home-preview-stats"><article><small>Registered</small><strong>1,284</strong><em>+86 today</em></article><article><small>Checked in</small><strong>63%</strong><em>812 guests</em></article><article><small>Open shifts</small><strong>9</strong><em>3 departments</em></article></div>
+                <section className="vf-home-preview-flow"><div><span>Live arrivals</span><b>View all</b></div>{[["ML","Mai Le","VIP · Badge 0842"],["TN","Tuan Nguyen","General · Badge 0843"],["AS","Ari Santos","Vendor · Hall B"]].map(([initial,name,detail]) => <article key={name}><i>{initial}</i><span><strong>{name}</strong><small>{detail}</small></span><BadgeCheck size={17} /></article>)}</section>
               </div>
             </div>
-            <div className="vf-hero-preview-activity">
-              <div className="vf-hero-preview-avatar">ML</div>
-              <div>
-                <strong>Mai Le checked in</strong>
-                <span>VIP · Badge 0842</span>
-              </div>
-              <span className="vf-hero-preview-check">✓</span>
-            </div>
-            <div className="vf-hero-preview-orbit vf-hero-preview-orbit-left">QR</div>
-            <div className="vf-hero-preview-orbit vf-hero-preview-orbit-right">12</div>
           </div>
         </div>
       </section>
 
-      <section className="vf-marketing-band vf-marketing-proof" aria-label="Launch proof points">
-        {proofPoints.map((point) => (
-          <span key={point}>{point}</span>
-        ))}
+      <section className="vf-home-proof" aria-label="Platform coverage"><span><TicketCheck />Registration</span><span><Hotel />Hotel blocks</span><span><Store />Commerce</span><span><Users />Staff and vendors</span><span><ScanLine />Check-in</span></section>
+
+      <section className="vf-home-section">
+        <div className="vf-home-section-heading"><p className="vf-label">One source of truth</p><h2>The messy middle is where vFurst earns its keep.</h2><p>Every workflow shares attendee, inventory, payment, and staffing context—so the team can act without translating between systems.</p></div>
+        <div className="vf-home-capability-grid">{capabilities.map(({ icon: Icon, title, body }) => <article key={title}><span><Icon size={20} /></span><h3>{title}</h3><p>{body}</p></article>)}</div>
       </section>
 
-      <section className="vf-marketing-section" aria-labelledby="home-features-title">
-        <div className="vf-marketing-section-header">
-          <p className="vf-label">Operations stack</p>
-          <h2 id="home-features-title">Built for the messy middle of convention planning</h2>
-          <p>Every flow keeps money movement, staff action, and attendee state connected, so launch week is less brittle.</p>
-        </div>
-        <div className="vf-marketing-grid">
-          {features.map((feature) => (
-            <article key={feature.title} className="vf-marketing-card">
-              <span className="vf-marketing-card-index">{feature.index}</span>
-              <h3>{feature.title}</h3>
-              <p>{feature.body}</p>
-            </article>
-          ))}
-        </div>
+      <section className="vf-home-workflow-section">
+        <div className="vf-home-section-heading"><p className="vf-label">From setup to show floor</p><h2>A workspace that changes with the event.</h2></div>
+        <div className="vf-home-workflow">{workflow.map((item) => <article key={item.number}><span>{item.number}</span><div><h3>{item.title}</h3><p>{item.body}</p></div></article>)}</div>
       </section>
 
-      <section className="vf-marketing-band vf-marketing-pricing-strip">
-        <div>
-          <p className="vf-label">Pricing</p>
-          <h2>$1 per attendee, $1 per hotel room, 1% on store and vendor transactions</h2>
-        </div>
-        <Link className="vf-marketing-button vf-marketing-button-primary" href="/pricing">
-          Calculate fees
-        </Link>
-      </section>
+      <section className="vf-home-cta"><div><p className="vf-label">Ready when your team is</p><h2>Replace the spreadsheet maze before launch week.</h2><p>Build the event workspace, publish the attendee portal, and keep every operator on the same page.</p></div><Link className="vf-home-button vf-home-button-primary" href="/register">Create your workspace <ArrowRight size={17} /></Link></section>
+      <MarketingFooter />
     </main>
   );
 }
