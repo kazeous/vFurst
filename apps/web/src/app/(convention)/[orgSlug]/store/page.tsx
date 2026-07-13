@@ -308,6 +308,8 @@ export default async function PublicStorePage({
                   {images.length > 0 ? (
                     <div className="vf-product-gallery">
                       {images.slice(0, 3).map((image) => (
+                        // Organizer-provided product URLs cannot be statically allowlisted for the Next image optimizer.
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img key={image} src={image} alt={product.name} />
                       ))}
                     </div>

@@ -2085,7 +2085,7 @@ label {
 .vf-nav-group-label {
   margin: 0;
   padding: 0 10px 4px;
-  color: #7b8781;
+  color: var(--muted-foreground);
   font-size: 0.67rem;
   font-weight: 760;
   letter-spacing: 0.08em;
@@ -2270,7 +2270,7 @@ label {
   border-radius: 6px;
   background: var(--background);
   padding: 0 6px;
-  color: #78837e;
+  color: var(--muted-foreground);
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.67rem;
 }
@@ -2525,7 +2525,7 @@ label {
 }
 
 .vf-label {
-  color: #718079;
+  color: var(--muted-foreground);
   font-size: 0.68rem;
   letter-spacing: 0.075em;
 }

@@ -14,7 +14,7 @@ export type CommandMenuItem = {
   icon?: LucideIcon;
 };
 
-export function DashboardCommandMenu({ open, onOpenChange, items }: { open: boolean; onOpenChange: (open: boolean) => void; items: CommandMenuItem[] }) {
+export function DashboardCommandMenu({ open, onOpenChange, items, restoreFocus }: { open: boolean; onOpenChange: (open: boolean) => void; items: CommandMenuItem[]; restoreFocus: () => void }) {
   const router = useRouter();
   const groups = Array.from(new Set(items.map((item) => item.group)));
 
@@ -27,7 +27,7 @@ export function DashboardCommandMenu({ open, onOpenChange, items }: { open: bool
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="vf-command-overlay" />
-        <Dialog.Content className="vf-command-dialog" aria-describedby={undefined}>
+        <Dialog.Content className="vf-command-dialog" aria-describedby={undefined} onCloseAutoFocus={(event) => { event.preventDefault(); restoreFocus(); }}>
           <Dialog.Title className="vf-sr-only">Search navigation</Dialog.Title>
           <Command label="Search dashboard navigation">
             <div className="vf-command-input-wrap">

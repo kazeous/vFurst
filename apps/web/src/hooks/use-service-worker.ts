@@ -14,7 +14,9 @@ export function useServiceWorker() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    if ("serviceWorker" in navigator) {
+    if (process.env.NODE_ENV !== "production") {
+      setRegistrationState("unavailable");
+    } else if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js")
         .then(() => setRegistrationState("registered"))

@@ -24,7 +24,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DashboardCommandMenu, type CommandMenuItem } from "@/components/dashboard/command-menu";
 import {
   DropdownMenu,
@@ -139,6 +139,8 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const commandTriggerRef = useRef<HTMLButtonElement>(null);
   const eventId = pathname.match(/^\/dashboard\/events\/([^/]+)/)?.[1];
   const orgIdFromPath = pathname.match(/^\/dashboard\/organizations\/([^/]+)/)?.[1];
   const currentEvent = workspace.events.find((event) => event.id === eventId);
@@ -148,6 +150,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   useEffect(() => {
     const stored = window.localStorage.getItem("vfurst-sidebar-collapsed");
     setCollapsed(stored === "true");
+    setIsReady(true);
   }, []);
 
   useEffect(() => {
@@ -179,6 +182,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   }, [currentEvent?.name, eventId, workspace.events]);
 
   const sectionLabel = pathname.split("/").filter(Boolean).at(-1)?.replaceAll("-", " ") ?? "Dashboard";
+  const isContextRoot = pathname === `/dashboard/events/${currentEvent?.id}` || pathname === `/dashboard/organizations/${currentOrg?.id}`;
 
   function toggleCollapsed() {
     const next = !collapsed;
@@ -187,7 +191,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
   }
 
   return (
-    <div className="vf-app-shell" data-collapsed={collapsed || undefined} data-mobile-open={mobileOpen || undefined}>
+    <div className="vf-app-shell" data-collapsed={collapsed || undefined} data-mobile-open={mobileOpen || undefined} data-app-shell-ready={isReady || undefined}>
       <button className="vf-mobile-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />
       <aside className="vf-app-sidebar" aria-label="Organizer workspace">
         <div className="vf-app-sidebar-header">
@@ -284,10 +288,10 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
               <Link href="/dashboard">Dashboard</Link>
               {currentOrg ? <><ChevronRight size={13} /><Link href={`/dashboard/organizations/${currentOrg.id}`}>{currentOrg.name}</Link></> : null}
               {currentEvent ? <><ChevronRight size={13} /><Link href={`/dashboard/events/${currentEvent.id}`}>{currentEvent.name}</Link></> : null}
-              {pathname !== "/dashboard" ? <><ChevronRight size={13} /><strong className="vf-capitalize">{sectionLabel}</strong></> : null}
+              {pathname !== "/dashboard" && !isContextRoot ? <><ChevronRight size={13} /><strong className="vf-capitalize">{sectionLabel}</strong></> : null}
             </nav>
           </div>
-          <button className="vf-command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-label="Search navigation">
+          <button ref={commandTriggerRef} className="vf-command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-label="Search navigation">
             <Search size={16} aria-hidden="true" />
             <span>Search navigation</span>
             <kbd className="vf-command-hint">Ctrl K</kbd>
@@ -295,7 +299,7 @@ export function DashboardAppShell({ children, userName, userEmail, workspace }: 
         </header>
         <main className="vf-dashboard-main" id="main-content">{children}</main>
       </div>
-      <DashboardCommandMenu open={commandOpen} onOpenChange={setCommandOpen} items={commandItems} />
+      <DashboardCommandMenu open={commandOpen} onOpenChange={setCommandOpen} items={commandItems} restoreFocus={() => commandTriggerRef.current?.focus()} />
     </div>
   );
 }

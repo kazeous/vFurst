@@ -4,7 +4,7 @@ import { createRegistration } from "@/actions/registration-actions";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { Check, ChevronLeft, ChevronRight, LockKeyhole } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type AddOn = { id: string; name: string; price: number; isComplimentary: boolean; maxQuantity: number };
 type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; remaining?: number; addOns: AddOn[] };
@@ -14,6 +14,7 @@ const stepLabels = ["Ticket", "Attendee", "Review"];
 export function RegistrationFlow({ orgId, eventId, currency, tiers }: { orgId: string; eventId: string; currency: "USD" | "VND"; tiers: Tier[] }) {
   const availableTier = tiers.find((tier) => !tier.soldOut);
   const [step, setStep] = useState(0);
+  const [isReady, setIsReady] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState(availableTier?.id ?? "");
   const [attendeeName, setAttendeeName] = useState("");
   const [attendeeEmail, setAttendeeEmail] = useState("");
@@ -27,8 +28,12 @@ export function RegistrationFlow({ orgId, eventId, currency, tiers }: { orgId: s
   }, [quantities, selectedAddOns, selectedTier]);
   const attendeeValid = attendeeName.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail);
 
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
+
   return (
-    <section className="vf-registration-experience" aria-labelledby="registration-flow-title">
+    <section className="vf-registration-experience" aria-labelledby="registration-flow-title" data-registration-ready={isReady || undefined}>
       <div className="vf-registration-main">
         <div className="vf-registration-stepper" aria-label="Registration progress">
           {stepLabels.map((label, index) => (

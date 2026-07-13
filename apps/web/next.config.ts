@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
 };
 
 const withSerwist = withSerwistInit({
+  disable: process.env.NODE_ENV === "development",
+  register: false,
   swSrc: "src/sw/offline-checkin.ts",
   swDest: "public/sw.js"
 });
