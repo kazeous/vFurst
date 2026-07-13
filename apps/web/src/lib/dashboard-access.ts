@@ -184,6 +184,55 @@ async function getOrderTenant(orderId: string) {
   });
 }
 
+async function getHotelBlockTenant(blockId: string) {
+  return prisma.hotelBlock.findUnique({
+    where: {
+      id: blockId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      hotelName: true,
+      roomTypes: true,
+      cutoffDate: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
+async function getHotelBookingTenant(bookingId: string) {
+  return prisma.hotelBooking.findUnique({
+    where: {
+      id: bookingId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      blockId: true,
+      block: {
+        select: {
+          id: true,
+          eventId: true,
+          event: {
+            select: {
+              id: true,
+              orgId: true,
+              currency: true
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function hasAllowedOrgRole(membership: Awaited<ReturnType<typeof getOrgMembership>>, allowedRoles: OrgRole[]) {
   return Boolean(membership && allowedRoles.includes(membership.role));
 }
@@ -392,6 +441,52 @@ export async function requireOrderAccess(orderId: string, allowedRoles: OrgRole[
     userId,
     membership,
     order,
+    event
+  };
+}
+
+export async function requireHotelBlockAccess(blockId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const hotelBlock = await getHotelBlockTenant(blockId);
+
+  if (!hotelBlock) {
+    throw new Error("Hotel block not found.");
+  }
+
+  const event = hotelBlock.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this hotel block.");
+  }
+
+  return {
+    userId,
+    membership,
+    hotelBlock,
+    event
+  };
+}
+
+export async function requireHotelBookingAccess(bookingId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const hotelBooking = await getHotelBookingTenant(bookingId);
+
+  if (!hotelBooking) {
+    throw new Error("Hotel booking not found.");
+  }
+
+  const event = hotelBooking.block.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this hotel booking.");
+  }
+
+  return {
+    userId,
+    membership,
+    hotelBooking,
     event
   };
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireEventAccess, requireHotelBlockAccess, requireHotelBookingAccess } from "@/lib/dashboard-access";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
@@ -11,27 +11,6 @@ import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage hotel blocks for this event.");
-  }
-}
 
 async function findOrCreateGuest(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -76,16 +55,14 @@ function roomTypesFromForm(formData: FormData, currency: "USD" | "VND") {
 }
 
 export async function createHotelBlock(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
+  const { event } = await requireEventAccess(eventId);
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
       hotelName: z.string().trim().min(2),
       cutoffDate: z.coerce.date()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
       hotelName: formData.get("hotelName"),
       cutoffDate: formData.get("cutoffDate")
     });
@@ -94,8 +71,6 @@ export async function createHotelBlock(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
   const roomTypes = roomTypesFromForm(formData, event.currency);
 
   if (roomTypes.length === 0) {
@@ -104,30 +79,26 @@ export async function createHotelBlock(formData: FormData) {
 
   await prisma.hotelBlock.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       hotelName: parsed.data.hotelName,
       cutoffDate: parsed.data.cutoffDate,
       roomTypes
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/hotel`);
+  revalidatePath(`/dashboard/events/${event.id}/hotel`);
 }
 
 export async function updateHotelBlock(formData: FormData) {
+  const blockId = z.string().uuid().parse(formData.get("blockId"));
+  const { hotelBlock, event } = await requireHotelBlockAccess(blockId);
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
-      blockId: z.string().uuid(),
       hotelName: z.string().trim().min(2),
       cutoffDate: z.coerce.date()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
-      blockId: formData.get("blockId"),
       hotelName: formData.get("hotelName"),
       cutoffDate: formData.get("cutoffDate")
     });
@@ -136,28 +107,31 @@ export async function updateHotelBlock(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
+  const roomTypes = roomTypesFromForm(formData, event.currency);
+
+  if (roomTypes.length === 0) {
+    throw new Error("Keep at least one room type.");
+  }
 
   await prisma.hotelBlock.update({
     where: {
-      id: parsed.data.blockId
+      id: hotelBlock.id
     },
     data: {
+      orgId: event.orgId,
       hotelName: parsed.data.hotelName,
       cutoffDate: parsed.data.cutoffDate,
-      roomTypes: roomTypesFromForm(formData, event.currency)
+      roomTypes
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/hotel`);
+  revalidatePath(`/dashboard/events/${event.id}/hotel`);
 }
 
 export async function bookRoom(formData: FormData) {
+  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
-      eventId: z.string().uuid(),
       blockId: z.string().uuid(),
       roomType: z.string().trim().min(1),
       checkIn: z.coerce.date(),
@@ -166,8 +140,6 @@ export async function bookRoom(formData: FormData) {
       guestEmail: z.string().email()
     })
     .safeParse({
-      orgId: formData.get("orgId"),
-      eventId: formData.get("eventId"),
       blockId: formData.get("blockId"),
       roomType: formData.get("roomType"),
       checkIn: formData.get("checkIn"),
@@ -182,11 +154,13 @@ export async function bookRoom(formData: FormData) {
 
   assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${parsed.data.guestEmail.toLowerCase()}`);
 
-  const block = await prisma.hotelBlock.findFirstOrThrow({
+  const block = await prisma.hotelBlock.findFirst({
     where: {
       id: parsed.data.blockId,
-      eventId: parsed.data.eventId,
-      orgId: parsed.data.orgId
+      eventId,
+      event: {
+        status: "PUBLISHED"
+      }
     },
     include: {
       bookings: true,
@@ -197,6 +171,14 @@ export async function bookRoom(formData: FormData) {
       }
     }
   });
+
+  if (!block) {
+    throw new Error("Hotel block not found or unavailable.");
+  }
+
+  if (block.orgId !== block.event.orgId) {
+    throw new Error("Hotel block tenant does not match its event.");
+  }
 
   if (block.cutoffDate < new Date()) {
     throw new Error("This hotel block is past its booking cutoff.");
@@ -225,7 +207,7 @@ export async function bookRoom(formData: FormData) {
 
   const booking = await prisma.hotelBooking.create({
     data: {
-      orgId: parsed.data.orgId,
+      orgId: block.event.orgId,
       userId: guest.id,
       blockId: block.id,
       roomType: roomType.name,
@@ -237,15 +219,15 @@ export async function bookRoom(formData: FormData) {
 
   const order = await prisma.order.create({
     data: {
-      orgId: parsed.data.orgId,
+      orgId: block.event.orgId,
       userId: guest.id,
-      eventId: parsed.data.eventId,
+      eventId: block.event.id,
       total,
       platformFee,
       currency: block.event.currency,
       items: {
         create: {
-          orgId: parsed.data.orgId,
+          orgId: block.event.orgId,
           itemType: "HOTEL",
           refId: booking.id,
           unitPrice: roomType.rate,
@@ -269,17 +251,14 @@ export async function bookRoom(formData: FormData) {
 }
 
 export async function cancelBooking(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const bookingId = z.string().uuid().parse(formData.get("bookingId"));
-
-  await requireEventAccess(orgId);
+  const { hotelBooking, event } = await requireHotelBookingAccess(bookingId);
 
   await prisma.hotelBooking.delete({
     where: {
-      id: bookingId
+      id: hotelBooking.id
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/hotel`);
+  revalidatePath(`/dashboard/events/${event.id}/hotel`);
 }

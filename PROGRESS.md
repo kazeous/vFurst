@@ -19,17 +19,36 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, and orders. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
-| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, and store/order mutations now derive tenant access from stored resources and pass cross-tenant regression tests. Hotel mutations and remaining VND/admin payment correctness still require remediation. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks, and hotel bookings. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
+| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, and hotel block/booking mutations now derive tenant access from stored resources and pass cross-tenant regression tests. Remaining VND/admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, VND product inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families and vendor uploads remain. |
 | 4 - Volunteers & Vendors | Audit reopened | Core flows exist, but cross-tenant mutations and unconstrained vendor uploads require remediation. |
 | 5 - Advanced Features | Audit reopened | Core event-day features exist, but WebUSB/PDF output is not exposed end-to-end, recipient accept/decline is absent, and cashier payment/currency behavior is incomplete. |
 | 6 - SaaS Layer | Audit reopened | Core SaaS surfaces exist, but custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits are process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, and store/product/order authorization units now pass the full 29-test E2E suite and 34 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order, and hotel authorization units now pass the full 32-test E2E suite and 34 web unit tests, but deployment remains blocked. The remaining resource-derived action families, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, derive hotel block and booking authorization from stored resources
+- Remediated the hotel `SEC-02` family and the hotel portion of `FIN-02`:
+  - Added shared `requireHotelBlockAccess(blockId)` and `requireHotelBookingAccess(bookingId)` guards. Block updates and booking cancellations now derive tenant/event/currency from the stored block or booking relationship instead of submitted organization/event values.
+  - Hotel block creation authorizes the stored event first and copies its authoritative organization/currency. Public booking requires the block to belong to the submitted portal event, requires that event to be published, rejects internally mismatched block/event tenant records, and writes the booking/order/order item with the event's authoritative organization and event ID.
+  - Removed redundant hidden `orgId` fields from organizer/public hotel forms. Public success lookup now scopes the booking through its block's organization, preventing one tenant portal from disclosing another tenant's booking.
+  - Hotel rate editors now use currency-aware VND whole-dong inputs and preserve existing VND values without dividing by 100.
+- Added regression evidence:
+  - Added Org A/Org B fixtures covering public success disclosure, cross-event public booking tampering, event-tampered block creation, foreign block update, foreign booking cancellation, and a valid zero-value VND hotel booking whose order remains event-scoped.
+- Verified:
+  - Focused hotel-resource E2E passed 3/3 in development mode.
+  - Full production-mode Chromium E2E passed 32/32 with four workers; expected server logs record the deliberately rejected hotel mutation attempts.
+  - Root unit tests passed 34/34; repository-wide type-check, lint, Prisma validation, and production build passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+  - `git diff --check` passed before this progress update and will be repeated before commit.
+- Remaining issues / blockers:
+  - `SEC-02` remains open for staff/vendors, badges/check-in, raffles/vouchers, API keys/webhooks, exports, and uploads outside product images. `SEC-03` unsigned Stripe webhook handling also remains open; do not deploy.
+  - Remaining VND cashier/payment correctness, invitations/lifecycle, `/platform` surface separation, domain/payment boundaries, and the 42-model target schema remain later logical units.
+- Next session should:
+  - Inventory and remediate the staff/volunteer/vendor action family with stored-resource authorization and Org A/Org B tests. Keep badges/check-in as a separate event-day unit.
 
 ### 2026-07-14 - Phase 7, derive store, product, order, and cart authorization from stored resources
 - Remediated the next `SEC-02` and product-upload family:

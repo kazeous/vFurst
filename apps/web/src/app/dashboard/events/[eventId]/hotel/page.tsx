@@ -1,5 +1,5 @@
 import { cancelBooking, createHotelBlock, updateHotelBlock } from "@/actions/hotel-actions";
-import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
+import { formatCurrency, formatMoneyInput, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -47,7 +47,6 @@ export default async function HotelManagementPage({ params }: { params: Promise<
         <div className="vf-section">
           <h2>Create hotel block</h2>
           <form action={createHotelBlock} className="vf-form">
-            <input type="hidden" name="orgId" value={event.orgId} />
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Hotel name
@@ -65,7 +64,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                 </label>
                 <label>
                   Nightly rate
-                  <input name="roomRate" type="number" min="0" step="0.01" required={index === 0} />
+                  <input name="roomRate" type="number" min="0" step={event.currency === "VND" ? "1" : "0.01"} required={index === 0} />
                 </label>
                 <label>
                   Rooms
@@ -103,8 +102,6 @@ export default async function HotelManagementPage({ params }: { params: Promise<
             <div key={block.id} className="vf-section">
               <h2>{block.hotelName}</h2>
               <form action={updateHotelBlock} className="vf-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
-                <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="blockId" value={block.id} />
                 <div className="vf-subform-row">
                   <label>
@@ -127,7 +124,14 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                       </label>
                       <label>
                         Nightly rate
-                        <input name="roomRate" type="number" min="0" step="0.01" defaultValue={(room.rate / 100).toFixed(2)} required />
+                        <input
+                          name="roomRate"
+                          type="number"
+                          min="0"
+                          step={event.currency === "VND" ? "1" : "0.01"}
+                          defaultValue={formatMoneyInput(room.rate, event.currency)}
+                          required
+                        />
                       </label>
                       <label>
                         Rooms
@@ -150,8 +154,6 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                       {booking.checkIn.toLocaleDateString()} to {booking.checkOut.toLocaleDateString()} - {booking.confirmationCode ?? "Pending"}
                     </small>
                     <form action={cancelBooking}>
-                      <input type="hidden" name="orgId" value={event.orgId} />
-                      <input type="hidden" name="eventId" value={event.id} />
                       <input type="hidden" name="bookingId" value={booking.id} />
                       <Button label="Cancel" type="submit" size="sm" variant="destructive" />
                     </form>

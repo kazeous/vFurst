@@ -42,9 +42,14 @@ export default async function PublicHotelPage({
   });
 
   const successBooking = query.success
-    ? await prisma.hotelBooking.findUnique({
+    ? await prisma.hotelBooking.findFirst({
         where: {
-          id: query.success
+          id: query.success,
+          block: {
+            event: {
+              orgId: org.id
+            }
+          }
         },
         include: {
           block: true,
@@ -97,7 +102,6 @@ export default async function PublicHotelPage({
 
             return (
               <form key={block.id} action={bookRoom} className="vf-section">
-                <input type="hidden" name="orgId" value={org.id} />
                 <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="blockId" value={block.id} />
                 <div>
