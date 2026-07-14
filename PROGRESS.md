@@ -25,11 +25,37 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment and the current resource-derived action/export/upload sweep now pass the full 55-test E2E suite, 63 web unit tests, and 21 worker tests. `SEC-02` is closed against the current inventory, but deployment remains blocked by fail-closed Stripe webhook verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 7 - Launch | Blocked | Managed-tenant containment, the current resource-derived action/export/upload sweep, and fail-closed Stripe callbacks now pass the full 58-test E2E suite, 73 web unit tests, and 21 worker tests. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by invitations/lifecycle, `/platform` route separation, payment correctness/rate-limit follow-ups, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, make Stripe inbound webhooks fail closed
+- Remediated the `SEC-03` P0 webhook path:
+  - Removed the unsigned JSON fallback from the Stripe route. The handler now processes only the exact raw request body returned by Stripe SDK signature verification.
+  - Missing, malformed, padded, short, or public placeholder webhook secrets fail closed with `503`; missing signatures and invalid, stale, or raw-body-mismatched signatures return controlled `400` responses before fulfillment code runs.
+  - The route no longer returns internal processing messages to callers. Processing failures are logged server-side and return a generic `500` response.
+  - Signed `checkout.session.completed`, `payment_intent.succeeded`, and `charge.refunded` callbacks remain independent of new-checkout provider enablement and reuse the existing idempotent paid/refund transitions. This preserves safe settlement of already-created orders after Stripe is disabled.
+- Hardened configuration and launch evidence:
+  - The E2E runner supplies one explicit Stripe test key/signing secret to both the Next.js server and Playwright process, without adding a runtime signature bypass.
+  - Launch readiness now requires non-placeholder Stripe secret-key and webhook-signing values and requires the Stripe webhook security spec artifact. Empty process values may fall back to dotenv values, while explicit non-empty values retain precedence.
+  - Updated the security audit, PCI SAQ A notes, and go-live checklist to record fail-closed signatures, provider-disabled settlement, current remediations, and the remaining launch blockers.
+- Added regression evidence:
+  - Added ten unit cases covering missing/placeholder/short/padded secrets, missing/invalid/stale signatures, raw-body mismatch, and a valid signed event.
+  - Added three database-backed E2E cases proving unsigned/forged/stale events leave pending orders untouched, signed Checkout/PaymentIntent events settle once while Stripe is disabled, and signed refunds reverse idempotently while disabled.
+  - The default local readiness run correctly rejects the placeholder Stripe values currently present in `.env.local`. A process-isolated run with the valid local test values passes both Stripe checks while still failing the nine unrelated/external launch gates.
+- Verified:
+  - Focused Stripe webhook E2E passed 3/3 in development mode.
+  - Full production-mode Chromium E2E passed 58/58 with four workers; expected server logs record deliberately rejected authorization and validation attempts.
+  - Root tests passed 73/73 web unit tests and 21/21 worker tests; repository-wide type-check, lint, Prisma validation, `git diff --check`, script syntax checks, docs build, worker build, and production web build passed.
+  - `npm audit --audit-level=moderate` passed with zero vulnerabilities. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+- Remaining issues / blockers:
+  - Do not deploy. The full security/launch gate remains blocked by organization lifecycle/invitations, `/platform` surface separation, mixed-currency fee reporting, payment-attempt serialization, shared production rate limiting, and external launch evidence.
+  - `.env.local` still contains placeholder Stripe values; real local forwarding requires replacing them with the active Stripe CLI/test-mode values. No secret file was changed in this unit.
+  - Domain/payment surface boundaries, the 42-model target schema, recipient transfer acceptance, badge image rendering, physical printer proof, and external webhook consumer verification remain later units.
+- Next session should:
+  - Start the lifecycle/invitation implementation order with an actual-schema inventory, additive `Organization.status`/domain lifecycle fields plus `OrgInvitation`, a safe existing-tenant backfill, and hashed invitation primitives/tests. Keep `/platform` route migration as a separately reviewable unit.
 
 ### 2026-07-14 - Phase 7, secure exports and close the current resource-action sweep
 - Completed the final current-inventory `SEC-02` sweep:

@@ -10,7 +10,7 @@ npm run check:launch
 The checker verifies:
 
 - Marketing, legal, E2E, load-test, and launch audit artifacts exist.
-- Sentry production environment variables are configured.
+- Stripe secret-key and webhook-signing environment variables plus Sentry production environment variables are configured.
 - At least two beta-program slots name real conventions and use `Externally verified` status.
 - Security audit no longer records any blocking application or dependency finding.
 - Full k6 target run is documented as passed.
@@ -63,7 +63,7 @@ npx prisma db push
 
 The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The production database role therefore needs schema DDL permission. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
 
-Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient. The current checker validates Sentry and live URL values; until it is extended, Stripe/SePay/checkout secrets above require an explicit manual go-live check. SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
+Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient. The current checker validates Stripe's secret key and webhook signing secret, Sentry values, and the live URL. SePay and checkout secrets above still require an explicit manual go-live check; SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
 
 Sentry source map upload is best-effort during `next build`: upload failures are logged as warnings so a bad token does not block deployment. If Coolify logs `sentry reported an error: You do not have permission to perform this action. (http status: 403)`, recreate or rotate `SENTRY_AUTH_TOKEN` in the same Sentry organization as `SENTRY_ORG`, confirm `SENTRY_PROJECT` is the exact project slug, and give the token release/source-map upload permissions before redeploying.
 

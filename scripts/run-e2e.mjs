@@ -5,6 +5,8 @@ const host = "127.0.0.1";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
 const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? "sk_test_e2e_stripe_secret_key_1234567890";
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "whsec_e2e_stripe_signing_secret_1234567890";
 const serverArgs = [
   "node_modules/next/dist/bin/next",
   serverMode,
@@ -52,7 +54,9 @@ function startServer() {
       AUTH_SECRET: process.env.AUTH_SECRET ?? "e2e-auth-secret-32-bytes-minimum-value",
       CHECKOUT_TOKEN_SECRET: process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum",
       SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
-      SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token"
+      SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
+      STRIPE_SECRET_KEY: stripeSecretKey,
+      STRIPE_WEBHOOK_SECRET: stripeWebhookSecret
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
@@ -86,6 +90,8 @@ function runPlaywright() {
         CHECKOUT_TOKEN_SECRET: process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum",
         SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
         SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
+        STRIPE_SECRET_KEY: stripeSecretKey,
+        STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
         PLAYWRIGHT_HTML_OPEN: "never"
       },
       stdio: "inherit",

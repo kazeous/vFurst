@@ -12,7 +12,7 @@
 - Use HTTPS in production.
 - Keep Stripe secret keys, webhook secrets, and Connect configuration in environment variables.
 - Restrict dashboard access through Auth.js sessions and organization roles.
-- Keep Stripe webhook signature verification enabled in production with `STRIPE_WEBHOOK_SECRET`.
+- Require Stripe webhook signature verification in every environment. Missing, placeholder, stale, or invalid `STRIPE_WEBHOOK_SECRET`/`Stripe-Signature` values fail closed before fulfillment.
 - Review Stripe account and Connect onboarding status before allowing paid public registration.
 
 ## Verification
@@ -21,3 +21,4 @@
 - Confirm checkout flows redirect to Stripe-hosted Checkout for paid orders.
 - Confirm zero-dollar and comped flows never ask for card details.
 - Confirm refunds use Stripe object IDs rather than local card data.
+- Confirm unsigned and invalidly signed webhook fixtures cannot change order state, while signed callbacks remain idempotent and can settle already-created orders after Stripe is disabled for new checkout attempts.

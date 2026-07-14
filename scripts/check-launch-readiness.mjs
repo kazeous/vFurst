@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 
-const explicitEnv = new Set(Object.keys(process.env));
+const explicitEnv = new Set(
+  Object.entries(process.env)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([name]) => name)
+);
 const ignoredDotEnvNames = new Set(["NODE_ENV"]);
 
 const requiredFiles = [
@@ -18,10 +22,19 @@ const requiredFiles = [
   "scripts/run-launch-load-proof.mjs",
   "tests/load/registration-checkin.k6.js",
   "tests/e2e/launch-critical-paths.spec.ts",
-  "tests/e2e/launch-accessibility-smoke.spec.ts"
+  "tests/e2e/launch-accessibility-smoke.spec.ts",
+  "tests/e2e/stripe-webhook-security.spec.ts"
 ];
 
 const requiredEnv = [
+  {
+    name: "STRIPE_SECRET_KEY",
+    type: "stripe-secret-key"
+  },
+  {
+    name: "STRIPE_WEBHOOK_SECRET",
+    type: "stripe-webhook-secret"
+  },
   {
     name: "NEXT_PUBLIC_SENTRY_DSN",
     type: "sentry-dsn"
@@ -173,11 +186,43 @@ function validateTextEnv(name, value) {
   return null;
 }
 
+function validateStripeSecretKey(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  if ((!value.startsWith("sk_test_") && !value.startsWith("sk_live_")) || value.length < 20) {
+    return `${name} does not look like a Stripe secret key.`;
+  }
+
+  return null;
+}
+
+function validateStripeWebhookSecret(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  if (!value.startsWith("whsec_") || value.length < 20 || value !== value.trim()) {
+    return `${name} does not look like a Stripe webhook signing secret.`;
+  }
+
+  return null;
+}
+
 function validateRequiredEnv({ name, type }) {
   const value = process.env[name] ?? "";
 
   if (type === "sentry-dsn") {
     return validateSentryDsn(name, value);
+  }
+
+  if (type === "stripe-secret-key") {
+    return validateStripeSecretKey(name, value);
+  }
+
+  if (type === "stripe-webhook-secret") {
+    return validateStripeWebhookSecret(name, value);
   }
 
   return validateTextEnv(name, value);

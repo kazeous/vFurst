@@ -1,5 +1,5 @@
 import { markOrderPaid, markOrderPaidByPaymentIntent, markOrderRefundedByPaymentIntent } from "@/lib/fulfillment";
-import { getStripe } from "@/lib/payments/stripe";
+import { verifyStripeWebhookEvent } from "@/lib/payments/stripe-webhook";
 import {
   RATE_LIMIT_WINDOW_MS,
   STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE,
@@ -23,20 +23,18 @@ export async function POST(request: Request) {
 
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let event: Stripe.Event;
+  const verification = verifyStripeWebhookEvent(body, signature);
 
-  try {
-    if (webhookSecret && signature) {
-      event = getStripe().webhooks.constructEvent(body, signature, webhookSecret);
-    } else {
-      event = JSON.parse(body) as Stripe.Event;
+  if (!verification.ok) {
+    if (verification.status === 503) {
+      console.error("Stripe webhook rejected because signing is not configured.");
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid webhook payload.";
-    return Response.json({ error: message }, { status: 400 });
+
+    return Response.json({ error: verification.error }, { status: verification.status });
   }
+
+  const event = verification.event;
 
   try {
     switch (event.type) {
@@ -69,8 +67,8 @@ export async function POST(request: Request) {
         break;
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Webhook handler failed.";
-    return Response.json({ error: message }, { status: 500 });
+    console.error("Stripe webhook processing failed.", error);
+    return Response.json({ error: "Stripe webhook processing failed." }, { status: 500 });
   }
 
   return Response.json({ received: true });
