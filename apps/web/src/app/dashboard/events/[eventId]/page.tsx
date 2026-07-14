@@ -55,8 +55,9 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const paidRevenue = event.orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.total, 0);
-  const platformFees = event.orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.platformFee, 0);
+  const paidOrders = event.orders.filter((order) => order.status === "PAID" && order.currency === event.currency);
+  const paidRevenue = paidOrders.reduce((sum, order) => sum + order.total, 0);
+  const platformFees = paidOrders.reduce((sum, order) => sum + order.platformFee, 0);
   const trendMap = new Map<string, number>();
 
   for (const registration of event.registrations) {

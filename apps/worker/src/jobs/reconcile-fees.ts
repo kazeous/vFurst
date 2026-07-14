@@ -1,101 +1,183 @@
-import { prisma } from "@vfurst/db";
+import {
+  calculateFeeSummariesByCurrency,
+  createFeePolicy,
+  DEFAULT_VND_ATTENDEE_FEE,
+  DEFAULT_VND_HOTEL_BOOKING_FEE,
+  prisma,
+  type FeePolicyByCurrency,
+  type Prisma
+} from "@vfurst/db";
 import type { Job } from "bullmq";
 import type { ReconcileFeesJob } from "../queues.js";
 
-const ATTENDEE_FEE_CENTS = 100;
-const HOTEL_BOOKING_FEE_CENTS = 100;
+function configuredFee(settings: Prisma.JsonValue, key: string, fallback: number) {
+  if (!settings || Array.isArray(settings) || typeof settings !== "object") {
+    return fallback;
+  }
 
-function cents(value: number) {
-  return Math.max(0, Math.round(value));
+  const value = settings[key];
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
-async function reportForOrg(orgId: string) {
-  const [attendeeCount, hotelBookingCount, paidOrders, compedRegistrations] = await Promise.all([
-    prisma.registration.count({
+async function loadFeePolicies() {
+  const config = await prisma.paymentProviderConfig.findUnique({
+    where: {
+      provider: "SEPAY"
+    },
+    select: {
+      settings: true
+    }
+  });
+  const settings = config?.settings ?? {};
+
+  return createFeePolicy({
+    registrationFeeVnd: configuredFee(settings, "registrationFeeVnd", DEFAULT_VND_ATTENDEE_FEE),
+    hotelFeeVnd: configuredFee(settings, "hotelFeeVnd", DEFAULT_VND_HOTEL_BOOKING_FEE)
+  });
+}
+
+async function reportForOrg(orgId: string, policies: FeePolicyByCurrency) {
+  const [events, registrations, hotelBookings, paidOrders] = await Promise.all([
+    prisma.event.findMany({
+      where: {
+        orgId
+      },
+      select: {
+        currency: true
+      }
+    }),
+    prisma.registration.findMany({
       where: {
         orgId,
+        event: {
+          orgId
+        },
         status: {
           in: ["CONFIRMED", "CHECKED_IN"]
         }
+      },
+      select: {
+        event: {
+          select: {
+            currency: true
+          }
+        },
+        orderItems: {
+          where: {
+            orgId,
+            order: {
+              orgId,
+              status: "PAID",
+              platformFee: {
+                gt: 0
+              }
+            }
+          },
+          select: {
+            order: {
+              select: {
+                currency: true
+              }
+            }
+          }
+        }
       }
     }),
-    prisma.hotelBooking.count({
+    prisma.hotelBooking.findMany({
       where: {
         orgId,
         confirmationCode: {
           not: "PENDING"
+        },
+        block: {
+          orgId,
+          event: {
+            orgId
+          }
+        }
+      },
+      select: {
+        block: {
+          select: {
+            event: {
+              select: {
+                currency: true
+              }
+            }
+          }
         }
       }
     }),
     prisma.order.findMany({
       where: {
         orgId,
+        event: {
+          orgId
+        },
         status: "PAID"
       },
-      include: {
-        items: true
-      }
-    }),
-    prisma.registration.count({
-      where: {
-        orgId,
-        status: {
-          in: ["CONFIRMED", "CHECKED_IN"]
+      select: {
+        currency: true,
+        platformFee: true,
+        event: {
+          select: {
+            currency: true
+          }
         },
-        orderItems: {
-          none: {
-            order: {
-              status: "PAID",
-              platformFee: {
-                gt: 0
-              }
-            }
+        items: {
+          where: {
+            orgId
+          },
+          select: {
+            itemType: true,
+            unitPrice: true,
+            quantity: true
           }
         }
       }
     })
   ]);
 
-  const storeVendorRevenue = paidOrders.reduce(
-    (sum, order) =>
-      sum +
-      order.items
-        .filter((item) => item.itemType === "PRODUCT" || item.itemType === "VENDOR")
-        .reduce((itemSum, item) => itemSum + item.unitPrice * item.quantity, 0),
-    0
-  );
-  const expectedTotal = attendeeCount * ATTENDEE_FEE_CENTS + hotelBookingCount * HOTEL_BOOKING_FEE_CENTS + cents(storeVendorRevenue * 0.01);
-  const collectedTotal = paidOrders.reduce((sum, order) => sum + order.platformFee, 0);
-
   return {
     orgId,
-    attendeeCount,
-    hotelBookingCount,
-    storeVendorRevenue,
-    expectedTotal,
-    collectedTotal,
-    discrepancyCents: expectedTotal - collectedTotal,
-    compedRegistrations,
+    currencies: calculateFeeSummariesByCurrency({
+      policies,
+      includeCurrencies: events.map((event) => event.currency),
+      registrations: registrations.map((registration) => ({
+        currency: registration.event.currency,
+        hasCollectedAttendeeFee: registration.orderItems.some(
+          (item) => item.order.currency === registration.event.currency
+        )
+      })),
+      hotelBookings: hotelBookings.map((booking) => ({
+        currency: booking.block.event.currency
+      })),
+      paidOrders
+    }),
+    currencyMismatchCount: paidOrders.filter((order) => order.currency !== order.event.currency).length,
     generatedAt: new Date().toISOString()
   };
 }
 
 export async function processReconcileFees(job: Job<ReconcileFeesJob>) {
-  const orgs = await prisma.organization.findMany({
-    where: job.data.orgId
-      ? {
-          id: job.data.orgId
-        }
-      : undefined,
-    select: {
-      id: true
-    }
-  });
+  const [orgs, policies] = await Promise.all([
+    prisma.organization.findMany({
+      where: job.data.orgId
+        ? {
+            id: job.data.orgId
+          }
+        : undefined,
+      select: {
+        id: true
+      }
+    }),
+    loadFeePolicies()
+  ]);
 
   const reports = [];
 
   for (const org of orgs) {
-    reports.push(await reportForOrg(org.id));
+    reports.push(await reportForOrg(org.id, policies));
   }
 
   return {

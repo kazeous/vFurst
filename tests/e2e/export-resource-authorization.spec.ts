@@ -230,7 +230,8 @@ test("an organizer can export only consistent records from its own event", async
   expect(analyticsCsv).toContain(registrationAId);
   expect(analyticsCsv).not.toContain(poisonedRegistrationId);
   expect(analyticsCsv).toContain(orderAId);
-  expect(analyticsCsv).toContain('"Paid revenue cents","12345"');
+  expect(analyticsCsv).toContain('"Paid revenue (USD cents)","12345"');
+  expect(analyticsCsv).toContain('"Currency","Order total (minor units)"');
   expect(analyticsCsv).not.toContain(poisonedOrderId);
   expect(analyticsCsv).not.toContain("999999");
 

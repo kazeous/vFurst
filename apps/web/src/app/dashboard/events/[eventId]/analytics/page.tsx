@@ -90,7 +90,8 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
     notFound();
   }
 
-  const feeReport = await getOrganizationFeeReport(event.orgId);
+  const feeReport = await getOrganizationFeeReport(event.orgId, { eventId: event.id });
+  const currencyFeeReport = feeReport.currencies.find((report) => report.currency === event.currency);
   const registrationTrendMap = new Map<string, number>();
   const checkInTrendMap = new Map<string, number>();
 
@@ -110,9 +111,10 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
       checkIns: cumulative
     };
   });
-  const paidItems = event.orders.flatMap((order) => order.items);
-  const grossRevenue = event.orders.reduce((sum, order) => sum + order.total, 0);
-  const platformFees = event.orders.reduce((sum, order) => sum + order.platformFee, 0);
+  const eventCurrencyOrders = event.orders.filter((order) => order.currency === event.currency);
+  const paidItems = eventCurrencyOrders.flatMap((order) => order.items);
+  const grossRevenue = eventCurrencyOrders.reduce((sum, order) => sum + order.total, 0);
+  const platformFees = eventCurrencyOrders.reduce((sum, order) => sum + order.platformFee, 0);
   const checkedIn = event.registrations.filter((registration) => registration.status === "CHECKED_IN").length;
 
   return (
@@ -147,6 +149,12 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
           <span>Event paid orders</span>
         </div>
       </section>
+      {feeReport.currencyMismatchCount > 0 ? (
+        <div className="vf-banner vf-banner-warning">
+          {feeReport.currencyMismatchCount} paid order(s) use a different currency from this {event.currency} event and are
+          excluded from the event totals and charts.
+        </div>
+      ) : null}
       <AnalyticsCharts
         registrationTrend={trendFromMap(registrationTrendMap, "registrations")}
         checkInTrend={checkInTrend}
@@ -166,7 +174,7 @@ export default async function EventAnalyticsPage({ params }: { params: Promise<{
             <span>Collected</span>
             <span>Basis</span>
           </div>
-          {feeReport.lines.map((line) => (
+          {currencyFeeReport?.lines.map((line) => (
             <div key={line.label} className="vf-table-row vf-four-col">
               <strong>{line.label}</strong>
               <span>{formatCurrency(line.expected, event.currency)}</span>

@@ -24,12 +24,35 @@ Phase 0 is complete under the updated local-development directive:
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
-| 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, and global payment operations now use their intended tenant/control-plane boundaries. Fee reports still mix USD/VND and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, and `/platform` separation pass the full 70-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by payment correctness/rate-limit follow-ups and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, and currency-separated fee reporting now use their intended tenant/control-plane boundaries. Production rate limits remain process-local. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, and mixed-currency reporting pass the full 72-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by payment-attempt serialization, shared production rate limiting, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, make fee reporting currency-safe
+- Replaced the single mixed-money fee total with one shared currency-bucket contract:
+  - Added a pure database-package calculator used by both the web report and reconciliation worker, so USD cents and VND whole dong are never added together.
+  - USD attendee/hotel fees remain $1.00; VND attendee/hotel fees now use the centrally configured SePay values. Store/vendor fees remain 1% inside each currency bucket.
+  - Mixed registration/hotel orders allocate the collected platform fee sequentially, so one order fee cannot be counted once for each item family. Comped attendee and discrepancy counts also remain currency-scoped.
+  - Reconciliation output now returns independent currency reports and identifies paid orders whose currency differs from their event instead of silently coercing them into the event currency.
+- Corrected organizer and event reporting surfaces:
+  - Organization billing renders an independent summary, breakdown, discrepancies, details, and fee history for each currency, with provider-neutral Stripe/central VND settlement copy.
+  - Event analytics requests an event-scoped fee report rather than reusing the whole organization's report. Revenue, fee cards, and chart inputs exclude wrong-currency orders and show a review warning when mismatches exist.
+  - Event overview and portfolio revenue now include only paid orders whose currency matches the immutable event currency; pending and mismatched orders no longer inflate the displayed totals.
+  - Analytics CSV groups metrics by currency, labels USD as cents and VND as whole dong, includes the order currency, and emits one row per order so a platform fee is not repeated for every order item.
+- Added regression evidence:
+  - Added four pure calculator cases covering independent USD/VND totals, configured VND fees, non-duplicated mixed-order allocation, currency-scoped comped attendees, and empty requested buckets.
+  - Added a database-backed USD/VND organizer fixture proving separate billing reports, event-scoped analytics, and currency-explicit CSV output. Updated the existing cross-tenant export suite for the new CSV contract.
+- Verified:
+  - Full production-mode Chromium E2E passed 72/72 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 84/84 web unit tests, 21/21 worker tests, 5/5 database tests, and 1/1 email test.
+  - Repository-wide type-check, lint, Prisma validation, `git diff --check`, and production builds passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+- Remaining issues / blockers:
+  - Do not deploy. Payment-attempt serialization, shared production rate limiting, recipient transfer acceptance, badge image rendering, physical printer proof, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain open.
+- Next session should:
+  - Take payment-attempt serialization as the next separately reviewable payment unit: inventory concurrent checkout/attempt creation and callback transitions, enforce one authoritative active attempt/order transition under races, add provider and replay regressions, and rerun the repository gates.
 
 ### 2026-07-14 - Phase 7, separate domain activation, global payments, and managed acquisition
 - Completed the domain control-plane boundary:

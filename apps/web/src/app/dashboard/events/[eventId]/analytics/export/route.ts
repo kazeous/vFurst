@@ -1,6 +1,6 @@
 import { csvDownload } from "@/lib/csv";
 import { requireEventPageAccess } from "@/lib/dashboard-access";
-import { prisma, type OrderItemType } from "@vfurst/db";
+import { prisma, type CurrencyCode, type OrderItemType } from "@vfurst/db";
 
 function sourceForItem(itemType: OrderItemType) {
   if (itemType === "PRODUCT") {
@@ -16,6 +16,15 @@ function sourceForItem(itemType: OrderItemType) {
   }
 
   return "Registration";
+}
+
+function sourceForOrder(itemTypes: OrderItemType[]) {
+  const sources = Array.from(new Set(itemTypes.map(sourceForItem)));
+  return sources.length === 1 ? sources[0] : "Mixed";
+}
+
+function currencyUnit(currency: CurrencyCode) {
+  return currency === "USD" ? "cents" : "whole dong";
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {
@@ -57,12 +66,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     })
   ]);
 
+  const paidOrders = orders.filter((order) => order.status === "PAID");
+  const currencies = Array.from(new Set<CurrencyCode>([event.currency, ...orders.map((order) => order.currency)])).sort(
+    (left, right) => (left === event.currency ? -1 : right === event.currency ? 1 : left.localeCompare(right))
+  );
+  const moneyRows = currencies.flatMap((currency) => {
+    const currencyOrders = paidOrders.filter((order) => order.currency === currency);
+    const unit = currencyUnit(currency);
+
+    return [
+      [`Paid revenue (${currency} ${unit})`, currencyOrders.reduce((sum, order) => sum + order.total, 0)],
+      [`Collected fees (${currency} ${unit})`, currencyOrders.reduce((sum, order) => sum + order.platformFee, 0)]
+    ];
+  });
   const rows = [
     ["Metric", "Value"],
     ["Registrations", registrations.length],
     ["Checked in", registrations.filter((registration) => registration.status === "CHECKED_IN").length],
-    ["Paid revenue cents", orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.total, 0)],
-    ["Collected fees cents", orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.platformFee, 0)],
+    ...moneyRows,
     [],
     ["Registration ID", "Attendee", "Email", "Type", "Status", "Created", "Checked in"],
     ...registrations.map((registration) => [
@@ -75,17 +96,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
       registration.checkedInAt?.toISOString() ?? ""
     ]),
     [],
-    ["Order ID", "Source", "Total cents", "Platform fee cents", "Status", "Updated"],
-    ...orders.flatMap((order) =>
-      order.items.map((item) => [
-        order.id,
-        sourceForItem(item.itemType),
-        item.unitPrice * item.quantity,
-        order.platformFee,
-        order.status,
-        order.updatedAt.toISOString()
-      ])
-    )
+    ["Order ID", "Source", "Currency", "Order total (minor units)", "Platform fee (minor units)", "Status", "Updated"],
+    ...orders.map((order) => [
+      order.id,
+      sourceForOrder(order.items.map((item) => item.itemType)),
+      order.currency,
+      order.total,
+      order.platformFee,
+      order.status,
+      order.updatedAt.toISOString()
+    ])
   ];
   return csvDownload(rows, `analytics-${event.id}.csv`);
 }

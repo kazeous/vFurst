@@ -1,4 +1,11 @@
-import { prisma, type CurrencyCode, type PaymentProvider, type Prisma } from "@vfurst/db";
+import {
+  DEFAULT_VND_ATTENDEE_FEE,
+  DEFAULT_VND_HOTEL_BOOKING_FEE,
+  prisma,
+  type CurrencyCode,
+  type PaymentProvider,
+  type Prisma
+} from "@vfurst/db";
 import { z } from "zod";
 
 export const sepaySettingsSchema = z.object({
@@ -7,8 +14,8 @@ export const sepaySettingsSchema = z.object({
   accountHolder: z.string().trim().min(2).default(""),
   bankAccountId: z.string().trim().default(""),
   memoPrefix: z.string().trim().max(40).default(""),
-  registrationFeeVnd: z.coerce.number().int().min(0).default(25_000),
-  hotelFeeVnd: z.coerce.number().int().min(0).default(25_000)
+  registrationFeeVnd: z.coerce.number().int().min(0).default(DEFAULT_VND_ATTENDEE_FEE),
+  hotelFeeVnd: z.coerce.number().int().min(0).default(DEFAULT_VND_HOTEL_BOOKING_FEE)
 });
 
 export type SePaySettings = z.infer<typeof sepaySettingsSchema>;
@@ -30,8 +37,8 @@ function parseSePaySettings(settings: Prisma.JsonValue | undefined): SePaySettin
         accountHolder: "",
         bankAccountId: "",
         memoPrefix: "",
-        registrationFeeVnd: 25_000,
-        hotelFeeVnd: 25_000
+        registrationFeeVnd: DEFAULT_VND_ATTENDEE_FEE,
+        hotelFeeVnd: DEFAULT_VND_HOTEL_BOOKING_FEE
       };
 }
 

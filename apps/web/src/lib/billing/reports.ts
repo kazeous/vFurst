@@ -1,4 +1,14 @@
-import { prisma, type OrderItemType, type Prisma } from "@vfurst/db";
+import { getSePaySettings } from "@/lib/payments/platform";
+import { formatCurrency } from "@/lib/registration/pricing";
+import {
+  calculateFeeSummariesByCurrency,
+  createFeePolicy,
+  prisma,
+  type CurrencyCode,
+  type CurrencyFeeSummary,
+  type OrderItemType,
+  type Prisma
+} from "@vfurst/db";
 
 export type FeeLine = {
   label: string;
@@ -22,26 +32,19 @@ export type FeeDiscrepancy = {
   message: string;
 };
 
-export type OrganizationFeeReport = {
-  orgId: string;
-  generatedAt: string;
-  attendeeCount: number;
-  hotelBookingCount: number;
-  storeVendorRevenue: number;
-  expectedTotal: number;
-  collectedTotal: number;
+export type CurrencyFeeReport = CurrencyFeeSummary & {
   lines: FeeLine[];
   history: FeeHistoryEntry[];
   discrepancies: FeeDiscrepancy[];
 };
 
-const ATTENDEE_FEE_CENTS = 100;
-const HOTEL_BOOKING_FEE_CENTS = 100;
-const TRANSACTION_FEE_RATE = 0.01;
-
-function cents(value: number) {
-  return Math.max(0, Math.round(value));
-}
+export type OrganizationFeeReport = {
+  orgId: string;
+  eventId?: string;
+  generatedAt: string;
+  currencies: CurrencyFeeReport[];
+  currencyMismatchCount: number;
+};
 
 function itemSource(itemTypes: OrderItemType[]) {
   if (itemTypes.includes("VENDOR")) {
@@ -63,137 +66,200 @@ function itemSource(itemTypes: OrderItemType[]) {
   return "Mixed";
 }
 
-function itemRevenue(items: Array<{ itemType: OrderItemType; unitPrice: number; quantity: number }>, types: OrderItemType[]) {
-  return items
-    .filter((item) => types.includes(item.itemType))
-    .reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+function feeBasis(currency: CurrencyCode, amount: number, noun: string) {
+  return `${formatCurrency(amount, currency)} per ${noun}`;
 }
 
-export async function getOrganizationFeeReport(orgId: string): Promise<OrganizationFeeReport> {
-  const [attendeeCount, hotelBookingCount, paidOrders, compedRegistrations] = await Promise.all([
-    prisma.registration.count({
+export async function getOrganizationFeeReport(
+  orgId: string,
+  options: { eventId?: string } = {}
+): Promise<OrganizationFeeReport> {
+  const eventScope = options.eventId ? { id: options.eventId, orgId } : { orgId };
+  const [events, registrations, hotelBookings, paidOrders, sepaySettings] = await Promise.all([
+    prisma.event.findMany({
+      where: eventScope,
+      select: {
+        currency: true
+      }
+    }),
+    prisma.registration.findMany({
       where: {
         orgId,
+        eventId: options.eventId,
+        event: eventScope,
         status: {
           in: ["CONFIRMED", "CHECKED_IN"]
         }
+      },
+      select: {
+        event: {
+          select: {
+            currency: true
+          }
+        },
+        orderItems: {
+          where: {
+            orgId,
+            order: {
+              orgId,
+              eventId: options.eventId,
+              status: "PAID",
+              platformFee: {
+                gt: 0
+              }
+            }
+          },
+          select: {
+            order: {
+              select: {
+                currency: true
+              }
+            }
+          }
+        }
       }
     }),
-    prisma.hotelBooking.count({
+    prisma.hotelBooking.findMany({
       where: {
         orgId,
         confirmationCode: {
           not: "PENDING"
+        },
+        block: {
+          orgId,
+          eventId: options.eventId,
+          event: eventScope
+        }
+      },
+      select: {
+        block: {
+          select: {
+            event: {
+              select: {
+                currency: true
+              }
+            }
+          }
         }
       }
     }),
     prisma.order.findMany({
       where: {
         orgId,
+        eventId: options.eventId,
+        event: eventScope,
         status: "PAID"
       },
-      include: {
-        event: true,
-        items: true
+      select: {
+        id: true,
+        currency: true,
+        total: true,
+        platformFee: true,
+        updatedAt: true,
+        event: {
+          select: {
+            name: true,
+            currency: true
+          }
+        },
+        items: {
+          where: {
+            orgId
+          },
+          select: {
+            itemType: true,
+            unitPrice: true,
+            quantity: true
+          }
+        }
       },
       orderBy: {
         updatedAt: "desc"
       }
     }),
-    prisma.registration.count({
-      where: {
-        orgId,
-        status: {
-          in: ["CONFIRMED", "CHECKED_IN"]
-        },
-        orderItems: {
-          none: {
-            order: {
-              status: "PAID",
-              platformFee: {
-                gt: 0
-              }
-            }
-          }
-        }
-      }
-    })
+    getSePaySettings()
   ]);
 
-  const storeVendorRevenue = paidOrders.reduce((sum, order) => sum + itemRevenue(order.items, ["PRODUCT", "VENDOR"]), 0);
-  const attendeeExpected = attendeeCount * ATTENDEE_FEE_CENTS;
-  const hotelExpected = hotelBookingCount * HOTEL_BOOKING_FEE_CENTS;
-  const transactionExpected = cents(storeVendorRevenue * TRANSACTION_FEE_RATE);
-  const expectedTotal = attendeeExpected + hotelExpected + transactionExpected;
-  const collectedTotal = paidOrders.reduce((sum, order) => sum + order.platformFee, 0);
-
-  const attendeeCollected = paidOrders.reduce((sum, order) => {
-    const hasRegistration = order.items.some((item) => item.itemType === "REGISTRATION");
-    return sum + (hasRegistration ? Math.min(order.platformFee, ATTENDEE_FEE_CENTS) : 0);
-  }, 0);
-  const hotelCollected = paidOrders.reduce((sum, order) => {
-    const hasHotel = order.items.some((item) => item.itemType === "HOTEL");
-    return sum + (hasHotel ? Math.min(order.platformFee, HOTEL_BOOKING_FEE_CENTS) : 0);
-  }, 0);
-  const transactionCollected = Math.max(0, collectedTotal - attendeeCollected - hotelCollected);
-
-  const discrepancies: FeeDiscrepancy[] = [];
-  const gap = expectedTotal - collectedTotal;
-
-  if (gap !== 0) {
-    discrepancies.push({
-      severity: "warning",
-      message: `${gap > 0 ? "Under-collected" : "Over-collected"} by ${Math.abs(gap)} cents compared with current usage.`
-    });
-  }
-
-  if (compedRegistrations > 0) {
-    discrepancies.push({
-      severity: "info",
-      message: `${compedRegistrations} confirmed attendee record(s) do not have a paid order with a collected attendee fee.`
-    });
-  }
+  const policies = createFeePolicy(sepaySettings);
+  const summaries = calculateFeeSummariesByCurrency({
+    policies,
+    includeCurrencies: events.map((event) => event.currency),
+    registrations: registrations.map((registration) => ({
+      currency: registration.event.currency,
+      hasCollectedAttendeeFee: registration.orderItems.some(
+        (item) => item.order.currency === registration.event.currency
+      )
+    })),
+    hotelBookings: hotelBookings.map((booking) => ({
+      currency: booking.block.event.currency
+    })),
+    paidOrders
+  });
 
   return {
     orgId,
+    eventId: options.eventId,
     generatedAt: new Date().toISOString(),
-    attendeeCount,
-    hotelBookingCount,
-    storeVendorRevenue,
-    expectedTotal,
-    collectedTotal,
-    lines: [
-      {
-        label: "Attendee fees",
-        expected: attendeeExpected,
-        collected: attendeeCollected,
-        units: attendeeCount,
-        basis: "$1.00 per confirmed or checked-in attendee"
-      },
-      {
-        label: "Hotel booking fees",
-        expected: hotelExpected,
-        collected: hotelCollected,
-        units: hotelBookingCount,
-        basis: "$1.00 per confirmed hotel booking"
-      },
-      {
-        label: "Store and vendor transaction fees",
-        expected: transactionExpected,
-        collected: transactionCollected,
-        units: storeVendorRevenue,
-        basis: "1% of paid store and vendor revenue"
+    currencyMismatchCount: paidOrders.filter((order) => order.currency !== order.event.currency).length,
+    currencies: summaries.map((summary) => {
+      const policy = policies[summary.currency];
+      const discrepancies: FeeDiscrepancy[] = [];
+
+      if (summary.discrepancy !== 0) {
+        discrepancies.push({
+          severity: "warning",
+          message: `${summary.discrepancy > 0 ? "Under-collected" : "Over-collected"} by ${formatCurrency(
+            Math.abs(summary.discrepancy),
+            summary.currency
+          )} compared with current usage.`
+        });
       }
-    ],
-    history: paidOrders.map((order) => ({
-      orderId: order.id,
-      eventName: order.event.name,
-      collectedAt: order.updatedAt.toISOString(),
-      gross: order.total,
-      platformFee: order.platformFee,
-      source: itemSource(order.items.map((item) => item.itemType))
-    })),
-    discrepancies
+
+      if (summary.compedRegistrationCount > 0) {
+        discrepancies.push({
+          severity: "info",
+          message: `${summary.compedRegistrationCount} confirmed attendee record(s) do not have a paid order with a collected attendee fee.`
+        });
+      }
+
+      return {
+        ...summary,
+        lines: [
+          {
+            label: "Attendee fees",
+            expected: summary.attendeeExpected,
+            collected: summary.attendeeCollected,
+            units: summary.attendeeCount,
+            basis: feeBasis(summary.currency, policy.attendeeFee, "confirmed or checked-in attendee")
+          },
+          {
+            label: "Hotel booking fees",
+            expected: summary.hotelExpected,
+            collected: summary.hotelCollected,
+            units: summary.hotelBookingCount,
+            basis: feeBasis(summary.currency, policy.hotelBookingFee, "confirmed hotel booking")
+          },
+          {
+            label: "Store and vendor transaction fees",
+            expected: summary.transactionExpected,
+            collected: summary.transactionCollected,
+            units: summary.storeVendorRevenue,
+            basis: "1% of paid store and vendor revenue"
+          }
+        ],
+        history: paidOrders
+          .filter((order) => order.currency === summary.currency)
+          .map((order) => ({
+            orderId: order.id,
+            eventName: order.event.name,
+            collectedAt: order.updatedAt.toISOString(),
+            gross: order.total,
+            platformFee: order.platformFee,
+            source: itemSource(order.items.map((item) => item.itemType))
+          })),
+        discrepancies
+      };
+    })
   };
 }
 
