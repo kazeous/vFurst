@@ -1,6 +1,5 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { badgeQueue } from "@/lib/badge-queue";
 import {
   requireBadgeAccess,
@@ -17,7 +16,6 @@ import { parseMoney } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 const badgeElementSchema = z.object({
@@ -48,29 +46,6 @@ const rafflePrizeSchema = z.object({
   description: z.string().trim().optional(),
   quantity: z.coerce.number().int().min(1)
 });
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage this event.");
-  }
-
-  return session.user.id;
-}
 
 async function findOrCreateUser(
   email: string,
@@ -794,7 +769,6 @@ export async function drawRaffleWinner(formData: FormData) {
 }
 
 export async function saveEmailTemplate(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const templateKey = z
     .enum(["registration-confirmation", "payment-receipt", "volunteer-approval", "vendor-status", "transfer-request"])
@@ -805,11 +779,15 @@ export async function saveEmailTemplate(formData: FormData) {
     text: formData.get("text")
   });
 
-  await requireEventAccess(orgId);
-
-  const event = await prisma.event.findUniqueOrThrow({
+  const { event: authorizedEvent } = await requireStoredEventAccess(eventId);
+  const event = await prisma.event.findFirstOrThrow({
     where: {
-      id: eventId
+      id: authorizedEvent.id,
+      orgId: authorizedEvent.orgId
+    },
+    select: {
+      id: true,
+      settings: true
     }
   });
   const settings = parseEventSettings(event.settings);
@@ -817,7 +795,7 @@ export async function saveEmailTemplate(formData: FormData) {
 
   await prisma.event.update({
     where: {
-      id: eventId
+      id: event.id
     },
     data: {
       settings: {
@@ -830,5 +808,5 @@ export async function saveEmailTemplate(formData: FormData) {
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/settings/emails`);
+  revalidatePath(`/dashboard/events/${event.id}/settings/emails`);
 }

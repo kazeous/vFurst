@@ -1,15 +1,18 @@
+import { csvDownload } from "@/lib/csv";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
-
-function csvCell(value: string | number | null | undefined) {
-  const text = String(value ?? "");
-  return `"${text.replaceAll('"', '""')}"`;
-}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
+  const { event } = await requireEventPageAccess(eventId);
   const registrations = await prisma.registration.findMany({
     where: {
-      eventId
+      eventId: event.id,
+      orgId: event.orgId,
+      type: {
+        eventId: event.id,
+        orgId: event.orgId
+      }
     },
     include: {
       type: true,
@@ -32,13 +35,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     ])
   ];
 
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-
-  return new Response(csv, {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="registrations-${eventId}.csv"`
-    }
-  });
+  return csvDownload(rows, `registrations-${event.id}.csv`);
 }
-

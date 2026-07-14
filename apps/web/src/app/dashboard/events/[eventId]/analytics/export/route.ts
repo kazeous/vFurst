@@ -1,9 +1,6 @@
+import { csvDownload } from "@/lib/csv";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { prisma, type OrderItemType } from "@vfurst/db";
-
-function csvCell(value: string | number | null | undefined) {
-  const text = String(value ?? "");
-  return `"${text.replaceAll('"', '""')}"`;
-}
 
 function sourceForItem(itemType: OrderItemType) {
   if (itemType === "PRODUCT") {
@@ -23,38 +20,52 @@ function sourceForItem(itemType: OrderItemType) {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const event = await prisma.event.findUnique({
-    where: {
-      id: eventId
-    },
-    include: {
-      registrations: {
-        include: {
-          type: true,
-          user: true
+  const { event } = await requireEventPageAccess(eventId);
+  const [registrations, orders] = await Promise.all([
+    prisma.registration.findMany({
+      where: {
+        eventId: event.id,
+        orgId: event.orgId,
+        type: {
+          eventId: event.id,
+          orgId: event.orgId
         }
       },
-      orders: {
-        include: {
-          items: true
-        }
+      include: {
+        type: true,
+        user: true
+      },
+      orderBy: {
+        createdAt: "asc"
       }
-    }
-  });
-
-  if (!event) {
-    return Response.json({ error: "Event not found." }, { status: 404 });
-  }
+    }),
+    prisma.order.findMany({
+      where: {
+        eventId: event.id,
+        orgId: event.orgId
+      },
+      include: {
+        items: {
+          where: {
+            orgId: event.orgId
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "asc"
+      }
+    })
+  ]);
 
   const rows = [
     ["Metric", "Value"],
-    ["Registrations", event.registrations.length],
-    ["Checked in", event.registrations.filter((registration) => registration.status === "CHECKED_IN").length],
-    ["Paid revenue cents", event.orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.total, 0)],
-    ["Collected fees cents", event.orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.platformFee, 0)],
+    ["Registrations", registrations.length],
+    ["Checked in", registrations.filter((registration) => registration.status === "CHECKED_IN").length],
+    ["Paid revenue cents", orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.total, 0)],
+    ["Collected fees cents", orders.filter((order) => order.status === "PAID").reduce((sum, order) => sum + order.platformFee, 0)],
     [],
     ["Registration ID", "Attendee", "Email", "Type", "Status", "Created", "Checked in"],
-    ...event.registrations.map((registration) => [
+    ...registrations.map((registration) => [
       registration.id,
       registration.user.name ?? "",
       registration.user.email,
@@ -65,7 +76,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     ]),
     [],
     ["Order ID", "Source", "Total cents", "Platform fee cents", "Status", "Updated"],
-    ...event.orders.flatMap((order) =>
+    ...orders.flatMap((order) =>
       order.items.map((item) => [
         order.id,
         sourceForItem(item.itemType),
@@ -76,12 +87,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
       ])
     )
   ];
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-
-  return new Response(csv, {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="analytics-${eventId}.csv"`
-    }
-  });
+  return csvDownload(rows, `analytics-${event.id}.csv`);
 }

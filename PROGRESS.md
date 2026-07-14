@@ -19,17 +19,40 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and central resource-derived guards now cover events, registration tiers, add-on definitions, registrations, attendee notes, store products, orders, hotel blocks/bookings, departments, staff roles/assignments, volunteer applications, vendor applications, badge templates, badges, raffles, API keys, and webhook endpoints. Invitations, lifecycle, separated `/platform` routes, and the remaining action families are not implemented. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and the current action/export/upload inventory is covered by stored-resource or direct-organization authorization. Invitations, lifecycle, and separated `/platform` routes are not implemented. |
 | 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment plus the event/tier/add-on, registration/note/transfer, store/product/order/voucher, hotel, staff/volunteer/vendor, badge/check-in, raffle, and API-key/outbound-webhook authorization units now pass the full 50-test E2E suite, 54 web unit tests, and 21 worker tests, but deployment remains blocked. Exports and any remaining resource-derived surfaces, fail-closed Stripe verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. |
+| 7 - Launch | Blocked | Managed-tenant containment and the current resource-derived action/export/upload sweep now pass the full 55-test E2E suite, 63 web unit tests, and 21 worker tests. `SEC-02` is closed against the current inventory, but deployment remains blocked by fail-closed Stripe webhook verification, invitations/lifecycle, `/platform` route separation, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, secure exports and close the current resource-action sweep
+- Completed the final current-inventory `SEC-02` sweep:
+  - Registration and analytics CSV routes now authorize the stored event independently of dashboard layouts. Unrelated owners, ordinary members, public users, and platform admins without organizer membership receive a controlled denial instead of event data.
+  - Registration rows require matching registration, tier, event, and organization relationships. Analytics rows apply the same registration checks and require orders/items to match the authorized event organization, excluding internally poisoned cross-tenant relationships.
+  - The global open-ledger export remains platform-only and now uses the controlled platform page guard, so organizer accounts cannot turn the route into a server error or read settlement data.
+  - Added a shared CSV serializer with spreadsheet-formula neutralization for user-controlled strings, quote escaping, CRLF rows, safe filenames, `private, no-store`, and `nosniff` response headers. Registration, analytics, and payout exports use the shared implementation.
+  - Found and remediated the remaining hidden-tenant mutation in email templates: the action now authorizes the stored event ID, reloads it with the derived organization constraint, and no longer accepts a hidden organization ID.
+  - Re-inventoried remaining organization-scoped actions and upload paths. The remaining `orgId` authorization helpers operate on that same organization resource (Stripe Connect, organization/domain settings, and fee reconciliation), while branding, product, and vendor uploads are already event/resource-bound and policy-constrained. No additional cross-resource hidden-tenant mutation was found, so `SEC-02` is closed against the current repository inventory.
+- Added regression evidence:
+  - Added a serial Org A/Org B export suite covering public redirects, owner/admin access, ordinary-member denial, cross-tenant direct URLs, platform-admin settlement access without implicit organizer membership, formula neutralization, no-store headers, and exclusion of deliberately poisoned registration/order relationships.
+  - Added a tampered email-template action case proving an Org A owner cannot overwrite Event B after changing the submitted event ID.
+  - Added nine unit cases for dangerous spreadsheet prefixes, negative numeric preservation, quote escaping, and CRLF serialization.
+- Verified:
+  - Focused export/action E2E passed 5/5 in development mode.
+  - Full production-mode Chromium E2E passed 55/55 with four workers; expected server logs record deliberately rejected cross-tenant mutations.
+  - Root tests passed 63/63 web unit tests and 21/21 worker tests; repository-wide type-check, lint, Prisma validation, `git diff --check`, docs build, worker build, and production web build passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+- Remaining issues / blockers:
+  - `SEC-03` unsigned inbound Stripe webhook handling remains the next P0 blocker; do not deploy.
+  - Production API/auth/payment rate limits remain process-local, and the external webhook delivery/consumer checkpoint remains incomplete.
+  - Invitations/lifecycle, `/platform` surface separation, domain/payment boundaries, mixed-currency reporting, payment-attempt serialization, the 42-model target schema, recipient transfer acceptance, badge image rendering, physical printer proof, and external Phase 7 gates remain later units.
+- Next session should:
+  - Remediate and verify inbound Stripe webhook handling as a fail-closed, signature-required `SEC-03` unit. Keep invitations/schema and surface migration as separate logical units.
 
 ### 2026-07-14 - Phase 7, secure API keys and outbound webhook delivery
 - Remediated the API-key/outbound-webhook `SEC-02` family and the outbound SSRF/integrity follow-up:

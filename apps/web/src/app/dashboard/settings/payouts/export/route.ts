@@ -1,12 +1,9 @@
-import { requirePlatformAdmin } from "@/lib/dashboard-access";
+import { csvDownload } from "@/lib/csv";
+import { requirePlatformAdminPage } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 
-function csvCell(value: unknown) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
-
 export async function GET() {
-  await requirePlatformAdmin();
+  await requirePlatformAdminPage();
   const entries = await prisma.organizerLedgerEntry.findMany({
     where: { status: "OPEN" },
     include: { org: true },
@@ -26,10 +23,5 @@ export async function GET() {
     ])
   ];
 
-  return new Response(rows.map((row) => row.map(csvCell).join(",")).join("\n"), {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": 'attachment; filename="vfurst-sepay-payables.csv"'
-    }
-  });
+  return csvDownload(rows, "vfurst-sepay-payables.csv");
 }

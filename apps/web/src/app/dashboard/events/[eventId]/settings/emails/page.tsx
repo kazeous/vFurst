@@ -106,7 +106,6 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
             <article key={option.key} className="vf-section">
               <h2>{option.label}</h2>
               <form action={saveEmailTemplate} className="vf-form">
-                <input type="hidden" name="orgId" value={event.orgId} />
                 <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="templateKey" value={option.key} />
                 <label>
