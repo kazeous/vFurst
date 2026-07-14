@@ -55,6 +55,7 @@ enum PaymentAttemptStatus {
 enum PaymentExceptionType {
   UNKNOWN_CODE
   LATE_PAYMENT
+  STALE_ATTEMPT
   UNDERPAID
   OVERPAID
   ACCOUNT_MISMATCH
@@ -800,6 +801,7 @@ model PaymentProviderConfig {
 model PaymentAttempt {
   id                String               @id @default(uuid()) @db.Uuid
   orderId           String               @db.Uuid
+  activeOrderId     String?              @unique @db.Uuid
   provider          PaymentProvider
   status            PaymentAttemptStatus @default(PENDING)
   amount            Int
@@ -844,6 +846,7 @@ model PaymentException {
   type               PaymentExceptionType
   status             PaymentExceptionStatus @default(OPEN)
   sepayTransactionId String?                @unique
+  providerReference  String?                @unique
   expectedAmount     Int?
   receivedAmount     Int?
   details            Json                   @default("{}")

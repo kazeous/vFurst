@@ -250,10 +250,10 @@ These models supplement the original 29 product/tenant entities. The managed-pro
 | **Account**, **Session**, **VerificationToken**, **Authenticator** | Auth.js persistence and provider/session infrastructure |
 | **OrgInvitation** | Expiring, single-use invitation with organization, normalized email, requested role, token hash, inviter, acceptance, and revocation state; acceptance creates the membership |
 | **PaymentProviderConfig** | Platform-admin Stripe/SePay enablement plus non-secret provider settings |
-| **PaymentAttempt** | Provider, amount, currency, unique SePay memo/reference, lifecycle, and expiry for an order attempt |
+| **PaymentAttempt** | Provider, amount, currency, unique SePay memo/reference, lifecycle, expiry, and a schema-backed single-active-attempt lock for an order |
 | **SePayWebhookEvent** | Raw webhook deduplication and processing record |
 | **SePayReconciliationCursor** | API v2 incremental reconciliation position |
-| **PaymentException** | Manual review for unknown, late, underpaid, overpaid, account-mismatched, or invalid transfers |
+| **PaymentException** | Manual review for unknown, late, stale-attempt, underpaid, overpaid, account-mismatched, or invalid provider payments |
 | **OrganizerLedgerEntry** | Idempotent organizer credit, refund, and adjustment entries for centrally received VND funds |
 | **OrganizerPayout** | Recorded external organizer settlement and bank reference |
 | **PaymentRefund** | Provider-aware manual refund record tied to idempotent fulfillment reversal |

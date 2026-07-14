@@ -1,4 +1,8 @@
-import { markOrderPaid, markOrderPaidByPaymentIntent, markOrderRefundedByPaymentIntent } from "@/lib/fulfillment";
+import {
+  markOrderPaidByPaymentIntent,
+  markOrderPaidWithProvider,
+  markOrderRefundedByPaymentIntent
+} from "@/lib/fulfillment";
 import { verifyStripeWebhookEvent } from "@/lib/payments/stripe-webhook";
 import {
   RATE_LIMIT_WINDOW_MS,
@@ -44,14 +48,21 @@ export async function POST(request: Request) {
         const paymentIntentId =
           typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
 
-        if (orderId) {
-          await markOrderPaid(orderId, paymentIntentId);
+        if (orderId && paymentIntentId) {
+          await markOrderPaidWithProvider(orderId, "STRIPE", paymentIntentId, {
+            paymentAttemptId: session.metadata?.paymentAttemptId,
+            attemptProviderReference: session.id
+          });
         }
         break;
       }
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        await markOrderPaidByPaymentIntent(paymentIntent.id, paymentIntent.metadata?.orderId);
+        await markOrderPaidByPaymentIntent(
+          paymentIntent.id,
+          paymentIntent.metadata?.orderId,
+          paymentIntent.metadata?.paymentAttemptId
+        );
         break;
       }
       case "charge.refunded": {

@@ -23,7 +23,7 @@ export function PaymentStatusPoller({ orderId, token }: { orderId: string; token
       if (result.status === "PAID" && result.successPath) {
         stopped = true;
         window.location.assign(result.successPath);
-      } else if (["EXPIRED", "FAILED", "CANCELLED"].includes(result.status)) {
+      } else if (["EXPIRED", "FAILED", "CANCELLED", "REVIEW"].includes(result.status)) {
         stopped = true;
         router.refresh();
       }

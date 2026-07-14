@@ -397,6 +397,128 @@ test("dashboard settings hub filters access and updates event settings", async (
   expect(settings.vendorConfig).toBeTruthy();
 });
 
+test("a SePay exception atomically replaces a newer provider lock with review", async ({ page }) => {
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
+  await prisma.paymentProviderConfig.upsert({
+    where: { provider: "SEPAY" },
+    update: {
+      enabled: true,
+      updatedById: admin.id,
+      settings: {
+        bankCode: "VCB",
+        accountNumber: "123456789",
+        accountHolder: "VFURST PLATFORM",
+        bankAccountId: "e2e-bank-account",
+        memoPrefix: "VFURST",
+        registrationFeeVnd: 25000,
+        hotelFeeVnd: 25000
+      }
+    },
+    create: {
+      provider: "SEPAY",
+      enabled: true,
+      updatedById: admin.id,
+      settings: {
+        bankCode: "VCB",
+        accountNumber: "123456789",
+        accountHolder: "VFURST PLATFORM",
+        bankAccountId: "e2e-bank-account",
+        memoPrefix: "VFURST",
+        registrationFeeVnd: 25000,
+        hotelFeeVnd: 25000
+      }
+    }
+  });
+
+  const paymentCode = `VF${randomBytes(6).toString("hex").toUpperCase()}`;
+  const stripeSessionId = `cs_review_${runId}`;
+  const order = await prisma.order.create({
+    data: {
+      orgId,
+      eventId,
+      userId: admin.id,
+      total: 150000,
+      platformFee: 25000,
+      currency: "VND",
+      paymentProvider: "STRIPE",
+      paymentReference: stripeSessionId,
+      checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+  const sepayAttempt = await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      provider: "SEPAY",
+      status: "EXPIRED",
+      amount: order.total,
+      currency: order.currency,
+      paymentCode,
+      expiresAt: new Date(Date.now() - 60_000)
+    }
+  });
+  const stripeAttempt = await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      activeOrderId: order.id,
+      provider: "STRIPE",
+      amount: order.total,
+      currency: order.currency,
+      providerReference: stripeSessionId,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const transactionId = `e2e-sepay-review-${runId}`;
+  const body = JSON.stringify({
+    id: transactionId,
+    accountNumber: "123456789",
+    code: null,
+    content: `VFURST ${paymentCode}`,
+    transferType: "in",
+    transferAmount: order.total - 1
+  });
+  const signature = `sha256=${createHmac("sha256", sepayWebhookSecret).update(`${timestamp}.${body}`).digest("hex")}`;
+
+  for (let replay = 0; replay < 2; replay += 1) {
+    const response = await page.request.post("/api/webhooks/sepay", {
+      data: body,
+      headers: {
+        "content-type": "application/json",
+        "x-sepay-timestamp": timestamp,
+        "x-sepay-signature": signature
+      }
+    });
+    expect(response.status()).toBe(200);
+  }
+
+  const [storedOrder, reviewedAttempt, cancelledAttempt, exceptions] = await Promise.all([
+    prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+    prisma.paymentAttempt.findUniqueOrThrow({ where: { id: sepayAttempt.id } }),
+    prisma.paymentAttempt.findUniqueOrThrow({ where: { id: stripeAttempt.id } }),
+    prisma.paymentException.findMany({ where: { sepayTransactionId: transactionId } })
+  ]);
+
+  expect(storedOrder).toEqual(
+    expect.objectContaining({
+      status: "PENDING",
+      paymentProvider: "SEPAY",
+      paymentReference: paymentCode
+    })
+  );
+  expect(reviewedAttempt).toEqual(expect.objectContaining({ status: "REVIEW", activeOrderId: order.id }));
+  expect(cancelledAttempt).toEqual(expect.objectContaining({ status: "CANCELLED", activeOrderId: null }));
+  expect(exceptions).toHaveLength(1);
+  expect(exceptions[0]).toEqual(
+    expect.objectContaining({
+      type: "UNDERPAID",
+      status: "OPEN",
+      paymentAttemptId: sepayAttempt.id,
+      orderId: order.id
+    })
+  );
+});
+
 test("embedded SePay QR fulfills through a signed webhook after the provider and organization are disabled", async ({ page }) => {
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
   await prisma.paymentProviderConfig.upsert({

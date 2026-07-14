@@ -11,6 +11,8 @@
     "generate": "prisma generate",
     "lint": "eslint .",
     "backfill:managed-tenancy": "node scripts/backfill-managed-tenancy.mjs",
+    "backfill:payment-attempt-locks": "node scripts/backfill-payment-attempt-locks.mjs",
+    "prepare:payment-attempt-locks": "node scripts/prepare-payment-attempt-locks.mjs",
     "push": "prisma db push --skip-generate",
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",

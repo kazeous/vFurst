@@ -1,13 +1,22 @@
 "use server";
 
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import { requireCheckoutOrder } from "@/lib/payments/checkout";
 import { getEligiblePaymentProviders } from "@/lib/payments/platform";
 import { createSePayPaymentCode } from "@/lib/payments/sepay";
 import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
-import { prisma } from "@vfurst/db";
+import {
+  PAYMENT_ATTEMPT_TTL_MS,
+  Prisma,
+  prisma,
+  reservePaymentAttempt,
+  type PaymentAttempt
+} from "@vfurst/db";
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { assertOrganizationActive } from "@/lib/organization-lifecycle";
+
+const STRIPE_EXPIRY_SAFETY_MS = 10_000;
 
 const checkoutSelectionSchema = z.object({
   orderId: z.string().uuid(),
@@ -21,33 +30,57 @@ function selection(formData: FormData) {
   });
 }
 
-async function assertNoActiveAttempt(orderId: string) {
-  const active = await prisma.paymentAttempt.findFirst({
-    where: {
-      orderId,
-      status: "PENDING",
-      expiresAt: {
-        gt: new Date()
+async function persistStripeSession(attempt: PaymentAttempt, session: { id: string; expires_at: number }) {
+  await prisma.$transaction(
+    async (tx) => {
+      const updatedAttempt = await tx.paymentAttempt.updateMany({
+        where: {
+          id: attempt.id,
+          orderId: attempt.orderId,
+          activeOrderId: attempt.orderId,
+          provider: "STRIPE",
+          status: "PENDING",
+          providerReference: null
+        },
+        data: {
+          providerReference: session.id,
+          expiresAt: new Date(session.expires_at * 1000)
+        }
+      });
+
+      if (updatedAttempt.count === 0) {
+        const current = await tx.paymentAttempt.findUnique({ where: { id: attempt.id } });
+        if (
+          !current ||
+          current.orderId !== attempt.orderId ||
+          current.activeOrderId !== attempt.orderId ||
+          current.status !== "PENDING" ||
+          current.providerReference !== session.id
+        ) {
+          throw new Error("The authoritative payment attempt changed while Stripe checkout was being created.");
+        }
       }
-    }
-  });
 
-  if (active) {
-    throw new Error("This order already has an active payment attempt.");
-  }
+      const updatedOrder = await tx.order.updateMany({
+        where: {
+          id: attempt.orderId,
+          status: "PENDING",
+          paymentProvider: "STRIPE"
+        },
+        data: {
+          paymentReference: session.id,
+          checkoutExpiresAt: new Date(session.expires_at * 1000)
+        }
+      });
 
-  await prisma.paymentAttempt.updateMany({
-    where: {
-      orderId,
-      status: "PENDING",
-      expiresAt: {
-        lte: new Date()
+      if (updatedOrder.count !== 1) {
+        throw new Error("The order changed while Stripe checkout was being created.");
       }
     },
-    data: {
-      status: "EXPIRED"
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     }
-  });
+  );
 }
 
 export async function startStripePayment(formData: FormData) {
@@ -60,65 +93,88 @@ export async function startStripePayment(formData: FormData) {
     throw new Error("Stripe is not available for this order.");
   }
 
-  await assertNoActiveAttempt(order.id);
-  const connectedAccountId = await getConnectedStripeAccount(order.orgId);
-  const checkoutUrl = `${getBaseUrl()}/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}`;
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    client_reference_id: order.id,
-    customer_email: order.userId ? (await prisma.user.findUnique({ where: { id: order.userId }, select: { email: true } }))?.email : undefined,
-    line_items: [
-      {
-        price_data: {
-          currency: order.currency.toLowerCase(),
-          product_data: {
-            name: `${order.event.name} order`
-          },
-          unit_amount: order.total
-        },
-        quantity: 1
-      }
-    ],
-    payment_intent_data: {
-      application_fee_amount: order.platformFee,
-      transfer_data: {
-        destination: connectedAccountId
-      },
-      metadata: {
-        orderId: order.id,
-        eventId: order.eventId,
-        orgId: order.orgId
-      }
-    },
-    metadata: {
-      orderId: order.id,
-      eventId: order.eventId,
-      orgId: order.orgId
-    },
-    success_url: `${checkoutUrl}&returned=stripe`,
-    cancel_url: `${checkoutUrl}&cancelled=stripe`
+  const [connectedAccountId, customer] = await Promise.all([
+    getConnectedStripeAccount(order.orgId),
+    order.userId
+      ? prisma.user.findUnique({
+          where: { id: order.userId },
+          select: { email: true }
+        })
+      : null
+  ]);
+  const reservation = await reservePaymentAttempt(prisma, {
+    id: randomUUID(),
+    orderId: order.id,
+    provider: "STRIPE",
+    amount: order.total,
+    currency: order.currency,
+    expiresAt: new Date(Date.now() + PAYMENT_ATTEMPT_TTL_MS + STRIPE_EXPIRY_SAFETY_MS)
   });
+  const attempt = reservation.attempt;
+  const stripe = getStripe();
+  const checkoutUrl = `${getBaseUrl()}/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}`;
+  const session = attempt.providerReference
+    ? await stripe.checkout.sessions.retrieve(attempt.providerReference)
+    : await stripe.checkout.sessions.create(
+        {
+          mode: "payment",
+          client_reference_id: order.id,
+          customer_email: customer?.email,
+          line_items: [
+            {
+              price_data: {
+                currency: order.currency.toLowerCase(),
+                product_data: {
+                  name: `${order.event.name} order`
+                },
+                unit_amount: order.total
+              },
+              quantity: 1
+            }
+          ],
+          payment_intent_data: {
+            application_fee_amount: order.platformFee,
+            transfer_data: {
+              destination: connectedAccountId
+            },
+            metadata: {
+              paymentAttemptId: attempt.id,
+              orderId: order.id,
+              eventId: order.eventId,
+              orgId: order.orgId
+            }
+          },
+          metadata: {
+            paymentAttemptId: attempt.id,
+            orderId: order.id,
+            eventId: order.eventId,
+            orgId: order.orgId
+          },
+          expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),
+          success_url: `${checkoutUrl}&returned=stripe`,
+          cancel_url: `${checkoutUrl}&cancelled=stripe`
+        },
+        {
+          idempotencyKey: `vfurst-payment-attempt-${attempt.id}`
+        }
+      );
 
   if (!session.url) {
     throw new Error("Stripe did not return a Checkout URL.");
   }
 
-  await prisma.$transaction([
-    prisma.paymentAttempt.create({
-      data: {
-        orderId: order.id,
-        provider: "STRIPE",
-        amount: order.total,
-        currency: order.currency,
-        providerReference: session.id,
-        expiresAt: new Date(session.expires_at * 1000)
+  if (!attempt.providerReference) {
+    try {
+      await persistStripeSession(attempt, session);
+    } catch (error) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (expiryError) {
+        console.error("Failed to expire an orphaned Stripe Checkout Session.", expiryError);
       }
-    }),
-    prisma.order.update({
-      where: { id: order.id },
-      data: { paymentProvider: "STRIPE", paymentReference: session.id }
-    })
-  ]);
+      throw error;
+    }
+  }
 
   redirect(session.url);
 }
@@ -133,30 +189,15 @@ export async function startSePayPayment(formData: FormData) {
     throw new Error("SePay is not available for this order.");
   }
 
-  await assertNoActiveAttempt(order.id);
-  let paymentCode = createSePayPaymentCode();
-
-  while (await prisma.paymentAttempt.findUnique({ where: { paymentCode } })) {
-    paymentCode = createSePayPaymentCode();
-  }
-
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-  await prisma.$transaction([
-    prisma.paymentAttempt.create({
-      data: {
-        orderId: order.id,
-        provider: "SEPAY",
-        amount: order.total,
-        currency: order.currency,
-        paymentCode,
-        expiresAt
-      }
-    }),
-    prisma.order.update({
-      where: { id: order.id },
-      data: { paymentProvider: "SEPAY", paymentReference: paymentCode, checkoutExpiresAt: expiresAt }
-    })
-  ]);
+  await reservePaymentAttempt(prisma, {
+    id: randomUUID(),
+    orderId: order.id,
+    provider: "SEPAY",
+    amount: order.total,
+    currency: order.currency,
+    paymentCode: createSePayPaymentCode(),
+    expiresAt: new Date(Date.now() + PAYMENT_ATTEMPT_TTL_MS)
+  });
 
   redirect(`/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}&sepay=1`);
 }

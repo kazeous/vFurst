@@ -64,6 +64,8 @@ Required remediation: use shared currency-aware form helpers, whole-đồng inpu
 
 Required remediation: serialize attempt creation with a database lock/advisory lock or a schema-backed single-active-attempt invariant, then add a concurrent-start test.
 
+Remediation update (July 14, 2026): implemented a nullable unique `PaymentAttempt.activeOrderId` lock, serializable reservation/settlement/review transitions, Stripe idempotency metadata, terminal lock release, safe legacy backfill, and concurrent same-provider/cross-provider/stale-callback/replay regressions. `PAY-01` is closed against the current inventory; this paragraph preserves the original audit finding above as historical evidence.
+
 ### SEC-04 — Store/vendor uploads are unbounded and type-unrestricted (P1)
 
 Public vendor files and organizer product images are read fully into server memory and uploaded with caller-supplied content types. Unlike event branding, these paths have no size, MIME, extension, or image/file allowlist constraints. This creates memory-exhaustion and unsafe-public-object risk.

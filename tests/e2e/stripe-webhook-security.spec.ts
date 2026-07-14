@@ -16,6 +16,8 @@ let unsignedOrderId: string;
 let invalidOrderId: string;
 let checkoutOrderId: string;
 let intentOrderId: string;
+let staleOrderId: string;
+let staleAttemptId: string;
 let refundOrderId: string;
 let stripeConfigExisted = false;
 let previousStripeEnabled = false;
@@ -58,7 +60,7 @@ async function postWebhook(request: APIRequestContext, body: string, stripeSigna
 }
 
 async function createPendingOrder(paymentReference: string) {
-  return prisma.order.create({
+  const order = await prisma.order.create({
     data: {
       orgId,
       eventId,
@@ -68,18 +70,21 @@ async function createPendingOrder(paymentReference: string) {
       currency: "USD",
       status: "PENDING",
       paymentProvider: "STRIPE",
-      paymentReference,
-      paymentAttempts: {
-        create: {
-          provider: "STRIPE",
-          amount: 12_500,
-          currency: "USD",
-          providerReference: paymentReference,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000)
-        }
-      }
+      paymentReference
     }
   });
+  await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      activeOrderId: order.id,
+      provider: "STRIPE",
+      amount: 12_500,
+      currency: "USD",
+      providerReference: paymentReference,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+  return order;
 }
 
 test.beforeAll(async () => {
@@ -126,6 +131,45 @@ test.beforeAll(async () => {
   invalidOrderId = invalidOrder.id;
   checkoutOrderId = checkoutOrder.id;
   intentOrderId = intentOrder.id;
+
+  const staleOrder = await prisma.order.create({
+    data: {
+      orgId,
+      eventId,
+      userId,
+      total: 15_000,
+      platformFee: 500,
+      currency: "USD",
+      status: "PENDING",
+      paymentProvider: "SEPAY",
+      paymentReference: `VFSTALE${runId.slice(-6)}`,
+      checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+  staleOrderId = staleOrder.id;
+  const staleAttempt = await prisma.paymentAttempt.create({
+    data: {
+      orderId: staleOrder.id,
+      provider: "STRIPE",
+      status: "EXPIRED",
+      amount: staleOrder.total,
+      currency: staleOrder.currency,
+      providerReference: `cs_stale_${runId}`,
+      expiresAt: new Date(Date.now() - 60_000)
+    }
+  });
+  staleAttemptId = staleAttempt.id;
+  await prisma.paymentAttempt.create({
+    data: {
+      orderId: staleOrder.id,
+      activeOrderId: staleOrder.id,
+      provider: "SEPAY",
+      amount: staleOrder.total,
+      currency: staleOrder.currency,
+      paymentCode: `VFSTALE${runId.slice(-6)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
 
   const refundOrder = await prisma.order.create({
     data: {
@@ -183,6 +227,17 @@ test("unsigned, invalidly signed, and stale Stripe events fail closed", async ({
   const stale = await postWebhook(request, invalidBody, signature(invalidBody, Math.floor(Date.now() / 1000) - 600));
   expect(stale.status()).toBe(400);
 
+  const missingPaymentReferenceBody = stripeEvent("checkout.session.completed", {
+    id: `cs_unsigned_${runId}`,
+    object: "checkout.session",
+    client_reference_id: unsignedOrderId,
+    metadata: { orderId: unsignedOrderId },
+    payment_status: "paid"
+  });
+  expect(
+    (await postWebhook(request, missingPaymentReferenceBody, signature(missingPaymentReferenceBody))).status()
+  ).toBe(200);
+
   const orders = await prisma.order.findMany({
     where: { id: { in: [unsignedOrderId, invalidOrderId] } },
     select: { status: true, stripePaymentIntentId: true }
@@ -218,7 +273,9 @@ test("signed completion events settle existing orders while the provider and org
   );
   const checkoutAttempts = await prisma.paymentAttempt.findMany({ where: { orderId: checkoutOrderId } });
   expect(checkoutAttempts).toHaveLength(1);
-  expect(checkoutAttempts[0]).toEqual(expect.objectContaining({ status: "PAID", paidAt: expect.any(Date) }));
+  expect(checkoutAttempts[0]).toEqual(
+    expect.objectContaining({ status: "PAID", activeOrderId: null, paidAt: expect.any(Date) })
+  );
 
   const intentBody = stripeEvent("payment_intent.succeeded", {
     id: `pi_intent_${runId}`,
@@ -231,6 +288,113 @@ test("signed completion events settle existing orders while the provider and org
       status: "PAID",
       paymentProvider: "STRIPE",
       stripePaymentIntentId: `pi_intent_${runId}`
+    })
+  );
+});
+
+test("a stale Stripe callback cannot settle an order locked by a newer SePay attempt", async ({ request }) => {
+  const staleBody = stripeEvent("checkout.session.completed", {
+    id: `cs_stale_${runId}`,
+    object: "checkout.session",
+    client_reference_id: staleOrderId,
+    metadata: { orderId: staleOrderId, paymentAttemptId: staleAttemptId },
+    payment_intent: `pi_stale_${runId}`,
+    payment_status: "paid"
+  });
+  const staleSignature = signature(staleBody);
+
+  expect((await postWebhook(request, staleBody, staleSignature)).status()).toBe(200);
+  expect((await postWebhook(request, staleBody, staleSignature)).status()).toBe(200);
+
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: staleOrderId } });
+  const activeAttempt = await prisma.paymentAttempt.findUniqueOrThrow({
+    where: { activeOrderId: staleOrderId }
+  });
+  const exceptions = await prisma.paymentException.findMany({
+    where: { providerReference: `pi_stale_${runId}` }
+  });
+
+  expect(order).toEqual(expect.objectContaining({ status: "PENDING", paymentProvider: "SEPAY" }));
+  expect(activeAttempt).toEqual(expect.objectContaining({ provider: "SEPAY", status: "PENDING" }));
+  expect(exceptions).toHaveLength(1);
+  expect(exceptions[0]).toEqual(
+    expect.objectContaining({
+      type: "STALE_ATTEMPT",
+      status: "OPEN",
+      orderId: staleOrderId,
+      paymentAttemptId: staleAttemptId
+    })
+  );
+});
+
+test("a Stripe capture after another provider paid is recorded as a payment exception", async ({ request }) => {
+  const paymentCode = `VF${runId.replaceAll("-", "").slice(-12).toUpperCase()}`;
+  const order = await prisma.order.create({
+    data: {
+      orgId,
+      eventId,
+      userId,
+      total: 18_000,
+      platformFee: 500,
+      currency: "USD",
+      status: "PAID",
+      paymentProvider: "SEPAY",
+      paymentReference: `sepay_paid_${runId}`
+    }
+  });
+  await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      provider: "SEPAY",
+      status: "PAID",
+      amount: order.total,
+      currency: order.currency,
+      paymentCode,
+      providerReference: `sepay_paid_${runId}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      paidAt: new Date()
+    }
+  });
+  const staleAttempt = await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      provider: "STRIPE",
+      status: "EXPIRED",
+      amount: order.total,
+      currency: order.currency,
+      providerReference: `cs_after_paid_${runId}`,
+      expiresAt: new Date(Date.now() - 60_000)
+    }
+  });
+  const paymentIntentId = `pi_after_paid_${runId}`;
+  const body = stripeEvent("checkout.session.completed", {
+    id: `cs_after_paid_${runId}`,
+    object: "checkout.session",
+    client_reference_id: order.id,
+    metadata: { orderId: order.id, paymentAttemptId: staleAttempt.id },
+    payment_intent: paymentIntentId,
+    payment_status: "paid"
+  });
+  const stripeSignature = signature(body);
+
+  expect((await postWebhook(request, body, stripeSignature)).status()).toBe(200);
+  expect((await postWebhook(request, body, stripeSignature)).status()).toBe(200);
+
+  expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toEqual(
+    expect.objectContaining({
+      status: "PAID",
+      paymentProvider: "SEPAY",
+      paymentReference: `sepay_paid_${runId}`
+    })
+  );
+  const exceptions = await prisma.paymentException.findMany({ where: { providerReference: paymentIntentId } });
+  expect(exceptions).toHaveLength(1);
+  expect(exceptions[0]).toEqual(
+    expect.objectContaining({
+      type: "STALE_ATTEMPT",
+      status: "OPEN",
+      orderId: order.id,
+      paymentAttemptId: staleAttempt.id
     })
   );
 });

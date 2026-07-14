@@ -27,7 +27,9 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   const { token = "", cancelled } = await searchParams;
   const order = await requireCheckoutOrder(orderId, token);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
-  const activeAttempt = order.paymentAttempts.find((attempt) => attempt.status === "PENDING" && attempt.expiresAt > new Date());
+  const activeAttempt =
+    order.paymentAttempts.find((attempt) => attempt.status === "REVIEW") ??
+    order.paymentAttempts.find((attempt) => attempt.status === "PENDING" && attempt.expiresAt > new Date());
   const sepaySettings = activeAttempt?.provider === "SEPAY" ? await getSePaySettings() : null;
   const branding = getEffectiveEventBranding(order.event.settings, order.org.logo);
   const style = { "--event-accent": branding.accentColor, "--event-accent-foreground": branding.accentForeground } as CSSProperties;
@@ -56,10 +58,12 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
 
       <div className="vf-checkout-layout">
         <section className="vf-checkout-payment">
-          <div className="vf-checkout-heading"><p className="vf-label">Secure checkout</p><h1>{activeAttempt?.provider === "SEPAY" ? "Complete bank transfer" : "Choose how to pay"}</h1><p>Order {order.id.slice(0, 8).toUpperCase()}</p></div>
+          <div className="vf-checkout-heading"><p className="vf-label">Secure checkout</p><h1>{activeAttempt?.status === "REVIEW" ? "Payment under review" : activeAttempt?.provider === "SEPAY" ? "Complete bank transfer" : activeAttempt?.provider === "STRIPE" ? "Continue card payment" : "Choose how to pay"}</h1><p>Order {order.id.slice(0, 8).toUpperCase()}</p></div>
           {cancelled ? <Alert variant="warning">Stripe checkout was cancelled. No payment was captured.</Alert> : null}
 
-          {activeAttempt?.provider === "SEPAY" && activeAttempt.paymentCode && sepaySettings ? (
+          {activeAttempt?.status === "REVIEW" ? (
+            <Alert variant="warning">A received payment is under platform review. Do not send another payment while this review is open.</Alert>
+          ) : activeAttempt?.provider === "SEPAY" && activeAttempt.paymentCode && sepaySettings ? (
             <div className="vf-sepay-payment-card">
               <div className="vf-sepay-qr-wrap">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -81,15 +85,15 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
           ) : (
             <div className="vf-payment-methods">
               {providers.length === 0 ? <Alert variant="warning">Paid checkout is temporarily unavailable for this event.</Alert> : null}
-              {providers.includes("STRIPE") ? (
+              {providers.includes("STRIPE") && (!activeAttempt || activeAttempt.provider === "STRIPE") ? (
                 <form action={startStripePayment} className="vf-payment-method-card">
                   <input type="hidden" name="orderId" value={order.id} /><input type="hidden" name="token" value={token} />
                   <span className="vf-checkout-method-icon"><CreditCard size={21} /></span>
-                  <div><h2>Card with Stripe</h2><p>Pay securely with a credit or debit card.</p><small>Card details stay with Stripe.</small></div>
-                  <Button label="Continue" type="submit" variant="primary" />
+                  <div><h2>Card with Stripe</h2><p>{activeAttempt ? "Continue the active Stripe checkout for this order." : "Pay securely with a credit or debit card."}</p><small>Card details stay with Stripe.</small></div>
+                  <Button label={activeAttempt ? "Continue active payment" : "Continue"} type="submit" variant="primary" />
                 </form>
               ) : null}
-              {providers.includes("SEPAY") ? (
+              {providers.includes("SEPAY") && !activeAttempt ? (
                 <form action={startSePayPayment} className="vf-payment-method-card">
                   <input type="hidden" name="orderId" value={order.id} /><input type="hidden" name="token" value={token} />
                   <span className="vf-checkout-method-icon"><QrCode size={21} /></span>

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "prestart": "npm run push --workspace @vfurst/db && npm run backfill:managed-tenancy --workspace @vfurst/db",
+    "prestart": "npm run prepare:payment-attempt-locks --workspace @vfurst/db && npm run push --workspace @vfurst/db && npm run backfill:managed-tenancy --workspace @vfurst/db && npm run backfill:payment-attempt-locks --workspace @vfurst/db",
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",

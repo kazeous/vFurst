@@ -20,16 +20,44 @@ Phase 0 is complete under the updated local-development directive:
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
 | 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, hashed single-use invitations, separately guarded `/platform` routes, platform-only lifecycle enforcement, and audited custom-domain activation are implemented. |
-| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
+| 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, event-day walk-in, and provider payment transitions now derive stored authority and pass cross-tenant/concurrency regressions. VND walk-in/card-terminal collection is currency-correct and atomic; standalone phase-completion evidence remains reopened. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, and currency-separated fee reporting now use their intended tenant/control-plane boundaries. Production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, and mixed-currency reporting pass the full 72-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by payment-attempt serialization, shared production rate limiting, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, mixed-currency reporting, and schema-backed payment-attempt serialization pass the full 78-test E2E suite plus repository checks. `SEC-01` through `SEC-03` and `PAY-01` are closed against the current inventory, but deployment remains blocked by shared production rate limiting and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, serialize active payment attempts and provider callbacks
+- Enforced one authoritative payment attempt per pending order:
+  - Added a nullable unique `PaymentAttempt.activeOrderId` database lock. `PENDING` and `REVIEW` attempts hold the lock; `PAID`, `EXPIRED`, `FAILED`, and `CANCELLED` transitions release it.
+  - Added a shared serializable reservation primitive. Concurrent starts for the same provider converge on one attempt, while Stripe/SePay races allow only the winning provider to proceed. Expired attempts release their lock and review attempts block all retries.
+  - Added safe startup preparation/backfill scripts that add the nullable columns/enum to legacy payment tables, expire stale attempts, deterministically cancel duplicates, claim one lock per order, and create the unique indexes before normal Prisma synchronization. Greenfield databases skip preparation and let Prisma create the current schema.
+  - The exact web `prestart` chain completed twice with zero expired attempts, duplicates, or new claims on the second run, proving the preparation, Prisma sync, managed-tenant backfill, and payment-lock backfill are repeatable.
+- Bound checkout and settlement to the exact attempt:
+  - Stripe Checkout uses the attempt UUID as its idempotency key and stores `paymentAttemptId` in Session and PaymentIntent metadata. Concurrent creators reuse the same remote session; a session that loses database authority is expired instead of being exposed.
+  - Stripe return handling, Checkout Session callbacks, PaymentIntent callbacks, and SePay transactions settle only an unexpired `PENDING` attempt with the expected provider, order, amount, currency, and active lock. Paid/refund replays remain idempotent.
+  - A stale callback cannot fulfill an order owned by a newer attempt. Stale provider captures, including a Stripe capture after SePay already paid, create one deduplicated `STALE_ATTEMPT` platform exception instead of changing the paid order.
+  - SePay account/amount/late-payment exceptions atomically cancel any competing provider attempt, claim the order lock as `REVIEW`, and prevent further payment. Platform resolution releases the review lock or repoints the order to a remaining authoritative attempt.
+  - Checkout UI/status polling prioritizes `REVIEW`, hides alternate providers while review is open, and resumes only the authoritative Stripe session. The expiry worker never releases review holds and clears locks when pending attempts expire.
+- Added regression and migration evidence:
+  - Database script tests cover greenfield/legacy preparation, deterministic deduplication, expiry, and lock claiming.
+  - Database-backed E2E covers six concurrent same-provider starts, a mixed Stripe/SePay race, direct uniqueness enforcement, review blocking, expired-attempt rollover, stale Stripe callbacks, cross-provider double-capture exceptions, signed replay, and atomic SePay exception takeover.
+  - Updated the reference model, historical audit remediation note, security audit, and go-live checklist; `PAY-01` is closed against the current repository inventory.
+- Verified:
+  - Full production-mode Chromium E2E passed 78/78 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 84/84 web unit tests, 21/21 worker tests, 8/8 database tests, and 1/1 email test.
+  - Repository-wide type-check, lint, Prisma validation, `git diff --check`, and production builds passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+  - `npm audit --audit-level=moderate` passed with zero vulnerabilities.
+  - Launch readiness correctly remains failed on 10 configuration/external gates: local Stripe and Sentry values, two externally verified beta conventions, physical screen-reader proof, and a live launch URL.
+  - The required 500-registration/50-check-in load rerun seeded its isolated 1,500-registration local fixture but could not start k6 because Docker access is outside the Codex sandbox; the escalation was rejected by the environment usage limit. No load-pass claim was added. The previously documented full-target proof remains the latest load evidence.
+- Remaining issues / blockers:
+  - Do not deploy. Shared production rate limiting, recipient transfer acceptance, badge image rendering, physical printer proof, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain open.
+- Next session should:
+  - Replace process-local auth/payment/webhook/API counters with one shared production rate-limit store, define fail-open/fail-closed behavior by route family, preserve tenant/key scopes, add multi-instance regressions, and rerun the repository gates.
 
 ### 2026-07-14 - Phase 7, make fee reporting currency-safe
 - Replaced the single mixed-money fee total with one shared currency-bucket contract:
@@ -1573,5 +1601,5 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 - Phase 3 is reopened by tenant-scope and product-upload findings.
 - Phase 4 is reopened by tenant-scope and vendor-upload findings.
 - Phase 5 is reopened by cashier, badge-printing, and recipient-transfer findings.
-- Phase 6 is reopened by mixed-currency reporting and process-local production rate limiting.
+- Phase 6 is reopened by process-local production rate limiting.
 - Phase 7 is blocked by the full-system audit plus beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.

@@ -181,7 +181,7 @@ export default async function PlatformPaymentsPage({
 
         <div>
           <h2>Payment exceptions</h2>
-          <p className="vf-muted">Late, unmatched, underpaid, overpaid, and account-mismatched transfers never auto-fulfill.</p>
+          <p className="vf-muted">Late, unmatched, stale-attempt, underpaid, overpaid, and account-mismatched payments never auto-fulfill.</p>
         </div>
         {exceptionSaved === "1" ? <div className="vf-banner vf-banner-success">Payment exception resolved.</div> : null}
         <div className="vf-list">
@@ -189,7 +189,7 @@ export default async function PlatformPaymentsPage({
             <form key={exception.id} action={resolvePaymentException} className="vf-list-row">
               <input type="hidden" name="exceptionId" value={exception.id} />
               <span>{exception.type}</span>
-              <small>{exception.sepayTransactionId ?? "No transaction ID"} · received {exception.receivedAmount ?? "unknown"}</small>
+              <small>{exception.sepayTransactionId ?? exception.providerReference ?? "No provider reference"} · received {exception.receivedAmount ?? "unknown"}</small>
               <input name="note" required placeholder="Resolution note" aria-label={`Resolution note for ${exception.type}`} />
               <select name="status" defaultValue="RESOLVED" aria-label={`Resolution status for ${exception.type}`}>
                 <option value="RESOLVED">Resolved</option>

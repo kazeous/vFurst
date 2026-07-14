@@ -89,7 +89,18 @@ async function verifyStripeReturn(orderId: string, sessionId?: string) {
       return null;
     }
 
-    return typeof checkoutSession.payment_intent === "string" ? checkoutSession.payment_intent : checkoutSession.payment_intent?.id ?? null;
+    const paymentIntentId =
+      typeof checkoutSession.payment_intent === "string"
+        ? checkoutSession.payment_intent
+        : checkoutSession.payment_intent?.id ?? null;
+
+    return paymentIntentId
+      ? {
+          paymentIntentId,
+          paymentAttemptId: checkoutSession.metadata?.paymentAttemptId,
+          sessionId: checkoutSession.id
+        }
+      : null;
   } catch (error) {
     console.error("Store checkout return verification failed.", error);
     return null;
@@ -120,10 +131,13 @@ async function resolveSuccessOrder({
   }
 
   if (order.status === "PENDING") {
-    const paymentIntentId = await verifyStripeReturn(order.id, sessionId);
+    const payment = await verifyStripeReturn(order.id, sessionId);
 
-    if (paymentIntentId) {
-      await markOrderPaid(order.id, paymentIntentId);
+    if (payment) {
+      await markOrderPaid(order.id, payment.paymentIntentId, {
+        paymentAttemptId: payment.paymentAttemptId,
+        attemptProviderReference: payment.sessionId
+      });
       return findReceiptOrder(order.id, userId, orgId, eventId);
     }
   }

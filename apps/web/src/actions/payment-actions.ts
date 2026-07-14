@@ -4,7 +4,7 @@ import { requirePlatformAdmin } from "@/lib/dashboard-access";
 import { reverseOrderFulfillment } from "@/lib/fulfillment";
 import { isSePayEnvironmentReady, isSePaySettingsReady, sepaySettingsSchema } from "@/lib/payments/platform";
 import { parseMoney } from "@/lib/registration/pricing";
-import { prisma } from "@vfurst/db";
+import { PAYMENT_ATTEMPT_TTL_MS, Prisma, prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -190,20 +190,88 @@ export async function resolvePaymentException(formData: FormData) {
     status: formData.get("status"),
     note: formData.get("note")
   });
-  const exception = await prisma.paymentException.findUniqueOrThrow({ where: { id: parsed.exceptionId } });
-  const details = exception.details && typeof exception.details === "object" && !Array.isArray(exception.details)
-    ? exception.details
-    : {};
+  await prisma.$transaction(
+    async (tx) => {
+      const exception = await tx.paymentException.findUniqueOrThrow({ where: { id: parsed.exceptionId } });
+      const details = exception.details && typeof exception.details === "object" && !Array.isArray(exception.details)
+        ? exception.details
+        : {};
+      const resolved = await tx.paymentException.updateMany({
+        where: {
+          id: exception.id,
+          status: "OPEN"
+        },
+        data: {
+          status: parsed.status,
+          resolvedById: admin.id,
+          resolvedAt: new Date(),
+          details: { ...details, resolutionNote: parsed.note }
+        }
+      });
 
-  await prisma.paymentException.update({
-    where: { id: exception.id },
-    data: {
-      status: parsed.status,
-      resolvedById: admin.id,
-      resolvedAt: new Date(),
-      details: { ...details, resolutionNote: parsed.note }
+      if (resolved.count !== 1) {
+        throw new Error("This payment exception was already resolved.");
+      }
+
+      if (!exception.paymentAttemptId || !exception.orderId) {
+        return;
+      }
+
+      const otherOpenExceptions = await tx.paymentException.count({
+        where: {
+          paymentAttemptId: exception.paymentAttemptId,
+          status: "OPEN"
+        }
+      });
+
+      if (otherOpenExceptions > 0) {
+        return;
+      }
+
+      await tx.paymentAttempt.updateMany({
+        where: {
+          id: exception.paymentAttemptId,
+          orderId: exception.orderId,
+          status: "REVIEW"
+        },
+        data: {
+          status: "CANCELLED",
+          activeOrderId: null
+        }
+      });
+
+      const remainingAttempt = await tx.paymentAttempt.findFirst({
+        where: {
+          orderId: exception.orderId,
+          status: {
+            in: ["PENDING", "REVIEW"]
+          }
+        },
+        orderBy: [{ status: "desc" }, { createdAt: "desc" }]
+      });
+
+      await tx.order.updateMany({
+        where: {
+          id: exception.orderId,
+          status: "PENDING"
+        },
+        data: remainingAttempt
+          ? {
+              paymentProvider: remainingAttempt.provider,
+              paymentReference: remainingAttempt.paymentCode ?? remainingAttempt.providerReference,
+              checkoutExpiresAt: remainingAttempt.expiresAt
+            }
+          : {
+              paymentProvider: null,
+              paymentReference: null,
+              checkoutExpiresAt: new Date(Date.now() + PAYMENT_ATTEMPT_TTL_MS)
+            }
+      });
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     }
-  });
+  );
 
   revalidatePath("/platform/payments");
   redirect("/platform/payments?exceptionSaved=1");

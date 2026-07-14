@@ -4,7 +4,12 @@ export async function processExpireCheckouts() {
   const orders = await prisma.order.findMany({
     where: {
       status: "PENDING",
-      checkoutExpiresAt: { lte: new Date() }
+      checkoutExpiresAt: { lte: new Date() },
+      paymentAttempts: {
+        none: {
+          status: "REVIEW"
+        }
+      }
     },
     include: { items: true },
     take: 250
@@ -15,7 +20,15 @@ export async function processExpireCheckouts() {
   for (const order of orders) {
     await prisma.$transaction(async (tx) => {
       const cancelled = await tx.order.updateMany({
-        where: { id: order.id, status: "PENDING" },
+        where: {
+          id: order.id,
+          status: "PENDING",
+          paymentAttempts: {
+            none: {
+              status: "REVIEW"
+            }
+          }
+        },
         data: { status: "CANCELLED", reservationReleasedAt: new Date() }
       });
 
@@ -25,7 +38,7 @@ export async function processExpireCheckouts() {
 
       await tx.paymentAttempt.updateMany({
         where: { orderId: order.id, status: "PENDING" },
-        data: { status: "EXPIRED" }
+        data: { status: "EXPIRED", activeOrderId: null }
       });
 
       for (const item of order.items) {
