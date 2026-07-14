@@ -83,7 +83,9 @@ VFURST_SKIP_LOCAL_SERVER=1
 ## Query optimization added in Phase 7
 
 - Event lookup by organization, publication status, and start date.
-- Cached public registration page data with filtered tier registration counts instead of loading attendee rows for capacity checks.
+- Public registration uses filtered tier registration counts instead of loading attendee rows for capacity checks. The query data and the anonymous base page HTML/RSC response use 15-second ISR, so launch bursts do not repeatedly spend server CPU rendering identical public content.
+- Registration success/cancel state is outside the shared ISR payload. A client boundary reads the query string and performs a `private, no-store` organization-bound confirmation lookup, preserving the prior attendee/event/tier message without allowing a foreign registration ID to cross tenants.
+- Portal links derive their central-path or tenant-host root from the visible pathname, so the same cached public content keeps correct navigation on both `/{orgSlug}` and activated custom-domain/subdomain routes.
 - Bounded staff check-in data with server-side search: the page loads at most 25 matching rows, with short-lived cache revalidation and action-driven path invalidation.
 - Request-local Auth.js memoization plus one user/membership/workspace/event snapshot removes duplicate dashboard/event authorization reads without caching authorization across requests.
 - Registration lookup by event/status, event/creation time, event/check-in time, and tier/status.
@@ -126,7 +128,14 @@ VFURST_SKIP_LOCAL_SERVER=1
   - 247,659/247,659 checks passed.
   - Registration p95 1.52s; check-in p95 2.49s; overall p95 1.58s.
   - The connection-exhaustion blocker is closed, but the full launch latency threshold remains failed by 80ms.
+- A supported six-replica/pool-4 baseline on July 14 completed 149,150 requests with 298,297/298,297 checks and 0.00% HTTP failures, but still failed at overall p95 1.79s. Registration p95 was 1.72s and check-in p95 spiked to 9.03s.
+- Short isolated diagnostics identified shared-host rendering contention rather than a slow check-in query path: 500 registration VUs plus one check-in VU produced overall p95 902.44ms, while 50 check-in VUs plus one registration VU produced overall p95 32.16ms. After the anonymous registration route became 15-second ISR, the combined 500/50 smoke produced overall p95 61.61ms with 100% checks and 0.00% failures.
+- The fresh full Phase 7 proof passed on July 14 with the supported topology: 1,500 seeded registrations, 500 registration VUs, 50 check-in VUs, six web replicas, pool limit 4, pool timeout 20 seconds, and Docker-backed k6:
+  - Postgres capacity preflight: 100 max - 3 reserved = 97 usable; 24 maximum web connections within application budget 80.
+  - 198,024 HTTP requests completed with 0.00% failures; no Prisma `P2037` or replica failure occurred.
+  - 396,045/396,045 checks passed.
+  - Registration p95 was 357.16ms, check-in p95 was 1.49s, and overall p95 was 409.88ms, below the unchanged 1.5-second launch threshold.
 
-## Remaining proof
+## Performance gate result
 
-The Phase 7 target run has not passed yet after the latest material critical-path change. Prisma connection growth is now bounded and the former `P2037`/HTTP-error failure mode is gone. The next performance unit must reduce registration/check-in tail latency enough for a fresh 500-registration/50-check-in full run to meet p95 under 1.5 seconds; do not weaken the threshold or restore a pass claim from the historical July 8 baseline.
+The Phase 7 500-registration/50-check-in performance gate is passed against the current supported six-replica/pool-4 topology. This claim comes from the fresh post-ISR run above, not the historical July 8 baseline: connection growth stayed bounded, correctness and HTTP-error gates passed, and overall p95 remained below 1.5 seconds. Rerun `npm run test:load:launch` after any material public-registration, check-in, authentication, cache, database-pool, or topology change.

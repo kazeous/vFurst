@@ -1,11 +1,16 @@
-import { Alert } from "@/components/ui/alert";
 import { RegistrationFlow } from "@/app/(convention)/[orgSlug]/register/registration-flow";
+import { RegistrationStatusAlert } from "@/app/(convention)/[orgSlug]/register/registration-status-alert";
 import { getScheduledPrice } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
-import { unstable_cache, unstable_noStore as noStore } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 export const revalidate = 15;
+
+export function generateStaticParams() {
+  return [];
+}
 
 const getPublicRegistrationData = unstable_cache(
   async (orgSlug: string) => {
@@ -35,27 +40,18 @@ const getPublicRegistrationData = unstable_cache(
   { revalidate: 15 }
 );
 
-export default async function PublicRegistrationPage({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams: Promise<{ success?: string; cancelled?: string }> }) {
-  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
-  if (query.success || query.cancelled) noStore();
+export default async function PublicRegistrationPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
   const data = await getPublicRegistrationData(orgSlug);
   if (!data) notFound();
   const { event, org } = data;
-  const successRegistration = query.success
-    ? await prisma.registration.findFirst({
-        where: {
-          id: query.success,
-          orgId: org.id
-        },
-        include: { event: true, type: true, user: true }
-      })
-    : null;
 
   return (
     <main className="vf-public-page vf-registration-flow-page">
       <header className="vf-public-header"><div><p className="vf-label">{org.name}</p><h1>Registration</h1><p className="vf-muted">Choose a ticket, add attendee details, and review before payment.</p></div></header>
-      {successRegistration ? <Alert variant="success"><h2>Registration confirmed</h2><p>{successRegistration.user.name ?? successRegistration.user.email} is registered for {successRegistration.event.name} as {successRegistration.type.name}.</p></Alert> : null}
-      {query.cancelled ? <Alert variant="warning"><h2>Checkout cancelled</h2><p>No payment was captured. Your ticket selection is still available to start again.</p></Alert> : null}
+      <Suspense fallback={null}>
+        <RegistrationStatusAlert orgSlug={orgSlug} />
+      </Suspense>
       {!event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
         <RegistrationFlow
           eventId={event.id}

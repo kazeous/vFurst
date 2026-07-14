@@ -157,6 +157,8 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 
 The launch-sized local default is six web replicas, one worker, and four Prisma connections per process (28 steady-state application connections). The application budget remains 80 against 97 usable local Postgres slots so rollout, administration, and reserved connections retain headroom. Cloud migration must configure both runtime and direct database URLs; it must not require a code branch.
 
+Anonymous public registration content uses a 15-second ISR response cache in addition to cached database projections. Query-specific confirmation state is fetched separately with a private, no-store, organization-bound lookup, so shared public HTML never contains attendee-specific state. Material registration/check-in, cache, pool, or replica-topology changes require a fresh 500/50 launch proof.
+
 ---
 
 ## Data Model

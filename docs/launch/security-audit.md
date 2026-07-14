@@ -6,7 +6,7 @@ Last repository remediation update: July 14, 2026
 
 ## Status
 
-**Public launch remains blocked.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, and unbounded Prisma connection growth. The latest full load proof has 0% HTTP failures but still misses the p95 latency target. External launch evidence also remains open. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
+**Public launch remains blocked.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, and unbounded Prisma connection growth. The fresh supported-topology 500/50 load proof also passes its correctness, HTTP-error, and p95 latency gates. External launch evidence remains open. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
 
 ## Scope
 
@@ -56,6 +56,6 @@ Card data remains hosted by Stripe Checkout and is not stored by vFurst. The SAQ
 8. **Done:** constrain store/vendor uploads before reading them into memory.
 9. **Done for shared rate limiting:** replace process-local counters with atomic Redis counters, define route-family failure policy, and add multi-instance/TTL regressions.
 10. **Done for connection exhaustion:** one Prisma singleton per process, bounded runtime pools, a direct administrative datasource, replica/budget/capacity readiness checks, and a zero-error 500/50 rerun replace the previous `P2037` failure mode.
-11. Rerun type-check, lint, unit, Prisma, build, dependency, E2E, security, and approved load gates; the full load p95 latency gate remains open.
+11. **Done for the repository performance gate:** rerun type-check, lint, unit, Prisma, build, dependency, focused tenant/domain E2E, and the approved 500/50 load proof. The full production E2E and readiness results are recorded in `PROGRESS.md` for the same change set.
 
 The repository rate-limit finding is closed. Public launch remains blocked until external monitoring and the remaining full launch-proof items are completed and the audit is repeated against the deployed environment.

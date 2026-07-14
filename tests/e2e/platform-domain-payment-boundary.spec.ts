@@ -147,7 +147,15 @@ test("platform admin owns domain activation and global payment operations", asyn
     headers: { host: requestedDomain }
   });
   expect(customRegistrationResponse.status()).toBe(200);
-  expect(await customRegistrationResponse.text()).toContain("Choose a ticket");
+  const customRegistrationHtml = await customRegistrationResponse.text();
+  expect(customRegistrationHtml).toContain("Choose a ticket");
+  expect(customRegistrationHtml).toContain('href="/register"');
+  expect(customRegistrationHtml).not.toContain(`href="/${orgSlug}/register"`);
+
+  const centralRegistrationResponse = await page.request.get(`/${orgSlug}/register`);
+  expect(centralRegistrationResponse.status()).toBe(200);
+  const centralRegistrationHtml = await centralRegistrationResponse.text();
+  expect(centralRegistrationHtml).toContain(`href="/${orgSlug}/register"`);
 
   await page.goto("/platform/payments");
   await expect(page.getByRole("heading", { name: "Payments and settlement" })).toBeVisible();

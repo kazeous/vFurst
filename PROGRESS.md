@@ -25,11 +25,33 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, currency-separated fee reporting, and shared Redis rate limits now use their intended tenant/control-plane boundaries. Remaining standalone Phase 6 completion evidence has not been rerun. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/control-plane separation, payment safety, shared rate limits, and bounded Prisma pools have automated evidence. The former load-test connection exhaustion is closed, but the latest 500/50 full run still misses the latency gate at p95 1.58s; external beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains open. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/control-plane separation, payment safety, shared rate limits, bounded Prisma pools, and the fresh 500/50 performance proof have automated evidence. External beta/live/Sentry/SePay Sandbox/screen-reader evidence remains open. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, remove registration render contention and pass the supported 500/50 proof
+- Measured the supported six-replica/pool-4 topology before changing code:
+  - The full baseline completed 149,150 HTTP requests with 298,297/298,297 checks and 0.00% failures, but overall p95 was 1.79s. Registration p95 was 1.72s and check-in p95 spiked to 9.03s.
+  - Short isolated profiles separated the bottleneck: 500 registration VUs plus one check-in VU produced overall p95 902.44ms, while 50 check-in VUs plus one registration VU produced overall p95 32.16ms. Check-in data/auth was fast alone; repeated anonymous registration SSR caused shared-host contention and starved the smaller event-day flow.
+- Removed the measured render bottleneck without changing load gates or authorization:
+  - The anonymous base registration page now uses 15-second Full Route Cache/ISR for its HTML/RSC response as well as its bounded database projection. Production build marks only `/[orgSlug]/register` as SSG; query-state public pages remain dynamic.
+  - Moved `?success` confirmation into a client boundary backed by a private, no-store API projection. It validates the organization lifecycle and binds the registration ID to that organization before returning the prior attendee/event/tier message; foreign registration IDs remain 404.
+  - Public portal links derive central-path versus tenant-host roots from the visible pathname, retaining correct server HTML and hydrated navigation on central subpaths, platform subdomains, and activated custom domains.
+  - Added pure portal-path coverage and expanded the platform-domain E2E to assert both custom-host and central registration links. Existing registration cross-tenant E2E proves a foreign success ID is not disclosed.
+- Load evidence:
+  - The combined 500/50 smoke after ISR passed with 15,088 requests, 30,173/30,173 checks, 0.00% failures, and overall p95 61.61ms.
+  - The exact full proof used 1,500 seeded registrations, 500 registration VUs, 50 check-in VUs, six web replicas, pool 4, and a 20-second timeout. Postgres preflight reported 24 web connections within budget 80 and 97 usable slots.
+  - It completed 198,024 HTTP requests with 0.00% failures and 396,045/396,045 checks. Registration p95 was 357.16ms, check-in p95 1.49s, and overall p95 409.88ms under the unchanged 1.5-second gate. No Prisma `P2037` or replica failure occurred.
+- Verified:
+  - Root tests passed 92/92 web, 21/21 worker, 12/12 database, and 1/1 email tests. Repository type-check, lint, Prisma validation, production build, `git diff --check`, and `npm audit --audit-level=moderate` (0 vulnerabilities) passed. The build retains the known BullMQ dynamic-dependency warning.
+  - Focused production-mode registration authorization/domain tests passed 7/7, and the dedicated custom-domain regression passed 2/2 after adding cached-link assertions. Full production-mode Chromium E2E passed 79/79 with four workers; expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Launch readiness now passes the database budget, security, and full k6 gates. It correctly remains failed on 10 external/configuration gates: seven local Stripe/Sentry values, two externally verified beta conventions, physical screen-reader evidence, and a live launch URL.
+- Remaining issues / blockers:
+  - The repository connection-capacity and 500/50 performance objective is satisfied. Do not deploy yet: external beta/live/Sentry/SePay Sandbox/screen-reader evidence, recipient transfer acceptance, badge image rendering, and physical printer proof remain open.
+- Next session should:
+  - Resume with one of the remaining independently reviewable external/Phase 5 proof units; rerun the load proof only after a material registration/check-in/auth/cache/pool/topology change.
 
 ### 2026-07-14 - Phase 7, bound Prisma connections and rerun the 500/50 proof
 - Added a production database connection contract:
@@ -1651,4 +1673,4 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 - Phase 4 is reopened by tenant-scope and vendor-upload findings.
 - Phase 5 is reopened by cashier, badge-printing, and recipient-transfer findings.
 - Phase 6 remains audit-reopened for standalone completion evidence; its process-local production rate-limit blocker is closed.
-- Phase 7 is blocked by the failed 16-replica database connection-capacity proof plus beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.
+- Phase 7 repository load/capacity gates pass; it remains blocked by beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.

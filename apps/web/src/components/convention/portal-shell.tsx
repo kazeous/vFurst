@@ -4,6 +4,7 @@ import type { Prisma } from "@vfurst/db";
 import { ArrowRight, MapPin } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { PortalLink } from "./portal-link";
 import { PortalNav } from "./portal-nav";
 
 type PortalOrganization = { name: string; subdomain: string; logo: string | null };
@@ -17,7 +18,7 @@ function imageStyle(url?: string) {
   return url ? { backgroundImage: `url("${url.replaceAll('"', "%22")}")` } : undefined;
 }
 
-export function ConventionPortalShell({ org, event, portalRoot, children }: { org: PortalOrganization; event: PortalEvent; portalRoot: string; children: ReactNode }) {
+export function ConventionPortalShell({ org, event, children }: { org: PortalOrganization; event: PortalEvent; children: ReactNode }) {
   const branding = getEffectiveEventBranding(event?.settings ?? {}, org.logo);
   const shellStyle = {
     "--event-accent": branding.accentColor,
@@ -28,13 +29,13 @@ export function ConventionPortalShell({ org, event, portalRoot, children }: { or
     <div className="vf-portal-shell" style={shellStyle}>
       <header className="vf-portal-header">
         <div className="vf-portal-topbar">
-          <Link className="vf-portal-identity" href={portalRoot}>
+          <PortalLink className="vf-portal-identity" subdomain={org.subdomain}>
             <span className="vf-portal-logo" style={imageStyle(branding.logoUrl)}>{branding.logoUrl ? null : initials(event?.name ?? org.name)}</span>
             <span><strong>{event?.name ?? org.name}</strong><small>Official convention portal</small></span>
-          </Link>
+          </PortalLink>
           <Link className="vf-portal-powered" href="/">Powered by <strong>vFurst</strong></Link>
         </div>
-        <PortalNav portalRoot={portalRoot} />
+        <PortalNav subdomain={org.subdomain} />
       </header>
 
       {event ? (
@@ -45,7 +46,7 @@ export function ConventionPortalShell({ org, event, portalRoot, children }: { or
               <h1>{event.name}</h1>
               <span>{formatDateRange(event.startDate, event.endDate)}{event.venue ? <><i>·</i><MapPin size={15} aria-hidden="true" />{event.venue}</> : null}</span>
             </div>
-            <Link className="vf-portal-primary-action" href={`${portalRoot}/register`}>Get tickets <ArrowRight size={17} /></Link>
+            <PortalLink className="vf-portal-primary-action" subdomain={org.subdomain} suffix="/register">Get tickets <ArrowRight size={17} /></PortalLink>
           </div>
         </section>
       ) : null}
@@ -54,7 +55,7 @@ export function ConventionPortalShell({ org, event, portalRoot, children }: { or
 
       <footer className="vf-portal-footer">
         <span>{event?.name ?? org.name}</span>
-        <div><Link href={`${portalRoot}/register`}>Tickets</Link><Link href={`${portalRoot}/volunteer`}>Volunteer</Link><Link href="/privacy">Privacy</Link></div>
+        <div><PortalLink subdomain={org.subdomain} suffix="/register">Tickets</PortalLink><PortalLink subdomain={org.subdomain} suffix="/volunteer">Volunteer</PortalLink><Link href="/privacy">Privacy</Link></div>
         <small>Secure registration and payments by vFurst.</small>
       </footer>
     </div>
