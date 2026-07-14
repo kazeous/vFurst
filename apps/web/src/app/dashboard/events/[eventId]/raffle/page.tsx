@@ -83,7 +83,6 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
 
       <section className="vf-two-column">
         <form action={createRaffle} className="vf-section vf-form">
-          <input type="hidden" name="orgId" value={event.orgId} />
           <input type="hidden" name="eventId" value={event.id} />
           <h2>Create raffle</h2>
           <label>
@@ -141,14 +140,10 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
                   ))}
                 </div>
                 <form action={autoEnterConfirmedRegistrations}>
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="raffleId" value={raffle.id} />
                   <Button label="Auto-enter attendees" type="submit" />
                 </form>
                 <form action={addRaffleEntry} className="vf-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="raffleId" value={raffle.id} />
                   <label>
                     Manual entry email
@@ -161,8 +156,6 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
                   <Button label="Add entry" type="submit" />
                 </form>
                 <form action={drawRaffleWinner} className="vf-inline-form">
-                  <input type="hidden" name="orgId" value={event.orgId} />
-                  <input type="hidden" name="eventId" value={event.id} />
                   <input type="hidden" name="raffleId" value={raffle.id} />
                   <label>
                     Prize

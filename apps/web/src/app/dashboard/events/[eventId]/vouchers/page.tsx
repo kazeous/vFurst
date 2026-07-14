@@ -55,7 +55,6 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
         <div className="vf-section">
           <h2>Create voucher</h2>
           <form action={createVoucher} className="vf-form">
-            <input type="hidden" name="orgId" value={event.orgId} />
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Code
@@ -71,7 +70,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
             </label>
             <label>
               Discount value
-              <input name="discountValue" type="number" min="0" step="0.01" defaultValue="10" />
+              <input name="discountValue" type="number" min="0" step={event.currency === "VND" ? "1" : "0.01"} defaultValue="10" />
             </label>
             <div className="vf-subform-row">
               <label>
@@ -99,7 +98,6 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
         <div className="vf-section">
           <h2>Bulk generate</h2>
           <form action={bulkGenerateVouchers} className="vf-form">
-            <input type="hidden" name="orgId" value={event.orgId} />
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Prefix
@@ -119,7 +117,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
             </label>
             <label>
               Discount value
-              <input name="discountValue" type="number" min="0" step="0.01" defaultValue="100" />
+              <input name="discountValue" type="number" min="0" step={event.currency === "VND" ? "1" : "0.01"} defaultValue="100" />
             </label>
             <label>
               Max uses

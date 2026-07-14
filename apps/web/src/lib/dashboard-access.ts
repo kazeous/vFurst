@@ -182,6 +182,29 @@ async function getBadgeTenant(badgeId: string) {
   });
 }
 
+async function getRaffleTenant(raffleId: string) {
+  return prisma.raffle.findUnique({
+    where: {
+      id: raffleId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      eventId: true,
+      name: true,
+      prizes: true,
+      drawDate: true,
+      event: {
+        select: {
+          id: true,
+          orgId: true,
+          currency: true
+        }
+      }
+    }
+  });
+}
+
 async function getAttendeeNoteTenant(noteId: string) {
   return prisma.attendeeNote.findUnique({
     where: {
@@ -651,6 +674,29 @@ export async function requireBadgeAccess(badgeId: string, allowedRoles: OrgRole[
     badge,
     registration: badge.registration,
     badgeTemplate: badge.template,
+    event
+  };
+}
+
+export async function requireRaffleAccess(raffleId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const raffle = await getRaffleTenant(raffleId);
+
+  if (!raffle || raffle.orgId !== raffle.event.orgId || raffle.eventId !== raffle.event.id) {
+    throw new Error("Raffle not found.");
+  }
+
+  const event = raffle.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this raffle.");
+  }
+
+  return {
+    userId,
+    membership,
+    raffle,
     event
   };
 }

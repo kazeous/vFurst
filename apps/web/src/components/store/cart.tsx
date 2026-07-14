@@ -103,7 +103,6 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
 
       <form action={applyVoucher} className="vf-inline-form">
         <input type="hidden" name="cartId" value={cart.id} />
-        <input type="hidden" name="eventId" value={cart.eventId} />
         <input type="hidden" name="returnPath" value={returnPath} />
         <label>
           Discount code

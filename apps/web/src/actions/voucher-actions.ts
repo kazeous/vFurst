@@ -1,35 +1,13 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { requireEventAccess as requireStoredEventAccess } from "@/lib/dashboard-access";
 import { parseMoney } from "@/lib/registration/pricing";
 import type { CurrencyCode } from "@vfurst/db";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function requireEventAccess(orgId: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const member = await prisma.orgMember.findUnique({
-    where: {
-      userId_orgId: {
-        userId: session.user.id,
-        orgId
-      }
-    }
-  });
-
-  if (!member || member.role === "MEMBER") {
-    throw new Error("You do not have permission to manage vouchers for this event.");
-  }
-
-  return session.user.id;
-}
 
 async function requireUserId() {
   const session = await auth();
@@ -48,37 +26,84 @@ function normalizeCode(code: string) {
 function voucherPayloadFromForm(formData: FormData, currency: CurrencyCode) {
   const mode = z.enum(["PERCENT", "AMOUNT", "COMP"]).parse(formData.get("discountType"));
   const discountType = mode === "AMOUNT" ? ("AMOUNT" as const) : ("PERCENT" as const);
-  const discountValue = mode === "COMP" ? 100 : mode === "AMOUNT" ? parseMoney(formData.get("discountValue"), currency) : Number(formData.get("discountValue") ?? 0);
-  const tierIds = formData
-    .getAll("tierId")
-    .map((value) => String(value))
-    .filter(Boolean);
+  const discountValue =
+    mode === "COMP"
+      ? 100
+      : mode === "AMOUNT"
+        ? parseMoney(formData.get("discountValue"), currency)
+        : z.coerce.number().positive().max(100).parse(formData.get("discountValue"));
+  const tierIds = [
+    ...new Set(
+      z.array(z.string().uuid()).parse(
+        formData
+          .getAll("tierId")
+          .map(String)
+          .filter(Boolean)
+      )
+    )
+  ];
+  const maxUses = formData.get("maxUses")
+    ? z.coerce.number().int().min(1).parse(formData.get("maxUses"))
+    : null;
+  const expiresValue = formData.get("expiresAt");
+  const expiresDate = expiresValue ? z.string().date().parse(expiresValue) : null;
+  const expiresAt = expiresDate ? new Date(`${expiresDate}T23:59:59.999Z`) : null;
 
-  if (discountValue <= 0) {
-    throw new Error("Discount value must be greater than zero.");
-  }
+  if (discountValue <= 0) throw new Error("Discount value must be greater than zero.");
+  if (expiresAt && expiresAt < new Date()) throw new Error("Voucher expiry must be today or later.");
 
   return {
-    discountType,
-    discountValue: discountType === "PERCENT" ? Math.min(Math.round(discountValue), 100) : discountValue,
-    maxUses: formData.get("maxUses") ? Number(formData.get("maxUses")) : null,
-    expiresAt: formData.get("expiresAt") ? new Date(String(formData.get("expiresAt"))) : null,
-    restrictions: {
-      tierIds,
-      compedRegistration: mode === "COMP"
+    tierIds,
+    payload: {
+      discountType,
+      discountValue: discountType === "PERCENT" ? Math.round(discountValue) : discountValue,
+      maxUses,
+      expiresAt,
+      restrictions: {
+        tierIds,
+        compedRegistration: mode === "COMP"
+      }
     }
+  };
+}
+
+async function assertVoucherTiersBelongToEvent(eventId: string, orgId: string, tierIds: string[]) {
+  const matchingTiers = await prisma.registrationType.count({
+    where: {
+      id: {
+        in: tierIds
+      },
+      eventId,
+      orgId
+    }
+  });
+
+  if (matchingTiers !== tierIds.length) {
+    throw new Error("One or more voucher tier restrictions do not belong to this event.");
+  }
+}
+
+function getVoucherRestrictions(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { tierIds: [] as string[], compedRegistration: false };
+  }
+
+  const restrictions = value as { tierIds?: unknown; compedRegistration?: unknown };
+  return {
+    tierIds: Array.isArray(restrictions.tierIds)
+      ? restrictions.tierIds.filter((tierId): tierId is string => typeof tierId === "string")
+      : [],
+    compedRegistration: restrictions.compedRegistration === true
   };
 }
 
 export async function createVoucher(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       code: z.string().trim().min(2)
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       code: formData.get("code")
     });
@@ -87,31 +112,32 @@ export async function createVoucher(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid voucher.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
+  const normalizedCode = normalizeCode(parsed.data.code);
+  z.string().min(2).max(64).regex(/^[A-Z0-9-]+$/).parse(normalizedCode);
+  const { event } = await requireStoredEventAccess(parsed.data.eventId);
+  const { payload, tierIds } = voucherPayloadFromForm(formData, event.currency);
+  await assertVoucherTiersBelongToEvent(event.id, event.orgId, tierIds);
 
   await prisma.voucher.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
-      code: normalizeCode(parsed.data.code),
-      ...voucherPayloadFromForm(formData, event.currency)
+      orgId: event.orgId,
+      eventId: event.id,
+      code: normalizedCode,
+      ...payload
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/vouchers`);
+  revalidatePath(`/dashboard/events/${event.id}/vouchers`);
 }
 
 export async function bulkGenerateVouchers(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       prefix: z.string().trim().min(1).max(16),
       count: z.coerce.number().int().min(1).max(500)
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       prefix: formData.get("prefix"),
       count: formData.get("count")
@@ -121,24 +147,26 @@ export async function bulkGenerateVouchers(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid bulk voucher request.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: parsed.data.eventId }, select: { currency: true } });
-  const payload = voucherPayloadFromForm(formData, event.currency);
+  const normalizedPrefix = normalizeCode(parsed.data.prefix);
+  z.string().min(1).max(16).regex(/^[A-Z0-9-]+$/).parse(normalizedPrefix);
+  const { event } = await requireStoredEventAccess(parsed.data.eventId);
+  const { payload, tierIds } = voucherPayloadFromForm(formData, event.currency);
+  await assertVoucherTiersBelongToEvent(event.id, event.orgId, tierIds);
 
   await prisma.voucher.createMany({
     data: Array.from({ length: parsed.data.count }, () => ({
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
-      code: normalizeCode(`${parsed.data.prefix}-${crypto.randomUUID().slice(0, 8)}`),
+      orgId: event.orgId,
+      eventId: event.id,
+      code: normalizeCode(`${normalizedPrefix}-${crypto.randomUUID().slice(0, 8)}`),
       ...payload
     })),
     skipDuplicates: true
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/vouchers`);
+  revalidatePath(`/dashboard/events/${event.id}/vouchers`);
 }
 
-export async function validateVoucher(eventId: string, code: string) {
+async function validateVoucher(event: { id: string; orgId: string }, code: string) {
   const normalized = normalizeCode(code);
 
   if (!normalized) {
@@ -148,13 +176,13 @@ export async function validateVoucher(eventId: string, code: string) {
   const voucher = await prisma.voucher.findUnique({
     where: {
       eventId_code: {
-        eventId,
+        eventId: event.id,
         code: normalized
       }
     }
   });
 
-  if (!voucher) {
+  if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
     throw new Error("Voucher code was not found.");
   }
 
@@ -173,12 +201,10 @@ export async function applyVoucher(formData: FormData) {
   const userId = await requireUserId();
   const parsed = z
     .object({
-      eventId: z.string().uuid(),
       cartId: z.string().uuid(),
       code: z.string().trim().min(1)
     })
     .safeParse({
-      eventId: formData.get("eventId"),
       cartId: formData.get("cartId"),
       code: formData.get("code")
     });
@@ -187,26 +213,51 @@ export async function applyVoucher(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid voucher code.");
   }
 
-  const voucher = await validateVoucher(parsed.data.eventId, parsed.data.code);
-  const restrictions =
-    voucher.restrictions && typeof voucher.restrictions === "object" && "compedRegistration" in voucher.restrictions
-      ? (voucher.restrictions as { compedRegistration?: boolean })
-      : null;
+  const cart = await prisma.cart.findFirst({
+    where: {
+      id: parsed.data.cartId,
+      userId
+    },
+    include: {
+      event: {
+        select: {
+          id: true,
+          orgId: true
+        }
+      }
+    }
+  });
 
-  if (restrictions?.compedRegistration) {
+  if (!cart || cart.orgId !== cart.event.orgId || cart.eventId !== cart.event.id) {
+    throw new Error("Cart not found.");
+  }
+
+  const voucher = await validateVoucher(cart.event, parsed.data.code);
+  const restrictions = getVoucherRestrictions(voucher.restrictions);
+
+  if (restrictions.compedRegistration) {
     throw new Error("Comped registration vouchers can only be used during registration.");
   }
 
-  await prisma.cart.updateMany({
+  if (restrictions.tierIds.length > 0) {
+    throw new Error("Registration-tier vouchers cannot be applied to the event store.");
+  }
+
+  const updated = await prisma.cart.updateMany({
     where: {
-      id: parsed.data.cartId,
+      id: cart.id,
       userId,
-      eventId: parsed.data.eventId
+      orgId: cart.event.orgId,
+      eventId: cart.event.id
     },
     data: {
       voucherId: voucher.id
     }
   });
+
+  if (updated.count !== 1) {
+    throw new Error("Cart not found.");
+  }
 
   revalidatePath(String(formData.get("returnPath") ?? "/"));
 }

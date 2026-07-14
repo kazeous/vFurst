@@ -29,6 +29,14 @@ export async function markOrderPaidWithProvider(
     return order;
   }
 
+  if (order.orgId !== order.event.orgId || order.eventId !== order.event.id) {
+    throw new Error("Order tenant does not match its event.");
+  }
+
+  if (order.voucher && (order.voucher.orgId !== order.orgId || order.voucher.eventId !== order.eventId)) {
+    throw new Error("Order voucher does not belong to this event.");
+  }
+
   let transitionedToPaid = false;
 
   await prisma.$transaction(async (tx) => {
@@ -88,9 +96,11 @@ export async function markOrderPaidWithProvider(
     }
 
     if (order.voucherId) {
-      await tx.voucher.update({
+      const updatedVoucher = await tx.voucher.updateMany({
         where: {
-          id: order.voucherId
+          id: order.voucherId,
+          orgId: order.orgId,
+          eventId: order.eventId
         },
         data: {
           usedCount: {
@@ -98,6 +108,10 @@ export async function markOrderPaidWithProvider(
           }
         }
       });
+
+      if (updatedVoucher.count !== 1) {
+        throw new Error("Order voucher does not belong to this event.");
+      }
     }
 
     for (const item of order.items) {
@@ -257,11 +271,19 @@ export async function markOrderRefundedByPaymentIntent(stripePaymentIntentId: st
 export async function reverseOrderFulfillment(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true }
+    include: { event: true, items: true, voucher: true }
   });
 
   if (!order || order.status === "REFUNDED") {
     return order;
+  }
+
+  if (order.orgId !== order.event.orgId || order.eventId !== order.event.id) {
+    throw new Error("Order tenant does not match its event.");
+  }
+
+  if (order.voucher && (order.voucher.orgId !== order.orgId || order.voucher.eventId !== order.eventId)) {
+    throw new Error("Order voucher does not belong to this event.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -272,6 +294,24 @@ export async function reverseOrderFulfillment(orderId: string) {
 
     if (refunded.count === 0) {
       return;
+    }
+
+    if (order.voucherId) {
+      await tx.voucher.updateMany({
+        where: {
+          id: order.voucherId,
+          orgId: order.orgId,
+          eventId: order.eventId,
+          usedCount: {
+            gt: 0
+          }
+        },
+        data: {
+          usedCount: {
+            decrement: 1
+          }
+        }
+      });
     }
 
     for (const item of order.items) {

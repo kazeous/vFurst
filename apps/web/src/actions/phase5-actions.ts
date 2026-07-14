@@ -6,6 +6,7 @@ import {
   requireBadgeAccess,
   requireBadgeTemplateAccess,
   requireEventAccess as requireStoredEventAccess,
+  requireRaffleAccess,
   requireRegistrationAccess,
   requireRegistrationTypeAccess
 } from "@/lib/dashboard-access";
@@ -40,6 +41,12 @@ const emailTemplateSchema = z.object({
   subject: z.string().trim().min(1),
   html: z.string().trim().min(1),
   text: z.string().trim().min(1)
+});
+
+const rafflePrizeSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().optional(),
+  quantity: z.coerce.number().int().min(1)
 });
 
 async function requireEventAccess(orgId: string) {
@@ -584,20 +591,12 @@ export async function adminTransferRegistration(formData: FormData) {
 export async function createRaffle(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       eventId: z.string().uuid(),
       name: z.string().trim().min(1),
       drawDate: z.coerce.date(),
-      prizes: z.array(
-        z.object({
-          name: z.string().trim().min(1),
-          description: z.string().trim().optional(),
-          quantity: z.coerce.number().int().min(1)
-        })
-      )
+      prizes: z.array(rafflePrizeSchema).min(1)
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       eventId: formData.get("eventId"),
       name: formData.get("name"),
       drawDate: formData.get("drawDate"),
@@ -619,29 +618,33 @@ export async function createRaffle(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid raffle.");
   }
 
-  await requireEventAccess(parsed.data.orgId);
+  const prizeNames = parsed.data.prizes.map((prize) => prize.name.toLowerCase());
+
+  if (new Set(prizeNames).size !== prizeNames.length) {
+    throw new Error("Prize names must be unique within a raffle.");
+  }
+
+  const { event } = await requireStoredEventAccess(parsed.data.eventId);
 
   await prisma.raffle.create({
     data: {
-      orgId: parsed.data.orgId,
-      eventId: parsed.data.eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       name: parsed.data.name,
       drawDate: parsed.data.drawDate,
       prizes: parsed.data.prizes as Prisma.InputJsonValue
     }
   });
 
-  revalidatePath(`/dashboard/events/${parsed.data.eventId}/raffle`);
+  revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
 
 export async function addRaffleEntry(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const raffleId = z.string().uuid().parse(formData.get("raffleId"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
   const attendeeName = z.string().trim().optional().parse(formData.get("attendeeName") || undefined);
+  const { raffle, event } = await requireRaffleAccess(raffleId);
 
-  await requireEventAccess(orgId);
   const user = await findOrCreateUser(attendeeEmail, attendeeName ?? attendeeEmail);
 
   await prisma.raffleEntry.upsert({
@@ -652,30 +655,28 @@ export async function addRaffleEntry(formData: FormData) {
       }
     },
     update: {
+      orgId: event.orgId,
       entryMethod: "MANUAL"
     },
     create: {
-      orgId,
-      raffleId,
+      orgId: event.orgId,
+      raffleId: raffle.id,
       userId: user.id,
       entryMethod: "MANUAL"
     }
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/raffle`);
+  revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
 
 export async function autoEnterConfirmedRegistrations(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const raffleId = z.string().uuid().parse(formData.get("raffleId"));
-
-  await requireEventAccess(orgId);
+  const { raffle, event } = await requireRaffleAccess(raffleId);
 
   const registrations = await prisma.registration.findMany({
     where: {
-      orgId,
-      eventId,
+      orgId: event.orgId,
+      eventId: event.id,
       status: {
         in: ["CONFIRMED", "CHECKED_IN"]
       }
@@ -685,41 +686,37 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
     }
   });
 
-  for (const registration of registrations) {
-    await prisma.raffleEntry.upsert({
-      where: {
-        raffleId_userId: {
-          raffleId,
-          userId: registration.userId
-        }
-      },
-      update: {},
-      create: {
-        orgId,
-        raffleId,
+  if (registrations.length > 0) {
+    await prisma.raffleEntry.createMany({
+      data: registrations.map((registration) => ({
+        orgId: event.orgId,
+        raffleId: raffle.id,
         userId: registration.userId,
-        entryMethod: "AUTO"
-      }
+        entryMethod: "AUTO" as const
+      })),
+      skipDuplicates: true
     });
   }
 
-  revalidatePath(`/dashboard/events/${eventId}/raffle`);
+  revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
 
 export async function drawRaffleWinner(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
   const raffleId = z.string().uuid().parse(formData.get("raffleId"));
   const prizeName = z.string().trim().min(1).parse(formData.get("prizeName"));
+  const { raffle: authorizedRaffle, event } = await requireRaffleAccess(raffleId);
 
-  await requireEventAccess(orgId);
-
-  const raffle = await prisma.raffle.findUniqueOrThrow({
+  const raffle = await prisma.raffle.findFirstOrThrow({
     where: {
-      id: raffleId
+      id: authorizedRaffle.id,
+      orgId: event.orgId,
+      eventId: event.id
     },
     include: {
       entries: {
+        where: {
+          orgId: event.orgId
+        },
         include: {
           user: true
         }
@@ -733,15 +730,41 @@ export async function drawRaffleWinner(formData: FormData) {
     throw new Error("This raffle does not have any entries yet.");
   }
 
+  const parsedPrizes = z.array(rafflePrizeSchema).safeParse(raffle.prizes);
+
+  if (!parsedPrizes.success) {
+    throw new Error("This raffle has an invalid prize configuration.");
+  }
+
+  const selectedPrize = parsedPrizes.data.find((prize) => prize.name === prizeName);
+
+  if (!selectedPrize) {
+    throw new Error("The selected prize does not belong to this raffle.");
+  }
+
   const settings = parseEventSettings(raffle.event.settings);
   const raffleHistory = Array.isArray(settings.raffleHistory) ? settings.raffleHistory : [];
+  const awardedCount = raffleHistory.filter(
+    (item) =>
+      item != null &&
+      typeof item === "object" &&
+      "raffleId" in item &&
+      "prizeName" in item &&
+      item.raffleId === raffle.id &&
+      item.prizeName === selectedPrize.name
+  ).length;
+
+  if (awardedCount >= selectedPrize.quantity) {
+    throw new Error("All available quantities of this prize have already been awarded.");
+  }
+
   const winner = raffle.entries[Math.floor(Math.random() * raffle.entries.length)]!;
   const nextHistory = [
     ...raffleHistory,
     {
-      raffleId,
+      raffleId: raffle.id,
       raffleName: raffle.name,
-      prizeName,
+      prizeName: selectedPrize.name,
       winnerUserId: winner.userId,
       winnerName: winner.user.name ?? winner.user.email,
       winnerEmail: winner.user.email,
@@ -751,7 +774,7 @@ export async function drawRaffleWinner(formData: FormData) {
 
   await prisma.event.update({
     where: {
-      id: eventId
+      id: event.id
     },
     data: {
       settings: {
@@ -763,11 +786,11 @@ export async function drawRaffleWinner(formData: FormData) {
 
   await sendOrgEmail(raffle.org, winner.user.email, "staff-message", {
     eventName: raffle.event.name,
-    subject: `You won ${prizeName}`,
-    message: `Congratulations! You were drawn as a winner for ${prizeName} in ${raffle.name}.`
+    subject: `You won ${selectedPrize.name}`,
+    message: `Congratulations! You were drawn as a winner for ${selectedPrize.name} in ${raffle.name}.`
   });
 
-  revalidatePath(`/dashboard/events/${eventId}/raffle`);
+  revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
 
 export async function saveEmailTemplate(formData: FormData) {

@@ -73,7 +73,7 @@ function getVoucherRestrictions(value: unknown) {
   };
 }
 
-async function getValidVoucher(eventId: string, code: string | null, typeId: string) {
+async function getValidVoucher(event: { id: string; orgId: string }, code: string | null, typeId: string) {
   if (!code) {
     return null;
   }
@@ -81,13 +81,13 @@ async function getValidVoucher(eventId: string, code: string | null, typeId: str
   const voucher = await prisma.voucher.findUnique({
     where: {
       eventId_code: {
-        eventId,
+        eventId: event.id,
         code: code.trim().toUpperCase()
       }
     }
   });
 
-  if (!voucher) {
+  if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
     throw new Error("Voucher code was not found.");
   }
 
@@ -163,7 +163,6 @@ export async function createRegistration(formData: FormData) {
     throw new Error("That registration tier is sold out.");
   }
 
-  const attendee = await findOrCreateAttendee(parsed.data.attendeeEmail, parsed.data.attendeeName);
   const selectedAddOns = type.addOns
     .map((addOn) => {
       const quantityValue = formData.get(`addon-${addOn.id}`);
@@ -179,13 +178,15 @@ export async function createRegistration(formData: FormData) {
   const registrationPrice = getScheduledPrice(type.price, type.scheduledPricing);
   const addOnTotal = selectedAddOns.reduce((sum, addOn) => sum + (addOn.isComplimentary ? 0 : addOn.price) * addOn.quantity, 0);
   const subtotal = registrationPrice + addOnTotal;
-  const voucher = await getValidVoucher(event.id, parsed.data.voucherCode ?? null, type.id);
+  const voucher = await getValidVoucher(event, parsed.data.voucherCode ?? null, type.id);
   const { discount, total } = applyVoucherDiscount(subtotal, voucher);
   const platformFee = total > 0 ? (event.currency === "VND" ? (await getSePaySettings()).registrationFeeVnd : REGISTRATION_PLATFORM_FEE_CENTS) : 0;
 
   if (parsed.data.checkoutMode !== "cart" && total > 0) {
     await assertPaidCheckoutAvailable(event.orgId, event.currency);
   }
+
+  const attendee = await findOrCreateAttendee(parsed.data.attendeeEmail, parsed.data.attendeeName);
 
   const registration = await prisma.registration.create({
     data: {
