@@ -109,7 +109,13 @@ VFURST_SKIP_LOCAL_SERVER=1
   - p95 `http_req_duration` 1.39s under the 1.5s threshold
   - 278,837/278,837 checks passed
   - 139,420 HTTP requests completed
+- The required rerun after the July 14 shared-rate-limit change reached Docker-backed k6 outside the sandbox with the same 1500-registration, 500/50 VU, 16-replica topology, but failed the launch thresholds:
+  - 94.52% `http_req_failed` (102,789 of 108,748 requests)
+  - p95 `http_req_duration` 2.88s
+  - 114,049/217,057 checks passed (52.54%)
+  - Server evidence repeatedly reports Prisma `P2037` / Postgres `FATAL: sorry, too many clients already`. The local 16-replica topology exhausts the database connection budget before it reaches the response-time target.
+  - This is a database connection-pooling/capacity blocker, not a Redis rate-limit rejection: the high-volume public registration path is not rate-limited, and the independent real-Redis multi-client regression proves the shared counter contract.
 
 ## Remaining proof
 
-The current Phase 7 load target is documented as passed. Keep the 16-replica launch proof as a capacity baseline and rerun it after material registration, check-in, middleware, Auth.js, Prisma, or deployment topology changes.
+The Phase 7 target run has not passed yet after the latest material critical-path change. Bound or pool Prisma connections for the 16-replica topology, rerun the 500-registration/50-check-in proof, and replace this failed result only with a new threshold-passing report. The July 8 result remains a historical baseline, not current launch evidence.

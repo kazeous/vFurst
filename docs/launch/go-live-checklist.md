@@ -10,7 +10,7 @@ npm run check:launch
 The checker verifies:
 
 - Marketing, legal, E2E, load-test, and launch audit artifacts exist.
-- Stripe secret-key and webhook-signing environment variables plus Sentry production environment variables are configured.
+- Stripe secret-key and webhook-signing environment variables, Sentry production variables, a valid shared Redis URL, and positive rate-limit quotas are configured.
 - At least two beta-program slots name real conventions and use `Externally verified` status.
 - Security audit no longer records any blocking application or dependency finding.
 - Full k6 target run is documented as passed.
@@ -36,6 +36,7 @@ NEXT_PUBLIC_ROOT_DOMAIN=your-production-domain.example
 AUTH_URL=https://your-production-domain.example
 AUTH_TRUST_HOST=true
 AUTH_SECRET=...
+REDIS_URL=rediss://your-managed-redis.example:6379
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 CHECKOUT_TOKEN_SECRET=...
@@ -49,6 +50,12 @@ SENTRY_PROJECT=...
 SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
 SALES_CONTACT_EMAIL=sales@your-production-domain.example
+VFURST_RATE_LIMIT_PREFIX=vfurst:rate-limit
+VFURST_API_RATE_LIMIT_PER_MINUTE=100
+VFURST_AUTH_RATE_LIMIT_PER_MINUTE=30
+VFURST_PAYMENT_RATE_LIMIT_PER_MINUTE=60
+VFURST_STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE=240
+VFURST_SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE=240
 ```
 
 For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `VFURST_LAUNCH_URL` should all point at the platform marketing domain, for example `https://vfurst.reyuugames.com` for URL values and `vfurst.reyuugames.com` for `NEXT_PUBLIC_ROOT_DOMAIN`. If the root domain is left at the local/default value, middleware can treat the production marketing domain as a convention custom domain and cause proxy-visible redirect/routing failures.
@@ -65,10 +72,10 @@ npm run backfill:managed-tenancy
 
 The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The idempotent backfill marks only legacy organizations with a null lifecycle marker as `ACTIVE`, preserves already-routed custom domains, and leaves explicitly provisioned tenants in `PROVISIONING`. The production database role therefore needs schema DDL and data-update permission. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
 
-Optional production tuning values are documented in `.env.example` and `.env.local`, including Sentry sample rates and fixed-window rate limits for Auth.js, payments, Stripe webhooks, and public API keys. Blank or placeholder launch values are not sufficient. The current checker validates Stripe's secret key and webhook signing secret, Sentry values, and the live URL. SePay and checkout secrets above still require an explicit manual go-live check; SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
+Sentry sample rates remain optional tuning values. Shared fixed-window quotas for Auth.js, public API keys, payment/refund actions, Stripe webhooks, and SePay webhooks are mandatory production values and are validated by the checker together with `REDIS_URL`. All web replicas must use the same Redis deployment and rate-limit prefix. Auth/API/payment controls intentionally fail closed if Redis is unavailable; signed and idempotent Stripe/SePay callbacks fail open while logging degraded protection so settlement is preserved. Blank or placeholder launch values are not sufficient. SePay and checkout secrets above still require an explicit manual go-live check; SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
 
 Sentry source map upload is best-effort during `next build`: upload failures are logged as warnings so a bad token does not block deployment. If Coolify logs `sentry reported an error: You do not have permission to perform this action. (http status: 403)`, recreate or rotate `SENTRY_AUTH_TOKEN` in the same Sentry organization as `SENTRY_ORG`, confirm `SENTRY_PROJECT` is the exact project slug, and give the token release/source-map upload permissions before redeploying.
 
 If Coolify logs show Turbo/Next completing successfully and then fail at Docker `exporting layers`, treat it as a Docker image export or host-resource failure rather than an application compile failure. First confirm the log contains `Tasks: 3 successful, 3 total` and `#16 exporting layers`; then prune unused Docker images/build cache or add disk to the Coolify host before retrying. The repo includes `.dockerignore` to keep local caches, `.git`, build artifacts, generated service workers, logs, and environment files out of the Docker context.
 
-Current result on July 14, 2026: managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/invitation onboarding, domain/payment/acquisition surface separation, currency-safe reporting, and payment-attempt serialization pass the current automated suite. Shared production rate limiting and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. Do not deploy until those gates are remediated and the full-system audit is rerun.
+Current result on July 14, 2026: managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/invitation onboarding, domain/payment/acquisition surface separation, currency-safe reporting, payment-attempt serialization, and shared production rate limiting pass the current automated suite. The latest 16-replica full load rerun fails because the local topology exhausts Postgres connections, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remains incomplete. Do not deploy until those gates are remediated and the full-system audit is rerun.

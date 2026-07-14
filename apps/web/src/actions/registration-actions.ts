@@ -133,7 +133,7 @@ export async function createRegistration(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration.");
   }
 
-  assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${parsed.data.attendeeEmail.toLowerCase()}`);
+  await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${parsed.data.attendeeEmail.toLowerCase()}`);
 
   const event = await prisma.event.findFirstOrThrow({
     where: {
@@ -439,7 +439,7 @@ export async function refundRegistration(formData: FormData) {
     ["OWNER", "ADMIN"],
     { allowInactive: true }
   );
-  assertActionRateLimit("payment:registration-refund", `${userId}:${registration.id}`);
+  await assertActionRateLimit("payment:registration-refund", `${userId}:${registration.id}`);
 
   const orderItem = await prisma.orderItem.findFirst({
     where: {

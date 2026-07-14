@@ -154,7 +154,7 @@ export async function bookRoom(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel booking.");
   }
 
-  assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${parsed.data.guestEmail.toLowerCase()}`);
+  await assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${parsed.data.guestEmail.toLowerCase()}`);
 
   const block = await prisma.hotelBlock.findFirst({
     where: {

@@ -24,12 +24,36 @@ Phase 0 is complete under the updated local-development directive:
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
-| 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, and currency-separated fee reporting now use their intended tenant/control-plane boundaries. Production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, mixed-currency reporting, and schema-backed payment-attempt serialization pass the full 78-test E2E suite plus repository checks. `SEC-01` through `SEC-03` and `PAY-01` are closed against the current inventory, but deployment remains blocked by shared production rate limiting and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, currency-separated fee reporting, and shared Redis rate limits now use their intended tenant/control-plane boundaries. Remaining standalone Phase 6 completion evidence has not been rerun. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, mixed-currency reporting, payment-attempt serialization, and shared production rate limiting pass the full 79-test E2E suite plus repository checks. The latest 16-replica load rerun is blocked by database connection exhaustion; external beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains open. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, share production rate limits across replicas
+- Replaced process-local safety counters with one production Redis contract:
+  - Added an atomic Lua fixed-window counter using Redis `INCR`, `PEXPIRE`, `PTTL`, and server `TIME`, so all web replicas consume one quota and process restart cannot reset an active window.
+  - SHA-256 hashes every rate-limit subject before storage. Existing scopes remain per IP for Auth.js/provider callbacks, per presented API key for REST calls, and per user/tenant/resource identity for payment and refund actions.
+  - Auth, API-key, payment, and refund controls fail closed with a retryable unavailable response/error when Redis is down. Signed, idempotent Stripe and SePay callbacks fail open while logging degraded protection so a Redis outage cannot discard settlement events.
+  - Added the missing SePay webhook quota and migrated Auth.js, Stripe, public API keys, registration/hotel/cart/vendor checkout, and registration/store refund paths to the shared async counter.
+- Added production configuration and regression evidence:
+  - Added `ioredis` to the web workspace, documented the shared prefix and all five quota variables, and made launch readiness validate a Redis URL plus positive quotas.
+  - E2E runs now pass one Redis URL and a unique counter prefix to the Next server and Playwright, preventing quota leakage between suites.
+  - Unit coverage proves hashed subjects, shared quota state, and fail-open/fail-closed policies. A real-Redis Playwright test uses two independent clients and 24 concurrent increments to prove exactly one atomic quota plus TTL expiry.
+  - Updated the reference, historical full-system audit, security audit, go-live checklist, and load evidence. The process-local production rate-limit finding is closed against the current inventory.
+- Verified:
+  - Focused shared-rate-limit and payment/webhook/API critical-path E2E passed 17/17.
+  - Full production-mode Chromium E2E passed 79/79 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 88/88 web unit tests, 21/21 worker tests, 8/8 database tests, and 1/1 email test.
+  - Repository-wide type-check, lint, Prisma validation, `git diff --check`, and production builds passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+  - `npm audit --audit-level=moderate` passed with zero vulnerabilities.
+  - Launch readiness recognizes Redis and all five rate-limit quotas; it now correctly reports 11 failures after the load evidence update: seven local Stripe/Sentry configuration values, the externally verified two-beta-convention gate, the latest full-target load proof, physical screen-reader proof, and a live launch URL.
+  - The first load rerun built and seeded 1,500 registrations but could not see Docker inside the sandbox. The approved outside-sandbox rerun reached the full 500-registration/50-check-in, 16-replica k6 profile, then failed: 94.52% HTTP errors, p95 2.88s, and 52.54% checks passed. Server evidence is Prisma `P2037` / Postgres connection exhaustion, not a rate-limit rejection. The previous July 8 pass is retained only as historical evidence.
+- Remaining issues / blockers:
+  - Do not deploy. The 16-replica database connection budget/pooling must be remediated and the full load target rerun. Recipient transfer acceptance, badge image rendering, physical printer proof, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence also remain open.
+- Next session should:
+  - Treat database connection capacity as the next separately reviewable launch unit: inventory Prisma connection counts across 16 replicas, configure a bounded/pooler-compatible production contract, add readiness/operations evidence, and rerun the exact 500-registration/50-check-in load proof before restoring a pass claim.
 
 ### 2026-07-14 - Phase 7, serialize active payment attempts and provider callbacks
 - Enforced one authoritative payment attempt per pending order:
@@ -1601,5 +1625,5 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 - Phase 3 is reopened by tenant-scope and product-upload findings.
 - Phase 4 is reopened by tenant-scope and vendor-upload findings.
 - Phase 5 is reopened by cashier, badge-printing, and recipient-transfer findings.
-- Phase 6 is reopened by process-local production rate limiting.
-- Phase 7 is blocked by the full-system audit plus beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.
+- Phase 6 remains audit-reopened for standalone completion evidence; its process-local production rate-limit blocker is closed.
+- Phase 7 is blocked by the failed 16-replica database connection-capacity proof plus beta-convention evidence, live marketing verification, production Sentry, real SePay Sandbox evidence, and a physical screen-reader pass.

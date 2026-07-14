@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { prisma, type ApiKey } from "@vfurst/db";
-
-type RateEntry = {
-  count: number;
-  resetAt: number;
-};
+import {
+  API_RATE_LIMIT_PER_MINUTE,
+  RATE_LIMIT_FAILURE_MODES,
+  RATE_LIMIT_WINDOW_MS,
+  RateLimitUnavailableError,
+  applyFixedWindowRateLimit,
+  rateLimitResponse,
+  rateLimitUnavailableResponse
+} from "../rate-limit";
 
 export type ApiContext = {
   apiKey: ApiKey;
@@ -14,10 +18,6 @@ export type ApiContext = {
     resetAt: number;
   };
 };
-
-const RATE_LIMIT = Number(process.env.VFURST_API_RATE_LIMIT_PER_MINUTE ?? 100);
-const WINDOW_MS = 60_000;
-const rateStore = new Map<string, RateEntry>();
 
 export function hashApiKey(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -46,22 +46,6 @@ function bearerToken(request: Request) {
   return token;
 }
 
-function applyRateLimit(keyHash: string) {
-  const now = Date.now();
-  const existing = rateStore.get(keyHash);
-  const entry = existing && existing.resetAt > now ? existing : { count: 0, resetAt: now + WINDOW_MS };
-
-  entry.count += 1;
-  rateStore.set(keyHash, entry);
-
-  return {
-    limited: entry.count > RATE_LIMIT,
-    limit: RATE_LIMIT,
-    remaining: Math.max(0, RATE_LIMIT - entry.count),
-    resetAt: entry.resetAt
-  };
-}
-
 export async function requireApiKey(request: Request, scope: string): Promise<ApiContext | Response> {
   const token = bearerToken(request);
 
@@ -70,25 +54,24 @@ export async function requireApiKey(request: Request, scope: string): Promise<Ap
   }
 
   const keyHash = hashApiKey(token);
-  const rate = applyRateLimit(keyHash);
+  let rate;
+  try {
+    rate = await applyFixedWindowRateLimit({
+      namespace: "api-key",
+      key: keyHash,
+      limit: API_RATE_LIMIT_PER_MINUTE,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      failureMode: RATE_LIMIT_FAILURE_MODES.api
+    });
+  } catch (error) {
+    if (error instanceof RateLimitUnavailableError) {
+      return rateLimitUnavailableResponse();
+    }
+    throw error;
+  }
 
   if (rate.limited) {
-    return Response.json(
-      {
-        error: {
-          code: "rate_limited",
-          message: "API rate limit exceeded."
-        }
-      },
-      {
-        status: 429,
-        headers: {
-          "x-ratelimit-limit": String(rate.limit),
-          "x-ratelimit-remaining": String(rate.remaining),
-          "x-ratelimit-reset": String(Math.ceil(rate.resetAt / 1000))
-        }
-      }
-    );
+    return rateLimitResponse(rate);
   }
 
   const apiKey = await prisma.apiKey.findUnique({

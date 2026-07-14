@@ -1,5 +1,13 @@
 import { processSePayTransaction } from "@/lib/payments/sepay-processing";
 import { verifySePaySignature } from "@/lib/payments/sepay";
+import {
+  RATE_LIMIT_FAILURE_MODES,
+  RATE_LIMIT_WINDOW_MS,
+  SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE,
+  applyFixedWindowRateLimit,
+  getClientIp,
+  rateLimitResponse
+} from "@/lib/rate-limit";
 import { prisma, type Prisma } from "@vfurst/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -18,6 +26,18 @@ function success() {
 }
 
 export async function POST(request: Request) {
+  const rate = await applyFixedWindowRateLimit({
+    namespace: "sepay-webhook",
+    key: getClientIp(request),
+    limit: SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    failureMode: RATE_LIMIT_FAILURE_MODES.webhook
+  });
+
+  if (rate.limited) {
+    return rateLimitResponse(rate);
+  }
+
   const rawBody = await request.text();
 
   if (!verifySePaySignature(rawBody, request.headers.get("x-sepay-timestamp"), request.headers.get("x-sepay-signature"))) {

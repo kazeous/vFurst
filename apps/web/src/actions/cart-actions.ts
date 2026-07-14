@@ -233,7 +233,7 @@ export async function convertCartToOrder(formData: FormData) {
   const returnPath = String(formData.get("returnPath") ?? "/store");
   const successPath = String(formData.get("successPath") ?? returnPath);
   const cancelPath = String(formData.get("cancelPath") ?? returnPath);
-  assertActionRateLimit("payment:cart-checkout", `${userId}:${cartId}`);
+  await assertActionRateLimit("payment:cart-checkout", `${userId}:${cartId}`);
 
   const cart = await prisma.cart.findFirstOrThrow({
     where: {

@@ -485,7 +485,7 @@ export async function addAssistant(formData: FormData) {
 export async function payVendorBooth(formData: FormData) {
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const orgSlug = z.string().trim().min(1).parse(formData.get("orgSlug"));
-  assertActionRateLimit("payment:vendor-booth", applicationId);
+  await assertActionRateLimit("payment:vendor-booth", applicationId);
 
   const org = await getConventionOrg(orgSlug);
 

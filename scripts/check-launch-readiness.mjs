@@ -19,14 +19,20 @@ const requiredFiles = [
   "docs/launch/security-audit.md",
   "docs/launch/accessibility-audit.md",
   "docs/launch/performance-load-test.md",
+  "apps/web/src/lib/redis-rate-limit.ts",
   "scripts/run-launch-load-proof.mjs",
   "tests/load/registration-checkin.k6.js",
   "tests/e2e/launch-critical-paths.spec.ts",
   "tests/e2e/launch-accessibility-smoke.spec.ts",
-  "tests/e2e/stripe-webhook-security.spec.ts"
+  "tests/e2e/stripe-webhook-security.spec.ts",
+  "tests/e2e/shared-rate-limit.spec.ts"
 ];
 
 const requiredEnv = [
+  {
+    name: "REDIS_URL",
+    type: "redis-url"
+  },
   {
     name: "STRIPE_SECRET_KEY",
     type: "stripe-secret-key"
@@ -54,6 +60,26 @@ const requiredEnv = [
   {
     name: "SENTRY_AUTH_TOKEN",
     type: "text"
+  },
+  {
+    name: "VFURST_API_RATE_LIMIT_PER_MINUTE",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_AUTH_RATE_LIMIT_PER_MINUTE",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_PAYMENT_RATE_LIMIT_PER_MINUTE",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE",
+    type: "positive-integer"
   }
 ];
 
@@ -210,6 +236,32 @@ function validateStripeWebhookSecret(name, value) {
   return null;
 }
 
+function validateRedisUrl(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if ((url.protocol !== "redis:" && url.protocol !== "rediss:") || !url.hostname) {
+      return `${name} must be a valid Redis URL.`;
+    }
+  } catch {
+    return `${name} must be a valid Redis URL.`;
+  }
+
+  return null;
+}
+
+function validatePositiveInteger(name, value) {
+  if (!/^\d+$/.test(value) || Number(value) <= 0) {
+    return `${name} must be a positive integer.`;
+  }
+
+  return null;
+}
+
 function validateRequiredEnv({ name, type }) {
   const value = process.env[name] ?? "";
 
@@ -223,6 +275,14 @@ function validateRequiredEnv({ name, type }) {
 
   if (type === "stripe-webhook-secret") {
     return validateStripeWebhookSecret(name, value);
+  }
+
+  if (type === "redis-url") {
+    return validateRedisUrl(name, value);
+  }
+
+  if (type === "positive-integer") {
+    return validatePositiveInteger(name, value);
   }
 
   return validateTextEnv(name, value);

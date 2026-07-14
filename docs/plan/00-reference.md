@@ -115,7 +115,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | **Payments** | Stripe Connect + SePay VietQR | Connected card settlement plus central VND receipt, reconciliation, organizer ledger, and manual payout/refund records |
 | **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
 | **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
-| **Background Jobs** | BullMQ + Redis | Email queues, badge generation, billing calculations |
+| **Background Jobs / Shared Controls** | BullMQ + Redis | Email queues, badge generation, billing calculations, and atomic shared rate-limit counters |
 | **Validation** | Zod + colocated TypeScript contracts | Validation stays with the owning action, API, payment, or package module |
 | **State** | React Server Components + URL/form state | Server-first rendering with minimal client state |
 | **Charts** | Recharts | Dashboard analytics visualization |
@@ -141,7 +141,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | Service | Image | Replaces (in production) | Notes |
 |---|---|---|---|
 | `postgres` | `postgres:16` | Managed Postgres (e.g. Railway/Neon) | `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vfurst` |
-| `redis` | `redis:7` | Railway Redis | Used by BullMQ (`apps/worker`) exactly as in production — no code difference |
+| `redis` | `redis:7` | Railway Redis | Used by BullMQ (`apps/worker`) and the web app's shared Lua-backed rate limits exactly as in production — no code difference |
 | `minio` | `minio/minio` | AWS S3 | S3-API-compatible object storage. `apps/web/src/lib/s3.ts` must read `S3_ENDPOINT` from env — when set (e.g. `http://localhost:9000`), the AWS SDK v3 client points at MinIO instead of AWS; when unset, it defaults to real AWS S3. This is a config-only difference, not a code branch. |
 | `mailpit` | `axllent/mailpit` | AWS SES | A local SMTP catcher with a web UI (`http://localhost:8025`) to view sent emails. Configure the dev org's email provider as SMTP pointing at `localhost:1025` — this uses the SMTP provider path that's already in the plan (`packages/email/src/providers/smtp.ts`), so no email-provider code is local-only special-cased. |
 

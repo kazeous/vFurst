@@ -5,6 +5,8 @@ const host = "127.0.0.1";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
 const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";
+const rateLimitPrefix = process.env.VFURST_RATE_LIMIT_PREFIX ?? `vfurst:e2e:${process.pid}:${Date.now()}`;
+const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? "sk_test_e2e_stripe_secret_key_1234567890";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "whsec_e2e_stripe_signing_secret_1234567890";
 const serverArgs = [
@@ -56,7 +58,9 @@ function startServer() {
       SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
       SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
       STRIPE_SECRET_KEY: stripeSecretKey,
-      STRIPE_WEBHOOK_SECRET: stripeWebhookSecret
+      STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
+      REDIS_URL: redisUrl,
+      VFURST_RATE_LIMIT_PREFIX: rateLimitPrefix
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
@@ -92,6 +96,8 @@ function runPlaywright() {
         SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
         STRIPE_SECRET_KEY: stripeSecretKey,
         STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
+        REDIS_URL: redisUrl,
+        VFURST_RATE_LIMIT_PREFIX: rateLimitPrefix,
         PLAYWRIGHT_HTML_OPEN: "never"
       },
       stdio: "inherit",

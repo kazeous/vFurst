@@ -5,6 +5,7 @@ import {
 } from "@/lib/fulfillment";
 import { verifyStripeWebhookEvent } from "@/lib/payments/stripe-webhook";
 import {
+  RATE_LIMIT_FAILURE_MODES,
   RATE_LIMIT_WINDOW_MS,
   STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE,
   applyFixedWindowRateLimit,
@@ -14,11 +15,12 @@ import {
 import type Stripe from "stripe";
 
 export async function POST(request: Request) {
-  const rate = applyFixedWindowRateLimit({
+  const rate = await applyFixedWindowRateLimit({
     namespace: "stripe-webhook",
     key: getClientIp(request),
     limit: STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE,
-    windowMs: RATE_LIMIT_WINDOW_MS
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    failureMode: RATE_LIMIT_FAILURE_MODES.webhook
   });
 
   if (rate.limited) {
