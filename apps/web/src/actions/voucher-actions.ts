@@ -8,6 +8,7 @@ import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
 async function requireUserId() {
   const session = await auth();
@@ -222,7 +223,10 @@ export async function applyVoucher(formData: FormData) {
       event: {
         select: {
           id: true,
-          orgId: true
+          orgId: true,
+          org: {
+            select: { status: true }
+          }
         }
       }
     }
@@ -231,6 +235,8 @@ export async function applyVoucher(formData: FormData) {
   if (!cart || cart.orgId !== cart.event.orgId || cart.eventId !== cart.event.id) {
     throw new Error("Cart not found.");
   }
+
+  assertOrganizationActive(cart.event.org.status);
 
   const voucher = await validateVoucher(cart.event, parsed.data.code);
   const restrictions = getVoucherRestrictions(voucher.restrictions);

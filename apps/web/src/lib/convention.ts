@@ -7,6 +7,7 @@ export async function getConventionOrg(orgSlug: string) {
 
   return prisma.organization.findFirst({
     where: {
+      status: "ACTIVE",
       OR: [{ subdomain: orgSlug }, { slug: orgSlug }, { customDomain: orgSlug.toLowerCase() }]
     }
   });

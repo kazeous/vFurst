@@ -94,11 +94,22 @@ export async function requireApiKey(request: Request, scope: string): Promise<Ap
   const apiKey = await prisma.apiKey.findUnique({
     where: {
       keyHash
+    },
+    include: {
+      org: {
+        select: {
+          status: true
+        }
+      }
     }
   });
 
   if (!apiKey) {
     return jsonError("Invalid API key.", 401, "unauthorized");
+  }
+
+  if (apiKey.org.status !== "ACTIVE") {
+    return jsonError("This organization is not active.", 403, "organization_inactive");
   }
 
   if (!apiKey.scopes.includes("*") && !apiKey.scopes.includes(scope)) {

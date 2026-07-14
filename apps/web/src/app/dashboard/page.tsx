@@ -24,11 +24,11 @@ export default async function DashboardPage() {
 
   const memberships = await prisma.orgMember.findMany({
     where: { userId: session.user.id, role: { in: ["OWNER", "ADMIN"] } },
-    select: { orgId: true }
+    select: { orgId: true, org: { select: { status: true } } }
   });
   const orgIds = memberships.map((membership) => membership.orgId);
-  const canManageEvents = orgIds.length > 0;
-  const isPlatformAdmin = session.user.platformRole === "PLATFORM_ADMIN";
+  const activeOrgIds = memberships.filter((membership) => membership.org.status === "ACTIVE").map((membership) => membership.orgId);
+  const canManageEvents = activeOrgIds.length > 0;
   const eventWhere = { orgId: { in: orgIds } };
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -60,10 +60,7 @@ export default async function DashboardPage() {
         eyebrow="Operations overview"
         title={`Welcome back${session.user.name ? `, ${session.user.name.split(" ")[0]}` : ""}`}
         description="Monitor the work that needs attention and move quickly into the next convention."
-        actions={canManageEvents || isPlatformAdmin ? <>
-          {canManageEvents ? <Button label="Create event" href="/dashboard/events/new" variant="primary" /> : null}
-          {isPlatformAdmin ? <Button label="New organization" href="/dashboard/organizations/new" /> : null}
-        </> : undefined}
+        actions={canManageEvents ? <Button label="Create event" href="/dashboard/events/new" variant="primary" /> : undefined}
       />
 
       <section className="vf-stat-grid" aria-label="Workspace summary">
@@ -115,12 +112,6 @@ export default async function DashboardPage() {
         </section>
       ) : canManageEvents ? (
         <EmptyState title="Your workspace is ready" description="Create an event to start configuring registration, staffing, vendors, and launch-day operations." actions={<Button label="Create your first event" href="/dashboard/events/new" variant="primary" />} />
-      ) : isPlatformAdmin ? (
-        <EmptyState
-          title="No organizer workspace"
-          description="Provision an organization before creating its first event."
-          actions={<Button label="New organization" href="/dashboard/organizations/new" variant="primary" />}
-        />
       ) : (
         <EmptyState
           title="No organizer access"

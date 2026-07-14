@@ -48,6 +48,7 @@ test.beforeAll(async () => {
         slug: orgASlug,
         subdomain: orgASlug,
         contactEmail: ownerAEmail,
+        status: "ACTIVE",
         members: {
           create: [
             { userId: ownerA.id, role: "OWNER" },
@@ -73,6 +74,7 @@ test.beforeAll(async () => {
         slug: orgBSlug,
         subdomain: orgBSlug,
         contactEmail: ownerBEmail,
+        status: "ACTIVE",
         members: { create: { userId: ownerB.id, role: "OWNER" } },
         events: {
           create: {
@@ -185,16 +187,12 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function login(page: Page, email: string) {
-  await page.goto("/login");
+async function login(page: Page, email: string, destination = "/dashboard") {
+  await page.goto(`/login?returnTo=${encodeURIComponent(destination)}`);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 30_000 });
 }
 
 function registrationExport(eventId: string) {
@@ -257,7 +255,7 @@ test("organization admins can export while ordinary members cannot", async ({ br
 });
 
 test("platform admins can export the global payout ledger without implicit event membership", async ({ page }) => {
-  await login(page, platformAdminEmail);
+  await login(page, platformAdminEmail, "/platform");
   expect((await page.request.get(registrationExport(eventAId))).status()).toBe(404);
 
   const response = await page.request.get("/dashboard/settings/payouts/export");

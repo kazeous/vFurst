@@ -3,7 +3,8 @@
 import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
-import { sendOrgEmail } from "@/lib/email";
+import { deliverOrganizationInvitation } from "@/lib/organization-invitation-email";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import {
   createOrganizationInvitationRecord,
   issueOrganizationInvitation,
@@ -67,13 +68,24 @@ async function requireUser() {
   return session.user.id;
 }
 
-async function requireOrgRole(orgId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+async function requireOrgRole(
+  orgId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: { allowInactive?: boolean } = {}
+) {
   const userId = await requireUser();
   const membership = await prisma.orgMember.findUnique({
     where: {
       userId_orgId: {
         userId,
         orgId
+      }
+    },
+    include: {
+      org: {
+        select: {
+          status: true
+        }
       }
     }
   });
@@ -82,35 +94,14 @@ async function requireOrgRole(orgId: string, allowedRoles: OrgRole[] = ["OWNER",
     throw new Error("You do not have permission to manage this organization.");
   }
 
+  if (!options.allowInactive) {
+    assertOrganizationActive(membership.org.status);
+  }
+
   return {
     userId,
     membership
   };
-}
-
-function invitationUrl(token: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
-  return new URL(`/invitations/${encodeURIComponent(token)}`, baseUrl).toString();
-}
-
-async function deliverOrganizationInvitation(input: {
-  org: {
-    contactEmail: string;
-    emailProvider: EmailProviderType;
-    emailSettings: Prisma.JsonValue;
-    name: string;
-  };
-  email: string;
-  role: OrgRole;
-  token: string;
-  expiresAt: Date;
-}) {
-  return sendOrgEmail(input.org, input.email, "organization-invitation", {
-    organizationName: input.org.name,
-    role: input.role,
-    invitationUrl: invitationUrl(input.token),
-    expiresAt: input.expiresAt.toISOString()
-  });
 }
 
 export async function createOrganization(formData: FormData) {
@@ -181,9 +172,9 @@ export async function createOrganization(formData: FormData) {
     throw new Error("The organization was provisioned, but its owner invitation could not be delivered.");
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/organizations");
-  redirect("/dashboard/organizations");
+  revalidatePath("/platform");
+  revalidatePath("/platform/organizations");
+  redirect(`/platform/organizations/${provisioned.org.id}`);
 }
 
 export async function updateOrganization(formData: FormData) {
@@ -379,7 +370,7 @@ export async function inviteMember(formData: FormData) {
 export async function removeMember(formData: FormData) {
   const orgId = z.string().uuid().parse(formData.get("orgId"));
   const memberId = z.string().uuid().parse(formData.get("memberId"));
-  const { userId } = await requireOrgRole(orgId, ["OWNER"]);
+  const { userId } = await requireOrgRole(orgId, ["OWNER"], { allowInactive: true });
 
   const member = await prisma.orgMember.findUnique({
     where: {

@@ -7,6 +7,7 @@ import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments
 import { prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
 const checkoutSelectionSchema = z.object({
   orderId: z.string().uuid(),
@@ -52,6 +53,7 @@ async function assertNoActiveAttempt(orderId: string) {
 export async function startStripePayment(formData: FormData) {
   const parsed = selection(formData);
   const order = await requireCheckoutOrder(parsed.orderId, parsed.token);
+  assertOrganizationActive(order.org.status);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
 
   if (order.status !== "PENDING" || !providers.includes("STRIPE")) {
@@ -124,6 +126,7 @@ export async function startStripePayment(formData: FormData) {
 export async function startSePayPayment(formData: FormData) {
   const parsed = selection(formData);
   const order = await requireCheckoutOrder(parsed.orderId, parsed.token);
+  assertOrganizationActive(order.org.status);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
 
   if (order.status !== "PENDING" || order.currency !== "VND" || !providers.includes("SEPAY")) {

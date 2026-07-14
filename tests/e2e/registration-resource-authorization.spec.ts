@@ -49,6 +49,7 @@ test.beforeAll(async () => {
         slug: orgASlug,
         subdomain: orgASlug,
         contactEmail: ownerAEmail,
+        status: "ACTIVE",
         members: { create: { userId: ownerA.id, role: "OWNER" } },
         events: {
           create: {
@@ -68,6 +69,7 @@ test.beforeAll(async () => {
         slug: orgBSlug,
         subdomain: orgBSlug,
         contactEmail: ownerBEmail,
+        status: "ACTIVE",
         members: { create: { userId: ownerB.id, role: "OWNER" } },
         events: {
           create: {

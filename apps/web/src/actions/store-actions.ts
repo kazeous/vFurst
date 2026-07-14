@@ -183,7 +183,7 @@ export async function createOrder(formData: FormData) {
 
 export async function refundOrder(formData: FormData) {
   const orderId = z.string().uuid().parse(formData.get("orderId"));
-  const { order, event } = await requireOrderAccess(orderId);
+  const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
 
   assertActionRateLimit("payment:store-refund", `${event.orgId}:${order.id}`);
 
@@ -207,7 +207,7 @@ export async function refundOrder(formData: FormData) {
 
 export async function partialRefund(formData: FormData) {
   const orderId = z.string().uuid().parse(formData.get("orderId"));
-  const { order, event } = await requireOrderAccess(orderId);
+  const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
   assertActionRateLimit("payment:store-partial-refund", `${event.orgId}:${order.id}`);
   const amount = parseMoney(formData.get("amount"), order.currency);
 

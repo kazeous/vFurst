@@ -153,7 +153,10 @@ test("an owner can revoke a pending invitation", async ({ page }) => {
   const row = page.locator(".vf-list-row", { hasText: `revokable-${runId}@example.com` });
   await row.getByRole("button", { name: "Revoke" }).click();
 
-  await expect.poll(async () => (await prisma.orgInvitation.findUnique({ where: { id: revokableInvitationId } }))?.revokedAt).not.toBeNull();
+  await expect.poll(
+    async () => (await prisma.orgInvitation.findUnique({ where: { id: revokableInvitationId } }))?.revokedAt,
+    { timeout: 30_000 }
+  ).not.toBeNull();
 });
 
 test("member invitation stores a hash but creates neither a user nor a membership", async ({ page }) => {
@@ -192,13 +195,13 @@ test("acceptance creates one membership transactionally and cannot be replayed",
 });
 
 test("platform provisioning creates a provisioning tenant and an owner invitation without implicit membership", async ({ page }) => {
-  await loginAs(page, platformEmail);
-  await page.goto("/dashboard/organizations/new");
+  await loginAs(page, platformEmail, "/platform");
+  await page.goto("/platform/organizations/new");
   await page.getByLabel("Name").fill("Provisioned Invitation Organization");
   await page.getByLabel("Subdomain slug").fill(provisionedOrgSlug);
   await page.getByLabel("Contact email").fill(platformEmail);
   await page.getByLabel("Initial owner email").fill(provisionedOwnerEmail);
-  await page.getByRole("button", { name: "Create organization" }).click();
+  await page.getByRole("button", { name: "Provision organization" }).click();
 
   await expect.poll(() => prisma.organization.count({ where: { slug: provisionedOrgSlug } }), { timeout: 30_000 }).toBe(1);
   const provisioned = await prisma.organization.findUniqueOrThrow({

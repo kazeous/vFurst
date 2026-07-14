@@ -12,6 +12,7 @@ import type { Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
 const orderItemTypes = {
   REGISTRATION: "REGISTRATION",
@@ -99,6 +100,8 @@ export async function addToCart(formData: FormData) {
     throw new Error("This product is not available for purchase.");
   }
 
+  assertOrganizationActive(product.event.org.status);
+
   if (product.stock < parsed.data.quantity) {
     throw new Error("Not enough inventory is available.");
   }
@@ -165,9 +168,22 @@ export async function updateQuantity(formData: FormData) {
       }
     },
     include: {
-      product: true
+      product: true,
+      cart: {
+        select: {
+          event: {
+            select: {
+              org: {
+                select: { status: true }
+              }
+            }
+          }
+        }
+      }
     }
   });
+
+  assertOrganizationActive(item.cart.event.org.status);
 
   if (item.product && item.product.stock < parsed.data.quantity) {
     throw new Error("Not enough inventory is available.");
@@ -247,6 +263,8 @@ export async function convertCartToOrder(formData: FormData) {
   if (cart.orgId !== cart.event.orgId) {
     throw new Error("Cart tenant does not match its event.");
   }
+
+  assertOrganizationActive(cart.event.org.status);
 
   for (const item of cart.items) {
     if (

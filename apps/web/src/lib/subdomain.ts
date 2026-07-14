@@ -12,16 +12,18 @@ export async function resolveOrganization(hostname: string) {
   if (normalized.endsWith(`.${rootDomain}`)) {
     const subdomain = normalized.replace(`.${rootDomain}`, "");
 
-    return prisma.organization.findUnique({
+    return prisma.organization.findFirst({
       where: {
-        subdomain
+        subdomain,
+        status: "ACTIVE"
       }
     });
   }
 
-  return prisma.organization.findUnique({
+  return prisma.organization.findFirst({
     where: {
-      customDomain: normalized
+      customDomain: normalized,
+      status: "ACTIVE"
     }
   });
 }

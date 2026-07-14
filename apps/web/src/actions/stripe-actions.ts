@@ -5,6 +5,7 @@ import { prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
 import Stripe from "stripe";
 import { z } from "zod";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
 function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -29,12 +30,19 @@ async function requireOrgOwner(orgId: string) {
         userId: session.user.id,
         orgId
       }
+    },
+    include: {
+      org: {
+        select: { status: true }
+      }
     }
   });
 
   if (!member || !["OWNER", "ADMIN"].includes(member.role)) {
     throw new Error("You do not have permission to manage Stripe for this organization.");
   }
+
+  assertOrganizationActive(member.org.status);
 }
 
 export async function startStripeOnboarding(formData: FormData) {
@@ -117,4 +125,3 @@ export async function refreshStripeStatus(formData: FormData) {
     }
   });
 }
-

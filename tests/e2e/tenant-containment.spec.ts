@@ -68,6 +68,7 @@ test.beforeAll(async () => {
       slug: orgASlug,
       subdomain: orgASlug,
       contactEmail: ownerEmail,
+      status: "ACTIVE",
       members: {
         create: [
           { userId: owner.id, role: "OWNER" },
@@ -94,6 +95,7 @@ test.beforeAll(async () => {
       slug: orgBSlug,
       subdomain: orgBSlug,
       contactEmail: foreignOwnerEmail,
+      status: "ACTIVE",
       members: {
         create: {
           userId: foreignOwner.id,
@@ -141,31 +143,41 @@ async function loginAs(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/, { timeout: 30_000 });
 }
 
-test("platform admin can reach provisioning routes but not tenant organizer routes without membership", async ({ page }) => {
+test("platform admin enters the control plane but not tenant organizer routes without membership", async ({ page }) => {
   await loginAs(page, platformAdminEmail);
+  await page.goto("/platform");
+  await expect(page.getByRole("heading", { name: "Platform overview" })).toBeVisible({ timeout: 30_000 });
 
-  const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });
+  const navigation = page.getByRole("navigation", { name: "Platform navigation" });
   await expect(navigation.getByRole("link", { name: "Organizations" })).toBeVisible();
 
-  await page.goto("/dashboard/organizations");
+  await page.goto("/platform/organizations");
   await expect(page.getByRole("heading", { name: "Organizations" })).toBeVisible();
-  await page.goto("/dashboard/organizations/new");
-  await expect(page.getByRole("heading", { name: "Create organization" })).toBeVisible();
+  await page.goto("/platform/organizations/new");
+  await expect(page.getByRole("heading", { name: "Provision organization" })).toBeVisible();
 
-  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
-  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/platform$/);
+
+  await page.goto("/dashboard/organizations");
+  await expect(page).toHaveURL(/\/platform(?:\/organizations)?$/);
+
+  const tenantRoute = await page.request.get(`/dashboard/organizations/${orgAId}`, { maxRedirects: 0 });
+  expect(tenantRoute.status()).toBe(307);
+  expect(tenantRoute.headers().location).toBe("/platform");
+  const eventRoute = await page.request.get("/dashboard/events/new", { maxRedirects: 0 });
+  expect(eventRoute.status()).toBe(307);
+  expect(eventRoute.headers().location).toBe("/platform");
 });
 
 test("organization owner sees only their tenant and cannot reach provisioning", async ({ page }) => {
   await loginAs(page, ownerEmail);
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 
   const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });
   await expect(navigation.getByRole("link", { name: "Organizations" })).toHaveCount(0);
@@ -174,6 +186,7 @@ test("organization owner sees only their tenant and cannot reach provisioning", 
 
   expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
   expect((await page.request.get("/dashboard/organizations/new")).status()).toBe(404);
+  expect((await page.request.get("/platform")).status()).toBe(404);
   expect((await page.request.get(`/dashboard/organizations/${orgBId}`)).status()).toBe(404);
   expect((await page.request.get(`/dashboard/organizations/${orgBId}/members`)).status()).toBe(404);
   expect((await page.request.get(`/dashboard/organizations/${orgBId}/stripe-connect`)).status()).toBe(404);
@@ -194,6 +207,8 @@ test("organization owner sees only their tenant and cannot reach provisioning", 
 
 test("member role cannot enter owner-admin organization or event-management routes", async ({ page }) => {
   await loginAs(page, memberEmail);
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 
   await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
@@ -209,15 +224,9 @@ test("member role cannot enter owner-admin organization or event-management rout
 
 test("public account receives no tenant inventory or organizer actions", async ({ page }) => {
   await loginAs(page, publicEmail);
-
-  await expect(page.getByText("No organizer access")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
+  expect((await page.request.get("/dashboard")).status()).toBe(404);
+  expect((await page.request.get("/platform")).status()).toBe(404);
   expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
   expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
   expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
-
-  await page.goto("/dashboard/events");
-  await expect(page.getByText("Containment Event A")).toHaveCount(0);
-  await expect(page.getByText("Containment Event B")).toHaveCount(0);
 });

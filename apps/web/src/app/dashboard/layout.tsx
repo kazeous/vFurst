@@ -1,7 +1,7 @@
 import { DashboardAppShell } from "@/components/dashboard/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@vfurst/db";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 export default async function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -11,30 +11,41 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
     redirect("/login");
   }
 
-  const memberships = await prisma.orgMember.findMany({
-    where: {
-      userId: session.user.id,
-      role: {
-        in: ["OWNER", "ADMIN"]
-      }
-    },
-    orderBy: { org: { name: "asc" } },
-    select: {
-      org: {
-        select: {
-          id: true,
-          name: true,
-          logo: true,
-          events: {
-            orderBy: { startDate: "desc" },
-            select: { id: true, name: true, status: true, startDate: true }
+  const [membershipCount, memberships] = await Promise.all([
+    prisma.orgMember.count({ where: { userId: session.user.id } }),
+    prisma.orgMember.findMany({
+      where: {
+        userId: session.user.id,
+        role: {
+          in: ["OWNER", "ADMIN"]
+        }
+      },
+      orderBy: { org: { name: "asc" } },
+      select: {
+        org: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            status: true,
+            events: {
+              orderBy: { startDate: "desc" },
+              select: { id: true, name: true, status: true, startDate: true }
+            }
           }
         }
       }
-    }
-  });
+    })
+  ]);
 
-  const organizations = memberships.map(({ org }) => ({ id: org.id, name: org.name, logo: org.logo }));
+  if (membershipCount === 0) {
+    if (session.user.platformRole === "PLATFORM_ADMIN") {
+      redirect("/platform");
+    }
+    notFound();
+  }
+
+  const organizations = memberships.map(({ org }) => ({ id: org.id, name: org.name, logo: org.logo, status: org.status }));
   const events = memberships.flatMap(({ org }) =>
     org.events.map((event) => ({
       id: event.id,

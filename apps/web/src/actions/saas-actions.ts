@@ -96,7 +96,7 @@ export async function createApiKey(
 
 export async function revokeApiKey(formData: FormData) {
   const keyId = z.string().uuid().parse(formData.get("keyId"));
-  const { apiKey } = await requireApiKeyAccess(keyId);
+  const { apiKey } = await requireApiKeyAccess(keyId, ["OWNER", "ADMIN"], { allowInactive: true });
 
   const deleted = await prisma.apiKey.deleteMany({
     where: {
@@ -226,7 +226,7 @@ export async function updateWebhookEndpoint(formData: FormData) {
 
 export async function deleteWebhookEndpoint(formData: FormData) {
   const endpointId = z.string().uuid().parse(formData.get("endpointId"));
-  const { webhookEndpoint } = await requireWebhookEndpointAccess(endpointId);
+  const { webhookEndpoint } = await requireWebhookEndpointAccess(endpointId, ["OWNER", "ADMIN"], { allowInactive: true });
 
   const deleted = await prisma.webhookEndpoint.deleteMany({
     where: {
@@ -254,7 +254,7 @@ export async function testWebhookEndpoint(formData: FormData) {
 export async function runFeeReconciliation(formData: FormData) {
   const orgId = z.string().uuid().parse(formData.get("orgId"));
 
-  await requireOrgAccess(orgId);
+  await requireOrgAccess(orgId, ["OWNER", "ADMIN"], { allowInactive: true });
   const report = await getOrganizationFeeReport(orgId);
 
   try {

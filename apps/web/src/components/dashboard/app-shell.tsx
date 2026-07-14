@@ -21,6 +21,8 @@ import {
   Users,
   X
 } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
+import type { OrganizationStatus } from "@vfurst/db";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,7 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getDashboardEventId, getDashboardOrganizationId } from "@/lib/dashboard-navigation";
 
 export type DashboardWorkspaceData = {
-  organizations: Array<{ id: string; name: string; logo: string | null }>;
+  organizations: Array<{ id: string; name: string; logo: string | null; status: OrganizationStatus }>;
   events: Array<{
     id: string;
     orgId: string;
@@ -57,7 +59,6 @@ type NavItem = {
 const baseWorkspaceNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/events", label: "Events", icon: CalendarDays },
-  { href: "/dashboard/organizations", label: "Organizations", icon: Building2 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
@@ -160,7 +161,7 @@ export function DashboardAppShell({
   const currentOrgId = currentEvent?.orgId ?? orgIdFromPath;
   const currentOrg = workspace.organizations.find((org) => org.id === currentOrgId);
   const workspaceNav = useMemo(
-    () => baseWorkspaceNav.filter((item) => isPlatformAdmin || item.href !== "/dashboard/organizations"),
+    () => isPlatformAdmin ? [...baseWorkspaceNav, { href: "/platform", label: "Platform", icon: ShieldCheck }] : baseWorkspaceNav,
     [isPlatformAdmin]
   );
 
@@ -239,7 +240,7 @@ export function DashboardAppShell({
             id="vf-organization-switcher"
             className="vf-workspace-select"
             value={currentOrgId ?? ""}
-            onChange={(event) => router.push(event.target.value ? `/dashboard/organizations/${event.target.value}` : "/dashboard/organizations")}
+            onChange={(event) => router.push(event.target.value ? `/dashboard/organizations/${event.target.value}` : "/dashboard")}
           >
             <option value="">Choose organization</option>
             {workspace.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
@@ -314,7 +315,15 @@ export function DashboardAppShell({
             <kbd className="vf-command-hint">Ctrl K</kbd>
           </button>
         </header>
-        <main className="vf-dashboard-main" id="main-content">{children}</main>
+        <main className="vf-dashboard-main" id="main-content">
+          {currentOrg && currentOrg.status !== "ACTIVE" ? (
+            <Alert variant="warning">
+              <strong>{currentOrg.name} is {currentOrg.status.toLowerCase()}.</strong>{" "}
+              Existing records remain visible, but new organizer and public activity is disabled.
+            </Alert>
+          ) : null}
+          {children}
+        </main>
       </div>
       <DashboardCommandMenu open={commandOpen} onOpenChange={setCommandOpen} items={commandItems} restoreFocus={() => commandTriggerRef.current?.focus()} />
     </div>

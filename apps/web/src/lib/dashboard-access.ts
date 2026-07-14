@@ -33,6 +33,13 @@ async function getOrgMembership(userId: string, orgId: string) {
         userId,
         orgId
       }
+    },
+    include: {
+      org: {
+        select: {
+          status: true
+        }
+      }
     }
   });
 }
@@ -495,8 +502,20 @@ async function getVendorApplicationTenant(applicationId: string) {
   });
 }
 
-function hasAllowedOrgRole(membership: Awaited<ReturnType<typeof getOrgMembership>>, allowedRoles: OrgRole[]) {
-  return Boolean(membership && allowedRoles.includes(membership.role));
+type OrganizationAccessOptions = {
+  allowInactive?: boolean;
+};
+
+function hasAllowedOrgRole(
+  membership: Awaited<ReturnType<typeof getOrgMembership>>,
+  allowedRoles: OrgRole[],
+  options: OrganizationAccessOptions = {}
+) {
+  return Boolean(
+    membership &&
+      allowedRoles.includes(membership.role) &&
+      (options.allowInactive || membership.org.status === "ACTIVE")
+  );
 }
 
 export async function requirePlatformAdmin() {
@@ -521,11 +540,15 @@ export async function requirePlatformAdminPage() {
   return user;
 }
 
-export async function requireOrgAccess(orgId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+export async function requireOrgAccess(
+  orgId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: OrganizationAccessOptions = {}
+) {
   const userId = await requireDashboardUser();
   const membership = await getOrgMembership(userId, orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this organization.");
   }
 
@@ -539,7 +562,7 @@ export async function requireOrgPageAccess(orgId: string, allowedRoles: OrgRole[
   const userId = await requireDashboardUser();
   const membership = await getOrgMembership(userId, orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, { allowInactive: true })) {
     notFound();
   }
 
@@ -619,7 +642,11 @@ export async function requireAddOnDefinitionAccess(addOnId: string, allowedRoles
   };
 }
 
-export async function requireRegistrationAccess(registrationId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+export async function requireRegistrationAccess(
+  registrationId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: OrganizationAccessOptions = {}
+) {
   const userId = await requireDashboardUser();
   const registration = await getRegistrationTenant(registrationId);
 
@@ -636,7 +663,7 @@ export async function requireRegistrationAccess(registrationId: string, allowedR
 
   const membership = await getOrgMembership(userId, registration.event.orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this registration.");
   }
 
@@ -730,7 +757,11 @@ export async function requireRaffleAccess(raffleId: string, allowedRoles: OrgRol
   };
 }
 
-export async function requireApiKeyAccess(apiKeyId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+export async function requireApiKeyAccess(
+  apiKeyId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: OrganizationAccessOptions = {}
+) {
   const userId = await requireDashboardUser();
   const apiKey = await getApiKeyTenant(apiKeyId);
 
@@ -740,7 +771,7 @@ export async function requireApiKeyAccess(apiKeyId: string, allowedRoles: OrgRol
 
   const membership = await getOrgMembership(userId, apiKey.orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this API key.");
   }
 
@@ -753,7 +784,8 @@ export async function requireApiKeyAccess(apiKeyId: string, allowedRoles: OrgRol
 
 export async function requireWebhookEndpointAccess(
   endpointId: string,
-  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: OrganizationAccessOptions = {}
 ) {
   const userId = await requireDashboardUser();
   const webhookEndpoint = await getWebhookEndpointTenant(endpointId);
@@ -764,7 +796,7 @@ export async function requireWebhookEndpointAccess(
 
   const membership = await getOrgMembership(userId, webhookEndpoint.orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this webhook endpoint.");
   }
 
@@ -822,7 +854,11 @@ export async function requireStoreProductAccess(productId: string, allowedRoles:
   };
 }
 
-export async function requireOrderAccess(orderId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+export async function requireOrderAccess(
+  orderId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"],
+  options: OrganizationAccessOptions = {}
+) {
   const userId = await requireDashboardUser();
   const order = await getOrderTenant(orderId);
 
@@ -833,7 +869,7 @@ export async function requireOrderAccess(orderId: string, allowedRoles: OrgRole[
   const event = order.event;
   const membership = await getOrgMembership(userId, event.orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this order.");
   }
 
@@ -1050,7 +1086,7 @@ export async function requireEventPageAccess(eventId: string, allowedRoles: OrgR
 
   const membership = await getOrgMembership(userId, event.orgId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+  if (!hasAllowedOrgRole(membership, allowedRoles, { allowInactive: true })) {
     notFound();
   }
 

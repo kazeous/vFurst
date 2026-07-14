@@ -19,17 +19,45 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, and hashed single-use organization invitations are implemented. Platform lifecycle transitions/enforcement and separated `/platform` routes remain. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, hashed single-use invitations, separately guarded `/platform` routes, and platform-only lifecycle transitions/enforcement are implemented. Platform custom-domain activation remains. |
 | 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
-| 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Organizer domain changes are staged as requests and no longer activate routing, but the platform activation surface is absent; fee reports mix USD/VND and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed Stripe callbacks, the 42-model lifecycle schema, legacy backfill, and organization invitations pass the full 65-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by `/platform` separation, lifecycle transition/suspension enforcement, payment correctness/rate-limit follow-ups, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Tenant inventory/provisioning/lifecycle now live in a separately guarded control plane, while platform custom-domain activation and global payment operations remain in the following boundary unit; fee reports mix USD/VND and production rate limits remain process-local. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle schema/backfill, invitations, `/platform` separation, and lifecycle enforcement pass the full 68-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by domain/payment boundary completion, payment correctness/rate-limit follow-ups, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, separate the platform control plane and enforce tenant lifecycle
+- Separated platform operations from organizer workspaces:
+  - Added a `PLATFORM_ADMIN`-only `/platform` shell with overview, tenant inventory, provisioning, tenant detail, owner-invitation retry, and lifecycle controls. Provisioning now lands on the new platform tenant detail instead of the organizer dashboard.
+  - Moved the all-tenant organization list/create experience out of `/dashboard`. Guarded legacy list/create URLs redirect platform admins to the control plane and remain `404` for organizers.
+  - `/dashboard` now requires at least one real organization membership. A platform admin with no membership is redirected to `/platform`; a public account receives `404`; a platform admin who separately holds an organizer membership may still enter only that membership-scoped workspace.
+  - Removed the global organization inventory link from the organizer navigation, changed the organization switcher fallback to the dashboard, and added a clear platform link only for platform admins.
+- Implemented auditable, non-destructive lifecycle transitions:
+  - Added one lifecycle policy for `PROVISIONING -> ACTIVE/RETIRED`, `ACTIVE -> SUSPENDED/RETIRED`, `SUSPENDED -> ACTIVE/RETIRED`, and terminal `RETIRED`.
+  - Activation requires at least one accepted `OWNER` membership. Platform mutations use serializable transactions, compare the previous state to prevent stale updates, and record the platform actor/timestamp.
+  - Tenant detail shows retained owner/member/event/registration/order inventory, the current lifecycle state, the last actor, and the valid next transitions. Retirement changes state only and deletes no tenant records.
+- Enforced lifecycle state at server boundaries:
+  - Organizer mutation guards now require an `ACTIVE` organization while organization/event pages remain readable with a suspended/provisioning/retired warning. Event creation lists only active memberships.
+  - Public tenant resolution, custom-host routing, registrations, hotel bookings, carts, vouchers, Stripe Connect onboarding, and new payment-attempt starts require an active organization. REST API keys return a controlled `403 organization_inactive` for inactive tenants.
+  - Explicit safety/settlement exceptions remain usable while inactive: signed Stripe/SePay callbacks, existing checkout/status reads, fee reconciliation, organizer refunds, invitation/member revocation, and API-key/webhook deletion. Signed Stripe completion and refund callbacks were reverified after the tenant itself was suspended.
+- Added regression evidence:
+  - Added pure lifecycle tests for transition allowlists, owner-required activation, active-state assertion, and terminal retirement.
+  - Added three database-backed platform lifecycle E2E cases covering ownerless activation denial, suspension of portal/API/new activity, readable organizer data and reconciliation during suspension, reactivation, terminal retirement, and exact record-count preservation.
+  - Updated all established E2E tenant fixtures to opt into `ACTIVE`, migrated provisioning expectations to `/platform`, and expanded persona/legacy-route tests for platform admin, owner, member, and public accounts.
+- Verified:
+  - Full production-mode Chromium E2E passed 68/68 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 80/80 web unit tests, 21/21 worker tests, 1/1 database backfill test, and 1/1 email test.
+  - Repository-wide type-check, lint, Prisma validation, `git diff --check`, and production builds passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+- Remaining issues / blockers:
+  - Do not deploy. Platform custom-domain verification/activation and global payment/refund/payout/exception surfaces still need to move behind the control-plane boundary.
+  - Mixed-currency reporting, payment-attempt serialization, shared production rate limiting, recipient transfer acceptance, badge image rendering, physical printer proof, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain open.
+- Next session should:
+  - Implement the domain/payment boundary unit: keep organizer custom-domain changes request-only, add platform verification/activation and audit controls, move global payment configuration/refund/payout/exception operations out of `/dashboard`, and add organizer/platform persona regressions. Keep mixed-currency reporting and payment-attempt serialization as separately reviewable follow-ups.
 
 ### 2026-07-14 - Phase 7, add managed organization lifecycle schema and invitation onboarding
 - Reached the managed-provisioning 42-model target without deleting existing tenant data:

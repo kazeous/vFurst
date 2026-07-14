@@ -60,7 +60,7 @@ export async function acceptOrganizationInvitation(formData: FormData) {
 export async function revokeOrganizationInvitation(formData: FormData) {
   const orgId = z.string().uuid().parse(formData.get("orgId"));
   const invitationId = z.string().uuid().parse(formData.get("invitationId"));
-  const { userId, membership } = await requireOrgAccess(orgId, ["OWNER", "ADMIN"]);
+  const { userId, membership } = await requireOrgAccess(orgId, ["OWNER", "ADMIN"], { allowInactive: true });
 
   const invitation = await prisma.orgInvitation.findUnique({
     where: {

@@ -10,7 +10,8 @@ export default async function NewEventPage() {
       userId,
       role: {
         in: ["OWNER", "ADMIN"]
-      }
+      },
+      org: { status: "ACTIVE" }
     },
     orderBy: { org: { name: "asc" } },
     select: {

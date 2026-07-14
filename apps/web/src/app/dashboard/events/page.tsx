@@ -17,10 +17,12 @@ export default async function EventsPage() {
       }
     },
     select: {
-      orgId: true
+      orgId: true,
+      org: { select: { status: true } }
     }
   });
   const orgIds = memberships.map((membership) => membership.orgId);
+  const activeOrgIds = memberships.filter((membership) => membership.org.status === "ACTIVE").map((membership) => membership.orgId);
   const events = await prisma.event.findMany({
     where: {
       orgId: {
@@ -43,7 +45,7 @@ export default async function EventsPage() {
         eyebrow="Event portfolio"
         title="Convention calendar"
         description="Track every draft, published, and archived convention in your organizer memberships."
-        actions={orgIds.length > 0 ? <Button label="New event" href="/dashboard/events/new" variant="primary" /> : undefined}
+        actions={activeOrgIds.length > 0 ? <Button label="New event" href="/dashboard/events/new" variant="primary" /> : undefined}
       />
       <section className="vf-section">
         <EventsTable

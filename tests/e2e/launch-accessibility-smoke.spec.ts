@@ -42,6 +42,7 @@ test.beforeAll(async () => {
       slug: orgSlug,
       subdomain: orgSlug,
       contactEmail: "accessibility@example.com",
+      status: "ACTIVE",
       members: {
         create: {
           userId: admin.id,

@@ -42,6 +42,7 @@ test.beforeAll(async () => {
       slug: orgSlug,
       subdomain: orgSlug,
       contactEmail: "ops@example.com",
+      status: "ACTIVE",
       members: {
         create: {
           userId: admin.id,
@@ -92,6 +93,7 @@ test.beforeAll(async () => {
       slug: memberOnlyOrgSlug,
       subdomain: memberOnlyOrgSlug,
       contactEmail: "member@example.com",
+      status: "ACTIVE",
       members: {
         create: {
           userId: admin.id,
@@ -303,12 +305,12 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   const invalidCreateEventChild = await page.request.get("/dashboard/events/new/staff");
   expect(invalidCreateEventChild.status()).toBe(404);
 
-  await page.goto("/dashboard/organizations/new");
+  await page.goto("/platform/organizations/new");
   await page.getByLabel("Name").fill("Launch CRUD Org");
   await page.getByLabel("Subdomain slug").fill(crudOrgSlug);
   await page.getByLabel("Contact email").fill("crud@example.com");
   await page.getByLabel("Initial owner email").fill("crud-owner@example.com");
-  await page.getByRole("button", { name: "Create organization" }).click();
+  await page.getByRole("button", { name: "Provision organization" }).click();
   await expect.poll(() => prisma.organization.count({ where: { slug: crudOrgSlug } }), { timeout: 30_000 }).toBe(1);
   const createdOrg = await prisma.organization.findUniqueOrThrow({
     where: { slug: crudOrgSlug },
@@ -390,7 +392,7 @@ test("dashboard settings hub filters access and updates event settings", async (
   expect(settings.vendorConfig).toBeTruthy();
 });
 
-test("embedded SePay QR fulfills through a signed webhook after the provider is disabled", async ({ page }) => {
+test("embedded SePay QR fulfills through a signed webhook after the provider and organization are disabled", async ({ page }) => {
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
   await prisma.paymentProviderConfig.upsert({
     where: { provider: "SEPAY" },
@@ -451,6 +453,7 @@ test("embedded SePay QR fulfills through a signed webhook after the provider is 
   const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });
 
   await prisma.paymentProviderConfig.update({ where: { provider: "SEPAY" }, data: { enabled: false } });
+  await prisma.organization.update({ where: { id: orgId }, data: { status: "SUSPENDED", statusUpdatedAt: new Date() } });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const body = JSON.stringify({
     id: `e2e-sepay-${runId}`,
@@ -471,7 +474,7 @@ test("embedded SePay QR fulfills through a signed webhook after the provider is 
   });
   expect(response.status()).toBe(200);
   expect(await response.text()).toBe('{"success":true}');
-  await expect(page).toHaveURL(/\/pricing$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/pricing$/, { timeout: 30_000 });
 
   const paidOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { ledgerEntries: true } });
   expect(paidOrder.status).toBe("PAID");

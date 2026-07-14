@@ -100,6 +100,7 @@ test.beforeAll(async () => {
       slug: orgSlug,
       subdomain: orgSlug,
       contactEmail: userEmail,
+      status: "ACTIVE",
       events: {
         create: {
           name: "Stripe Webhook Event",
@@ -190,8 +191,9 @@ test("unsigned, invalidly signed, and stale Stripe events fail closed", async ({
   expect(orders.every((order) => order.status === "PENDING" && order.stripePaymentIntentId === null)).toBe(true);
 });
 
-test("signed completion events settle existing orders while Stripe is disabled for new checkout", async ({ request }) => {
+test("signed completion events settle existing orders while the provider and organization are disabled for new checkout", async ({ request }) => {
   expect((await prisma.paymentProviderConfig.findUniqueOrThrow({ where: { provider: "STRIPE" } })).enabled).toBe(false);
+  await prisma.organization.update({ where: { id: orgId }, data: { status: "SUSPENDED", statusUpdatedAt: new Date() } });
 
   const checkoutBody = stripeEvent("checkout.session.completed", {
     id: `cs_checkout_${runId}`,

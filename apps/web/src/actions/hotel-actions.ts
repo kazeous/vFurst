@@ -11,6 +11,7 @@ import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
 async function findOrCreateGuest(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -179,6 +180,8 @@ export async function bookRoom(formData: FormData) {
   if (block.orgId !== block.event.orgId) {
     throw new Error("Hotel block tenant does not match its event.");
   }
+
+  assertOrganizationActive(block.event.org.status);
 
   if (block.cutoffDate < new Date()) {
     throw new Error("This hotel block is past its booking cutoff.");

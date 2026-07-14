@@ -14,6 +14,7 @@ import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/strip
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
+import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -152,6 +153,8 @@ export async function createRegistration(formData: FormData) {
       }
     }
   });
+
+  assertOrganizationActive(event.org.status);
 
   const type = event.registrationTypes.find((registrationType) => registrationType.id === parsed.data.typeId);
 
@@ -429,7 +432,11 @@ export async function bulkUpdateRegistrations(formData: FormData) {
 
 export async function refundRegistration(formData: FormData) {
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-  const { userId, registration, event } = await requireRegistrationAccess(registrationId);
+  const { userId, registration, event } = await requireRegistrationAccess(
+    registrationId,
+    ["OWNER", "ADMIN"],
+    { allowInactive: true }
+  );
   assertActionRateLimit("payment:registration-refund", `${userId}:${registration.id}`);
 
   const orderItem = await prisma.orderItem.findFirst({
