@@ -3,9 +3,14 @@
 import { randomBytes } from "node:crypto";
 import { getOrganizationFeeReport } from "@/lib/billing/reports";
 import { hashApiKey } from "@/lib/api/auth";
-import { requireOrgAccess } from "@/lib/dashboard-access";
+import {
+  requireApiKeyAccess,
+  requireOrgAccess,
+  requireWebhookEndpointAccess
+} from "@/lib/dashboard-access";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
-import { webhookQueue } from "@/lib/webhook-queue";
+import { normalizeWebhookTarget } from "@/lib/webhook-target";
+import { queueWebhookEndpointTest } from "@/lib/webhooks";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -26,14 +31,22 @@ const apiKeySchema = z.object({
   scopes: z.array(z.enum(API_SCOPES)).min(1)
 });
 
-const webhookSchema = z.object({
-  orgId: z.string().uuid(),
-  endpointId: z.string().uuid().optional(),
+const webhookPayloadSchema = z.object({
   url: z.string().trim().url(),
-  secret: z.string().trim().min(12).optional(),
+  secret: z.string().trim().min(24).max(256).optional(),
   events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1),
   active: z.boolean()
 });
+
+export type CreateApiKeyState = {
+  error?: string;
+  token?: string;
+};
+
+export type CreateWebhookEndpointState = {
+  error?: string;
+  secret?: string;
+};
 
 function selectedValues<T extends readonly string[]>(formData: FormData, key: string, allowed: T) {
   const allowedSet = new Set<string>(allowed);
@@ -51,7 +64,10 @@ function newWebhookSecret() {
   return `whsec_${randomBytes(24).toString("base64url")}`;
 }
 
-export async function createApiKey(formData: FormData) {
+export async function createApiKey(
+  _previousState: CreateApiKeyState,
+  formData: FormData
+): Promise<CreateApiKeyState> {
   const parsed = apiKeySchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
@@ -59,7 +75,7 @@ export async function createApiKey(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid API key.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid API key." };
   }
 
   await requireOrgAccess(parsed.data.orgId);
@@ -75,33 +91,34 @@ export async function createApiKey(formData: FormData) {
   });
 
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/api-keys`);
-  redirect(`/dashboard/organizations/${parsed.data.orgId}/api-keys?created=${encodeURIComponent(token)}`);
+  return { token };
 }
 
 export async function revokeApiKey(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const keyId = z.string().uuid().parse(formData.get("keyId"));
+  const { apiKey } = await requireApiKeyAccess(keyId);
 
-  await requireOrgAccess(orgId);
-  await prisma.apiKey.deleteMany({
+  const deleted = await prisma.apiKey.deleteMany({
     where: {
-      id: keyId,
-      orgId
+      id: apiKey.id,
+      orgId: apiKey.orgId
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${orgId}/api-keys`);
+  if (deleted.count !== 1) {
+    throw new Error("API key not found.");
+  }
+
+  revalidatePath(`/dashboard/organizations/${apiKey.orgId}/api-keys`);
 }
 
 export async function updateApiKeyScopes(formData: FormData) {
   const parsed = z
     .object({
-      orgId: z.string().uuid(),
       keyId: z.string().uuid(),
       scopes: z.array(z.enum(API_SCOPES)).min(1)
     })
     .safeParse({
-      orgId: formData.get("orgId"),
       keyId: formData.get("keyId"),
       scopes: selectedValues(formData, "scopes", API_SCOPES)
     });
@@ -110,98 +127,128 @@ export async function updateApiKeyScopes(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Select at least one API scope.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
-  await prisma.apiKey.updateMany({
+  const { apiKey } = await requireApiKeyAccess(parsed.data.keyId);
+  const updated = await prisma.apiKey.updateMany({
     where: {
-      id: parsed.data.keyId,
-      orgId: parsed.data.orgId
+      id: apiKey.id,
+      orgId: apiKey.orgId
     },
     data: {
       scopes: parsed.data.scopes
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/api-keys`);
+  if (updated.count !== 1) {
+    throw new Error("API key not found.");
+  }
+
+  revalidatePath(`/dashboard/organizations/${apiKey.orgId}/api-keys`);
 }
 
-export async function saveWebhookEndpoint(formData: FormData) {
-  const endpointId = String(formData.get("endpointId") ?? "") || undefined;
-  const parsed = webhookSchema.safeParse({
-    orgId: formData.get("orgId"),
-    endpointId,
+function webhookPayloadFromForm(formData: FormData) {
+  return webhookPayloadSchema.safeParse({
     url: formData.get("url"),
     secret: formData.get("secret") || undefined,
     events: selectedValues(formData, "events", WEBHOOK_EVENT_TYPES),
     active: formData.get("active") === "on"
   });
+}
+
+export async function createWebhookEndpoint(
+  _previousState: CreateWebhookEndpointState,
+  formData: FormData
+): Promise<CreateWebhookEndpointState> {
+  const orgId = z.string().uuid().safeParse(formData.get("orgId"));
+  const parsed = webhookPayloadFromForm(formData);
+
+  if (!orgId.success) {
+    return { error: orgId.error.issues[0]?.message ?? "Invalid organization." };
+  }
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid webhook endpoint." };
+  }
+
+  let url: string;
+
+  try {
+    url = normalizeWebhookTarget(parsed.data.url);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid webhook endpoint." };
+  }
+
+  await requireOrgAccess(orgId.data);
+  const secret = parsed.data.secret ?? newWebhookSecret();
+
+  await prisma.webhookEndpoint.create({
+    data: {
+      orgId: orgId.data,
+      url,
+      secret,
+      events: parsed.data.events,
+      active: parsed.data.active
+    }
+  });
+
+  revalidatePath(`/dashboard/organizations/${orgId.data}/webhooks`);
+  return { secret };
+}
+
+export async function updateWebhookEndpoint(formData: FormData) {
+  const endpointId = z.string().uuid().parse(formData.get("endpointId"));
+  const { webhookEndpoint } = await requireWebhookEndpointAccess(endpointId);
+  const parsed = webhookPayloadFromForm(formData);
 
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid webhook endpoint.");
   }
 
-  await requireOrgAccess(parsed.data.orgId);
-
-  if (parsed.data.endpointId) {
-    const data = {
-      url: parsed.data.url,
+  const url = normalizeWebhookTarget(parsed.data.url);
+  const updated = await prisma.webhookEndpoint.updateMany({
+    where: {
+      id: webhookEndpoint.id,
+      orgId: webhookEndpoint.orgId
+    },
+    data: {
+      url,
       events: parsed.data.events,
       active: parsed.data.active,
       ...(parsed.data.secret ? { secret: parsed.data.secret } : {})
-    };
+    }
+  });
 
-    await prisma.webhookEndpoint.updateMany({
-      where: {
-        id: parsed.data.endpointId,
-        orgId: parsed.data.orgId
-      },
-      data
-    });
-  } else {
-    await prisma.webhookEndpoint.create({
-      data: {
-        orgId: parsed.data.orgId,
-        url: parsed.data.url,
-        secret: parsed.data.secret ?? newWebhookSecret(),
-        events: parsed.data.events,
-        active: parsed.data.active
-      }
-    });
+  if (updated.count !== 1) {
+    throw new Error("Webhook endpoint not found.");
   }
 
-  revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/webhooks`);
+  revalidatePath(`/dashboard/organizations/${webhookEndpoint.orgId}/webhooks`);
 }
 
 export async function deleteWebhookEndpoint(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const endpointId = z.string().uuid().parse(formData.get("endpointId"));
+  const { webhookEndpoint } = await requireWebhookEndpointAccess(endpointId);
 
-  await requireOrgAccess(orgId);
-  await prisma.webhookEndpoint.deleteMany({
+  const deleted = await prisma.webhookEndpoint.deleteMany({
     where: {
-      id: endpointId,
-      orgId
+      id: webhookEndpoint.id,
+      orgId: webhookEndpoint.orgId
     }
   });
 
-  revalidatePath(`/dashboard/organizations/${orgId}/webhooks`);
+  if (deleted.count !== 1) {
+    throw new Error("Webhook endpoint not found.");
+  }
+
+  revalidatePath(`/dashboard/organizations/${webhookEndpoint.orgId}/webhooks`);
 }
 
 export async function testWebhookEndpoint(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
   const endpointId = z.string().uuid().parse(formData.get("endpointId"));
+  const { webhookEndpoint } = await requireWebhookEndpointAccess(endpointId);
 
-  await requireOrgAccess(orgId);
-  await webhookQueue.add("webhook.test", {
-    orgId,
-    endpointId,
-    type: "webhook.test",
-    data: {
-      message: "vFurst webhook test",
-      sentAt: new Date().toISOString()
-    }
-  });
+  await queueWebhookEndpointTest(webhookEndpoint);
 
-  revalidatePath(`/dashboard/organizations/${orgId}/webhooks`);
+  revalidatePath(`/dashboard/organizations/${webhookEndpoint.orgId}/webhooks`);
 }
 
 export async function runFeeReconciliation(formData: FormData) {

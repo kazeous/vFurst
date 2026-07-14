@@ -49,6 +49,8 @@ export type ReconcileFeesJob = {
 export type ReconciliationJob = ReconcileFeesJob | Record<string, never>;
 
 export type SendWebhookJob = {
+  deliveryId?: string;
+  createdAt?: string;
   orgId: string;
   endpointId?: string;
   type: string;

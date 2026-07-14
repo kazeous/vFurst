@@ -1,8 +1,9 @@
-import { createApiKey, revokeApiKey, updateApiKeyScopes } from "@/actions/saas-actions";
+import { revokeApiKey, updateApiKeyScopes } from "@/actions/saas-actions";
 import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ApiKeyCreateForm } from "./api-key-create-form";
 import { notFound } from "next/navigation";
 
 const scopes = [
@@ -15,14 +16,11 @@ const scopes = [
 ] as const;
 
 export default async function ApiKeysPage({
-  params,
-  searchParams
+  params
 }: {
   params: Promise<{ orgId: string }>;
-  searchParams: Promise<{ created?: string }>;
 }) {
   const { orgId } = await params;
-  const { created } = await searchParams;
   await requireOrgPageAccess(orgId);
 
   const org = await prisma.organization.findUnique({
@@ -51,32 +49,9 @@ export default async function ApiKeysPage({
         </div>
         <Button label="API docs" href="/docs/api" />
       </header>
-      {created ? (
-        <div className="vf-banner vf-banner-success">
-          <strong>New API key:</strong>
-          <code>{created}</code>
-        </div>
-      ) : null}
       <section className="vf-two-column">
         <Card>
-          <form action={createApiKey} className="vf-form">
-            <input type="hidden" name="orgId" value={org.id} />
-            <h2>Create key</h2>
-            <label>
-              Name
-              <input name="name" placeholder="Reporting integration" required />
-            </label>
-            <fieldset className="vf-fieldset">
-              <legend>Scopes</legend>
-              {scopes.map(([value, label]) => (
-                <label key={value} className="vf-check">
-                  <input name="scopes" type="checkbox" value={value} defaultChecked={value === "read:events"} />
-                  {label}
-                </label>
-              ))}
-            </fieldset>
-            <Button label="Create API key" type="submit" variant="primary" />
-          </form>
+          <ApiKeyCreateForm orgId={org.id} />
         </Card>
         <section className="vf-section">
           <h2>Active keys</h2>
@@ -90,7 +65,6 @@ export default async function ApiKeysPage({
                   </small>
                 </summary>
                 <form action={updateApiKeyScopes} className="vf-form">
-                  <input type="hidden" name="orgId" value={org.id} />
                   <input type="hidden" name="keyId" value={key.id} />
                   <fieldset className="vf-fieldset">
                     <legend>Scopes</legend>
@@ -106,7 +80,6 @@ export default async function ApiKeysPage({
                   </div>
                 </form>
                 <form action={revokeApiKey}>
-                  <input type="hidden" name="orgId" value={org.id} />
                   <input type="hidden" name="keyId" value={key.id} />
                   <Button label="Revoke" type="submit" size="sm" variant="destructive" />
                 </form>

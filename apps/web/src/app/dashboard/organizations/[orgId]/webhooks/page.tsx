@@ -1,4 +1,4 @@
-import { deleteWebhookEndpoint, saveWebhookEndpoint, testWebhookEndpoint } from "@/actions/saas-actions";
+import { deleteWebhookEndpoint, testWebhookEndpoint, updateWebhookEndpoint } from "@/actions/saas-actions";
 import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/webhook-events";
 import { webhookQueue } from "@/lib/webhook-queue";
@@ -6,13 +6,14 @@ import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { notFound } from "next/navigation";
+import { WebhookCreateForm } from "./webhook-create-form";
 
 export const dynamic = "force-dynamic";
 
 async function getRecentWebhookJobs(orgId: string) {
   try {
-    const jobs = await webhookQueue.getJobs(["completed", "failed", "waiting", "delayed", "active"], 0, 20, false);
-    return jobs.filter((job) => job.data.orgId === orgId);
+    const jobs = await webhookQueue.getJobs(["completed", "failed", "waiting", "delayed", "active"], 0, 499, false);
+    return jobs.filter((job) => job.data.orgId === orgId).slice(0, 20);
   } catch {
     return [];
   }
@@ -53,32 +54,7 @@ export default async function WebhooksPage({ params }: { params: Promise<{ orgId
       </header>
       <section className="vf-two-column">
         <Card>
-          <form action={saveWebhookEndpoint} className="vf-form">
-            <input type="hidden" name="orgId" value={org.id} />
-            <h2>Add endpoint</h2>
-            <label>
-              Endpoint URL
-              <input name="url" type="url" placeholder="https://example.com/vfurst/webhook" required />
-            </label>
-            <label>
-              Signing secret
-              <input name="secret" placeholder="Generated automatically if blank" />
-            </label>
-            <fieldset className="vf-fieldset">
-              <legend>Events</legend>
-              {WEBHOOK_EVENT_TYPES.map((event) => (
-                <label key={event} className="vf-check">
-                  <input name="events" type="checkbox" value={event} defaultChecked={event === "registration.created" || event === "order.paid"} />
-                  {event}
-                </label>
-              ))}
-            </fieldset>
-            <label className="vf-check">
-              <input name="active" type="checkbox" defaultChecked />
-              Active
-            </label>
-            <Button label="Save endpoint" type="submit" variant="primary" />
-          </form>
+          <WebhookCreateForm orgId={org.id} />
         </Card>
         <section className="vf-section">
           <h2>Configured endpoints</h2>
@@ -89,16 +65,22 @@ export default async function WebhooksPage({ params }: { params: Promise<{ orgId
                   <strong>{endpoint.url}</strong>
                   <small>{endpoint.active ? "Active" : "Paused"}</small>
                 </summary>
-                <form action={saveWebhookEndpoint} className="vf-form">
-                  <input type="hidden" name="orgId" value={org.id} />
+                <form action={updateWebhookEndpoint} className="vf-form">
                   <input type="hidden" name="endpointId" value={endpoint.id} />
                   <label>
                     Endpoint URL
                     <input name="url" type="url" defaultValue={endpoint.url} required />
+                    <small>Use a public HTTPS DNS endpoint.</small>
                   </label>
                   <label>
                     Rotate signing secret
-                    <input name="secret" placeholder="Leave blank to keep current secret" />
+                    <input
+                      name="secret"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={24}
+                      placeholder="Leave blank to keep current secret"
+                    />
                   </label>
                   <fieldset className="vf-fieldset">
                     <legend>Events</legend>
@@ -117,12 +99,10 @@ export default async function WebhooksPage({ params }: { params: Promise<{ orgId
                 </form>
                 <div className="vf-inline-forms">
                   <form action={testWebhookEndpoint}>
-                    <input type="hidden" name="orgId" value={org.id} />
                     <input type="hidden" name="endpointId" value={endpoint.id} />
                     <Button label="Test" type="submit" size="sm" />
                   </form>
                   <form action={deleteWebhookEndpoint}>
-                    <input type="hidden" name="orgId" value={org.id} />
                     <input type="hidden" name="endpointId" value={endpoint.id} />
                     <Button label="Delete" type="submit" size="sm" variant="destructive" />
                   </form>

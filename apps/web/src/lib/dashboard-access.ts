@@ -205,6 +205,35 @@ async function getRaffleTenant(raffleId: string) {
   });
 }
 
+async function getApiKeyTenant(apiKeyId: string) {
+  return prisma.apiKey.findUnique({
+    where: {
+      id: apiKeyId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      name: true,
+      scopes: true
+    }
+  });
+}
+
+async function getWebhookEndpointTenant(endpointId: string) {
+  return prisma.webhookEndpoint.findUnique({
+    where: {
+      id: endpointId
+    },
+    select: {
+      id: true,
+      orgId: true,
+      url: true,
+      events: true,
+      active: true
+    }
+  });
+}
+
 async function getAttendeeNoteTenant(noteId: string) {
   return prisma.attendeeNote.findUnique({
     where: {
@@ -698,6 +727,51 @@ export async function requireRaffleAccess(raffleId: string, allowedRoles: OrgRol
     membership,
     raffle,
     event
+  };
+}
+
+export async function requireApiKeyAccess(apiKeyId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const apiKey = await getApiKeyTenant(apiKeyId);
+
+  if (!apiKey) {
+    throw new Error("API key not found.");
+  }
+
+  const membership = await getOrgMembership(userId, apiKey.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this API key.");
+  }
+
+  return {
+    userId,
+    membership,
+    apiKey
+  };
+}
+
+export async function requireWebhookEndpointAccess(
+  endpointId: string,
+  allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]
+) {
+  const userId = await requireDashboardUser();
+  const webhookEndpoint = await getWebhookEndpointTenant(endpointId);
+
+  if (!webhookEndpoint) {
+    throw new Error("Webhook endpoint not found.");
+  }
+
+  const membership = await getOrgMembership(userId, webhookEndpoint.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this webhook endpoint.");
+  }
+
+  return {
+    userId,
+    membership,
+    webhookEndpoint
   };
 }
 

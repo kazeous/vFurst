@@ -12,7 +12,9 @@ export default function ApiDocsPage() {
       </header>
       <section className="vf-section">
         <h2>Authentication</h2>
-        <p>Send an organization API key as a Bearer token. Keys are scoped and rate limited to 100 requests per minute by default.</p>
+        <p>
+          Send an organization API key as a Bearer token. Keys are scoped and rate limited to 100 requests per minute by default. The raw key is shown only once; store it in a secret manager.
+        </p>
         <pre className="vf-code-block">Authorization: Bearer vf_test_...</pre>
       </section>
       <section className="vf-section">

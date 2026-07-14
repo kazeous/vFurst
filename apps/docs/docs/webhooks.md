@@ -3,13 +3,17 @@ id: webhooks
 title: Webhooks
 ---
 
-Webhook endpoints receive signed JSON envelopes. Failed deliveries retry through BullMQ with exponential backoff.
+Webhook endpoints receive signed JSON envelopes. Failed deliveries retry through BullMQ with exponential backoff. Each endpoint receives its own job, and the payload `id` remains stable across retries so consumers can deduplicate safely.
+
+Endpoints must use a public HTTPS DNS hostname. vFurst rejects credentials in URLs, private/local DNS answers, IP-literal targets, redirects, and deliveries that exceed the timeout.
 
 ## Headers
 
 - `x-vfurst-event`: event type
 - `x-vfurst-timestamp`: Unix timestamp
 - `x-vfurst-signature`: HMAC-SHA256 of `timestamp.body` using the endpoint secret
+
+Verify the timestamp and signature against the exact raw request body before parsing JSON. Compare signatures in constant time and deduplicate the stable payload `id`.
 
 ## Event catalog
 

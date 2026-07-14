@@ -13,7 +13,7 @@ Send an organization API key as a Bearer token:
 Authorization: Bearer vf_test_...
 ```
 
-Keys are scoped per organization and rate limited to 100 requests per minute by default.
+Keys are scoped per organization and rate limited to 100 requests per minute by default. The raw key is shown only once when it is created; copy it into a secret manager because vFurst stores only its hash.
 
 ## Resources
 
