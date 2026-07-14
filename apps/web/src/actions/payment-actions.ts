@@ -60,8 +60,8 @@ export async function savePlatformPaymentSettings(formData: FormData) {
     })
   ]);
 
-  revalidatePath("/dashboard/settings");
-  redirect("/dashboard/settings?paymentsSaved=1");
+  revalidatePath("/platform/payments");
+  redirect("/platform/payments?paymentsSaved=1");
 }
 
 const payoutSchema = z.object({
@@ -123,8 +123,8 @@ export async function recordOrganizerPayout(formData: FormData) {
     });
   });
 
-  revalidatePath("/dashboard/settings");
-  redirect("/dashboard/settings?payoutSaved=1");
+  revalidatePath("/platform/payments");
+  redirect("/platform/payments?payoutSaved=1");
 }
 
 const refundSchema = z.object({
@@ -173,8 +173,8 @@ export async function recordSePayRefund(formData: FormData) {
     }
   });
 
-  revalidatePath("/dashboard/settings");
-  redirect("/dashboard/settings?refundSaved=1");
+  revalidatePath("/platform/payments");
+  redirect("/platform/payments?refundSaved=1");
 }
 
 const exceptionResolutionSchema = z.object({
@@ -205,6 +205,6 @@ export async function resolvePaymentException(formData: FormData) {
     }
   });
 
-  revalidatePath("/dashboard/settings");
-  redirect("/dashboard/settings?exceptionSaved=1");
+  revalidatePath("/platform/payments");
+  redirect("/platform/payments?exceptionSaved=1");
 }

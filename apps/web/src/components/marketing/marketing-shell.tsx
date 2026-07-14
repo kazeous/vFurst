@@ -20,8 +20,8 @@ export function MarketingNav() {
         <Link href="/pricing">Pricing</Link>
         <Link href="/docs">Docs</Link>
         <Link href="/login">Log in</Link>
-        <Link className="vf-marketing-cta" href="/register">
-          Start organizing
+        <Link className="vf-marketing-cta" href="/request-access">
+          Request access
         </Link>
       </div>
     </nav>

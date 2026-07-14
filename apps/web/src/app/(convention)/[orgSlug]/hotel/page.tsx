@@ -1,5 +1,5 @@
 import { bookRoom } from "@/actions/hotel-actions";
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export default async function PublicHotelPage({
   if (!org) {
     notFound();
   }
+  const portalRoot = await getConventionPortalRootForRequest(org);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -66,10 +67,10 @@ export default async function PublicHotelPage({
           <h1>Hotel</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`/${org.subdomain}/register`} />
-          <Button label="Store" href={`/${org.subdomain}/store`} />
-          <Button label="Volunteer" href={`/${org.subdomain}/volunteer`} />
-          <Button label="Vendor apply" href={`/${org.subdomain}/vendor-apply`} />
+          <Button label="Register" href={`${portalRoot}/register`} />
+          <Button label="Store" href={`${portalRoot}/store`} />
+          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
+          <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
         </div>
       </header>
 

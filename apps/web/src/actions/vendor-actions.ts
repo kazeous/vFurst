@@ -1,11 +1,12 @@
 "use server";
 
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { requireEventAccess, requireVendorApplicationAccess } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
+import { getBaseUrl } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { parseMoney } from "@/lib/registration/pricing";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
@@ -266,7 +267,8 @@ export async function submitApplication(formData: FormData) {
     }
   });
 
-  redirect(`/${event.org.subdomain}/vendor-apply?success=${application.id}`);
+  const portalRoot = await getConventionPortalRootForRequest(event.org);
+  redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
 }
 
 export async function approveVendor(formData: FormData) {
@@ -518,8 +520,10 @@ export async function payVendorBooth(formData: FormData) {
     throw new Error("A booth must be assigned before payment.");
   }
 
+  const portalRoot = await getConventionPortalRootForRequest(application.event.org);
+
   if (application.boothPaidAt) {
-    redirect(`/${application.event.org.subdomain}/vendor-apply?success=${application.id}`);
+    redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
   }
 
   const total = application.boothPrice;
@@ -576,7 +580,7 @@ export async function payVendorBooth(formData: FormData) {
 
   if (total === 0) {
     await markOrderPaid(payableOrder.id);
-    redirect(`/${application.event.org.subdomain}/vendor-apply?success=${application.id}`);
+    redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
   }
 
   const checkout = await prepareOrderCheckout(
@@ -584,5 +588,5 @@ export async function payVendorBooth(formData: FormData) {
     `/${application.event.org.subdomain}/vendor-apply?success=${application.id}`,
     `/${application.event.org.subdomain}/vendor-apply?cancelled=1`
   );
-  redirect(checkout.checkoutPath);
+  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
 }

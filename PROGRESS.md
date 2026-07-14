@@ -19,17 +19,45 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, hashed single-use invitations, separately guarded `/platform` routes, and platform-only lifecycle transitions/enforcement are implemented. Platform custom-domain activation remains. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, hashed single-use invitations, separately guarded `/platform` routes, platform-only lifecycle enforcement, and audited custom-domain activation are implemented. |
 | 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
-| 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Tenant inventory/provisioning/lifecycle now live in a separately guarded control plane, while platform custom-domain activation and global payment operations remain in the following boundary unit; fee reports mix USD/VND and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle schema/backfill, invitations, `/platform` separation, and lifecycle enforcement pass the full 68-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by domain/payment boundary completion, payment correctness/rate-limit follow-ups, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, and global payment operations now use their intended tenant/control-plane boundaries. Fee reports still mix USD/VND and production rate limits remain process-local. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, and `/platform` separation pass the full 70-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by payment correctness/rate-limit follow-ups and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, separate domain activation, global payments, and managed acquisition
+- Completed the domain control-plane boundary:
+  - Organizer organization settings now only submit `requestedCustomDomain`, display platform-owned request/activation state, and show the required CNAME/TXT records. The organizer DNS-check action and activation controls were removed.
+  - Added `/platform/domains` with pending-request inventory, DNS ownership verification, active-tenant-only routing activation, duplicate-domain protection, serialized stale-state checks, and verified/activated actor timestamps.
+  - Fixed the existing custom-host resolver defect that rejected dotted hostnames after middleware rewrite. Portal navigation now distinguishes platform paths from managed subdomains/custom hosts, and paid public flows move to the canonical platform checkout while preserving functional return paths.
+- Completed the payment control-plane boundary:
+  - Added `/platform/payments` for global Stripe/SePay enablement, central SePay account/fee settings, payment-exception resolution, manual SePay refund records, open organizer settlement, recent payouts, and the global payout CSV.
+  - Removed all global payment queries, forms, and conditional platform-admin rendering from `/dashboard/settings`; that page is now membership-scoped organization/event navigation only.
+  - Payment actions revalidate and return to `/platform/payments`. The canonical payout export moved to `/platform/payments/payouts/export`; the guarded legacy dashboard URL redirects platform administrators and remains unavailable to organizers.
+  - Organizer Stripe Connect onboarding, payout-bank details, tenant billing/reconciliation, and tenant-scoped operational refunds remain in their organizer routes.
+- Aligned acquisition with managed tenancy:
+  - Replaced self-service “start organizing/create your workspace” marketing promises with managed-access CTAs and added `/request-access` with a configurable sales contact.
+  - Public registration now states that it creates an attendee identity only; organization access comes from a platform-issued owner invitation.
+  - Reviewed and intentionally updated the desktop/mobile marketing visual baselines for the managed-onboarding copy.
+- Added regression evidence:
+  - Added a serial organizer/platform E2E suite proving request-only domain behavior, organizer denial from domain/payment/export controls, platform navigation and activation ownership, activation audit persistence, custom-host root/registration routing, and the platform payout export.
+  - Added four unit cases for platform-path, managed-subdomain, exact custom-domain, and lookalike-host portal roots. Updated launch, export, marketing, and visual assertions to the separated surface contract.
+  - Reverified signed SePay fulfillment and signed Stripe completion/refund settlement while providers or tenants are disabled; moving the administration UI did not weaken existing callback completion.
+- Verified:
+  - Full production-mode Chromium E2E passed 70/70 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 84/84 web unit tests, 21/21 worker tests, 1/1 database backfill test, and 1/1 email test.
+  - Repository-wide type-check, lint, Prisma validation, `git diff --check`, and production builds passed. The existing BullMQ dynamic-dependency build warning remains non-blocking.
+  - `npm audit --audit-level=moderate` passed with zero vulnerabilities.
+- Remaining issues / blockers:
+  - Do not deploy. Mixed-currency fee reporting, payment-attempt serialization, shared production rate limiting, recipient transfer acceptance, badge image rendering, physical printer proof, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain open.
+- Next session should:
+  - Take mixed-currency fee/reporting correctness as the next separately reviewable payment unit: inventory every aggregate/export/chart that combines money, group and label values by currency without adding unlike units, add USD/VND regression fixtures, and rerun the repository gates. Keep payment-attempt serialization as the following logical unit.
 
 ### 2026-07-14 - Phase 7, separate the platform control plane and enforce tenant lifecycle
 - Separated platform operations from organizer workspaces:

@@ -1,5 +1,5 @@
-import { updateCustomDomain, updateOrganization, verifyCustomDomain } from "@/actions/org-actions";
-import { getCustomDomainRecords, isCustomDomainVerified } from "@/lib/custom-domain";
+import { updateCustomDomain, updateOrganization } from "@/actions/org-actions";
+import { getCustomDomainRecords } from "@/lib/custom-domain";
 import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,6 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
 
   const emailSettings = org.emailSettings as EmailSettings;
   const domainRecords = org.requestedCustomDomain ? getCustomDomainRecords(org.id, org.requestedCustomDomain) : null;
-  const domainVerified = org.requestedCustomDomain ? await isCustomDomainVerified(org.id, org.requestedCustomDomain) : false;
 
   return (
     <div className="vf-page">
@@ -119,8 +118,12 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
             </dl>
             {domainRecords ? (
               <div className="vf-stack">
-                <div className={`vf-banner ${domainVerified ? "vf-banner-success" : "vf-banner-warning"}`}>
-                  {domainVerified ? "DNS ownership verified." : "Waiting for DNS TXT verification."}
+                <div className={`vf-banner ${org.customDomainStatus === "ACTIVE" ? "vf-banner-success" : "vf-banner-warning"}`}>
+                  {org.customDomainStatus === "ACTIVE"
+                    ? "The platform operator activated this domain."
+                    : org.customDomainStatus === "VERIFIED"
+                      ? "The platform operator verified DNS. Activation is pending."
+                      : "Add these DNS records. The platform operator will verify and activate routing."}
                 </div>
                 <dl className="vf-details">
                   <dt>CNAME name</dt>
@@ -132,10 +135,6 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
                   <dt>TXT value</dt>
                   <dd>{domainRecords.txtValue}</dd>
                 </dl>
-                <form action={verifyCustomDomain}>
-                  <input type="hidden" name="orgId" value={org.id} />
-                  <Button label="Check DNS" type="submit" variant="primary" />
-                </form>
               </div>
             ) : (
               <p className="vf-muted">Add a CNAME and TXT challenge to route a verified custom domain to this convention portal.</p>

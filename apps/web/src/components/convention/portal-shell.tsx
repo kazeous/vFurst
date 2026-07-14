@@ -17,9 +17,8 @@ function imageStyle(url?: string) {
   return url ? { backgroundImage: `url("${url.replaceAll('"', "%22")}")` } : undefined;
 }
 
-export function ConventionPortalShell({ org, event, children }: { org: PortalOrganization; event: PortalEvent; children: ReactNode }) {
+export function ConventionPortalShell({ org, event, portalRoot, children }: { org: PortalOrganization; event: PortalEvent; portalRoot: string; children: ReactNode }) {
   const branding = getEffectiveEventBranding(event?.settings ?? {}, org.logo);
-  const portalRoot = `/${org.subdomain}`;
   const shellStyle = {
     "--event-accent": branding.accentColor,
     "--event-accent-foreground": branding.accentForeground

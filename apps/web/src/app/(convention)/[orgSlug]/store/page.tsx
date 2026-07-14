@@ -1,7 +1,7 @@
 import { addToCart } from "@/actions/cart-actions";
 import { StoreCart } from "@/components/store/cart";
 import { auth } from "@/lib/auth";
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getStripe } from "@/lib/payments/stripe";
 import { formatCurrency } from "@/lib/registration/pricing";
@@ -198,6 +198,7 @@ export default async function PublicStorePage({
   if (!org) {
     notFound();
   }
+  const portalRoot = await getConventionPortalRootForRequest(org);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -218,7 +219,7 @@ export default async function PublicStorePage({
       }
     }
   });
-  const storePath = `/${org.subdomain}/store`;
+  const storePath = `${portalRoot}/store`;
   const successOrder =
     event && query.success
       ? await resolveSuccessOrder({
@@ -262,10 +263,10 @@ export default async function PublicStorePage({
           <h1>Store</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`/${org.subdomain}/register`} />
-          <Button label="Hotel" href={`/${org.subdomain}/hotel`} />
-          <Button label="Volunteer" href={`/${org.subdomain}/volunteer`} />
-          <Button label="Vendor apply" href={`/${org.subdomain}/vendor-apply`} />
+          <Button label="Register" href={`${portalRoot}/register`} />
+          <Button label="Hotel" href={`${portalRoot}/hotel`} />
+          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
+          <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
         </div>
       </header>
 

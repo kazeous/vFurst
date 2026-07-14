@@ -1,10 +1,11 @@
 "use server";
 
 import { requireEventAccess, requireHotelBlockAccess, requireHotelBookingAccess } from "@/lib/dashboard-access";
+import { getConventionPortalRootForRequest } from "@/lib/convention";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
-import { HOTEL_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
+import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getNightCount, parseMoney, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
@@ -182,6 +183,7 @@ export async function bookRoom(formData: FormData) {
   }
 
   assertOrganizationActive(block.event.org.status);
+  const portalRoot = await getConventionPortalRootForRequest(block.event.org);
 
   if (block.cutoffDate < new Date()) {
     throw new Error("This hotel block is past its booking cutoff.");
@@ -242,7 +244,7 @@ export async function bookRoom(formData: FormData) {
 
   if (total === 0) {
     await markOrderPaid(order.id);
-    redirect(`/${block.event.org.subdomain}/hotel?success=${booking.id}`);
+    redirect(`${portalRoot}/hotel?success=${booking.id}`);
   }
 
   const checkout = await prepareOrderCheckout(
@@ -250,7 +252,7 @@ export async function bookRoom(formData: FormData) {
     `/${block.event.org.subdomain}/hotel?success=${booking.id}`,
     `/${block.event.org.subdomain}/hotel?cancelled=1`
   );
-  redirect(checkout.checkoutPath);
+  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
 }
 
 export async function cancelBooking(formData: FormData) {

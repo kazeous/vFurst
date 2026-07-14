@@ -1,6 +1,6 @@
 "use server";
 
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import {
   requireDepartmentAccess,
   requireEventAccess,
@@ -440,7 +440,8 @@ export async function submitVolunteerApplication(formData: FormData) {
     }
   });
 
-  redirect(`/${org.subdomain}/volunteer?success=${application.id}`);
+  const portalRoot = await getConventionPortalRootForRequest(org);
+  redirect(`${portalRoot}/volunteer?success=${application.id}`);
 }
 
 export async function approveApplication(formData: FormData) {

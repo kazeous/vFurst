@@ -8,9 +8,10 @@ import {
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
+import { getConventionPortalRootForRequest } from "@/lib/convention";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
-import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/stripe";
+import { REGISTRATION_PLATFORM_FEE_CENTS, getBaseUrl, getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
@@ -155,6 +156,7 @@ export async function createRegistration(formData: FormData) {
   });
 
   assertOrganizationActive(event.org.status);
+  const portalRoot = await getConventionPortalRootForRequest(event.org);
 
   const type = event.registrationTypes.find((registrationType) => registrationType.id === parsed.data.typeId);
 
@@ -301,8 +303,8 @@ export async function createRegistration(formData: FormData) {
       }
     });
 
-    revalidatePath(`/${event.org.subdomain}/store`);
-    redirect(`/${event.org.subdomain}/store`);
+    revalidatePath(`${portalRoot}/store`);
+    redirect(`${portalRoot}/store`);
   }
 
   const order = await prisma.order.create({
@@ -339,7 +341,7 @@ export async function createRegistration(formData: FormData) {
 
   if (total === 0) {
     await markOrderPaid(order.id);
-    redirect(`/${event.org.subdomain}/register?success=${registration.id}`);
+    redirect(`${portalRoot}/register?success=${registration.id}`);
   }
 
   const checkout = await prepareOrderCheckout(
@@ -347,7 +349,7 @@ export async function createRegistration(formData: FormData) {
     `/${event.org.subdomain}/register?success=${registration.id}`,
     `/${event.org.subdomain}/register?cancelled=1`
   );
-  redirect(checkout.checkoutPath);
+  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
 }
 
 export async function confirmRegistration(formData: FormData) {

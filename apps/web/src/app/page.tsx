@@ -25,7 +25,7 @@ export default function HomePage() {
             <p className="vf-home-eyebrow"><span /> Convention operations platform</p>
             <h1 id="home-title">Run the whole convention from one calm workspace.</h1>
             <p>Manage registration, hotels, stores, vendors, volunteers, badges, check-in, APIs, and fees without stitching together spreadsheets and point tools.</p>
-            <div className="vf-home-actions"><Link className="vf-home-button vf-home-button-primary" href="/register">Start organizing <ArrowRight size={17} /></Link><Link className="vf-home-button" href="/features">See how it works</Link></div>
+            <div className="vf-home-actions"><Link className="vf-home-button vf-home-button-primary" href="/request-access">Request managed access <ArrowRight size={17} /></Link><Link className="vf-home-button" href="/features">See how it works</Link></div>
             <div className="vf-home-trust"><span><BadgeCheck size={16} />Built for live event pressure</span><span><BadgeCheck size={16} />WCAG-minded workflows</span></div>
           </div>
 
@@ -55,7 +55,7 @@ export default function HomePage() {
         <div className="vf-home-workflow">{workflow.map((item) => <article key={item.number}><span>{item.number}</span><div><h3>{item.title}</h3><p>{item.body}</p></div></article>)}</div>
       </section>
 
-      <section className="vf-home-cta"><div><p className="vf-label">Ready when your team is</p><h2>Replace the spreadsheet maze before launch week.</h2><p>Build the event workspace, publish the attendee portal, and keep every operator on the same page.</p></div><Link className="vf-home-button vf-home-button-primary" href="/register">Create your workspace <ArrowRight size={17} /></Link></section>
+      <section className="vf-home-cta"><div><p className="vf-label">Managed onboarding</p><h2>Replace the spreadsheet maze before launch week.</h2><p>We provision your organization, invite its first owner, and help connect the public domain before your team configures events.</p></div><Link className="vf-home-button vf-home-button-primary" href="/request-access">Talk to the platform team <ArrowRight size={17} /></Link></section>
       <MarketingFooter />
     </main>
   );

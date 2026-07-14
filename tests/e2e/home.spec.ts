@@ -10,7 +10,7 @@ test("renders the launch marketing home page", async ({ page }) => {
       name: "Live convention operations dashboard showing registration, check-in, and volunteer staffing"
     })
   ).toBeVisible();
-  await expect(page.locator(".vf-home-hero-copy").getByRole("link", { name: "Start organizing" })).toBeVisible();
+  await expect(page.locator(".vf-home-hero-copy").getByRole("link", { name: "Request managed access" })).toBeVisible();
 });
 
 test("keeps the marketing hero contained on mobile", async ({ page }) => {

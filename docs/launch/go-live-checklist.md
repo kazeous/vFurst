@@ -48,6 +48,7 @@ SENTRY_ORG=...
 SENTRY_PROJECT=...
 SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
+SALES_CONTACT_EMAIL=sales@your-production-domain.example
 ```
 
 For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL`, and `VFURST_LAUNCH_URL` should all point at the platform marketing domain, for example `https://vfurst.reyuugames.com` for URL values and `vfurst.reyuugames.com` for `NEXT_PUBLIC_ROOT_DOMAIN`. If the root domain is left at the local/default value, middleware can treat the production marketing domain as a convention custom domain and cause proxy-visible redirect/routing failures.
@@ -70,4 +71,4 @@ Sentry source map upload is best-effort during `next build`: upload failures are
 
 If Coolify logs show Turbo/Next completing successfully and then fail at Docker `exporting layers`, treat it as a Docker image export or host-resource failure rather than an application compile failure. First confirm the log contains `Tasks: 3 successful, 3 total` and `#16 exporting layers`; then prune unused Docker images/build cache or add disk to the Coolify host before retrying. The repo includes `.dockerignore` to keep local caches, `.git`, build artifacts, generated service workers, logs, and environment files out of the Docker context.
 
-Current result on July 13, 2026: compilation, dependency, E2E, and previously documented load gates pass, but the full-system security audit is blocked. External launch evidence is also incomplete. Do not deploy until `docs/launch/full-system-audit-2026-07-13.md` is remediated and rerun.
+Current result on July 14, 2026: managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/invitation onboarding, and domain/payment/acquisition surface separation pass the current automated suite. Mixed-currency reporting, payment-attempt serialization, shared production rate limiting, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remain incomplete. Do not deploy until those gates are remediated and the full-system audit is rerun.

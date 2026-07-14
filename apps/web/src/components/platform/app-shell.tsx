@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Building2, Gauge, LayoutDashboard, LogOut } from "lucide-react";
+import { Building2, CreditCard, Gauge, Globe2, LayoutDashboard, LogOut } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -38,6 +38,8 @@ export function PlatformAppShell({
             <p className="vf-nav-group-label">Platform</p>
             <Link className="vf-nav-link" href="/platform"><Gauge size={18} aria-hidden="true" /><span>Overview</span></Link>
             <Link className="vf-nav-link" href="/platform/organizations"><Building2 size={18} aria-hidden="true" /><span>Organizations</span></Link>
+            <Link className="vf-nav-link" href="/platform/domains"><Globe2 size={18} aria-hidden="true" /><span>Domains</span></Link>
+            <Link className="vf-nav-link" href="/platform/payments"><CreditCard size={18} aria-hidden="true" /><span>Payments</span></Link>
           </div>
           <div className="vf-nav-group">
             <p className="vf-nav-group-label">Workspace</p>

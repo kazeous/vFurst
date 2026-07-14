@@ -1,5 +1,5 @@
 import { ConventionPortalShell } from "@/components/convention/portal-shell";
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -8,6 +8,7 @@ export default async function ConventionLayout({ children, params }: { children:
   const { orgSlug } = await params;
   const org = await getConventionOrg(orgSlug);
   if (!org) notFound();
+  const portalRoot = await getConventionPortalRootForRequest(org);
 
   const event = await prisma.event.findFirst({
     where: { orgId: org.id, status: "PUBLISHED" },
@@ -15,5 +16,5 @@ export default async function ConventionLayout({ children, params }: { children:
     select: { name: true, venue: true, startDate: true, endDate: true, settings: true }
   });
 
-  return <ConventionPortalShell org={org} event={event}>{children}</ConventionPortalShell>;
+  return <ConventionPortalShell org={org} event={event} portalRoot={portalRoot}>{children}</ConventionPortalShell>;
 }

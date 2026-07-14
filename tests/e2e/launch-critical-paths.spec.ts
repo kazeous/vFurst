@@ -353,8 +353,13 @@ test("dashboard settings hub filters access and updates event settings", async (
   await expect(page).toHaveURL(/\/dashboard\/settings$/);
   await expect(dashboardNavigation.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Launch Test Convention" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Payment methods" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payment methods" })).toHaveCount(0);
+  await expect(page.getByText("Enable Stripe platform-wide")).toHaveCount(0);
   await expect(page.getByRole("main").getByText("Member Only Convention")).toHaveCount(0);
+
+  await page.goto("/platform/payments");
+  await expect(page.getByRole("heading", { name: "Payments and settlement" })).toBeVisible();
+  await expect(page.getByText("Enable Stripe platform-wide")).toBeVisible();
 
   const unauthorizedOrgResponse = await page.request.get(`/dashboard/organizations/${memberOnlyOrgId}/settings`);
   expect(unauthorizedOrgResponse.ok()).toBe(false);

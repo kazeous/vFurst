@@ -1,5 +1,5 @@
 import { payVendorBooth, submitApplication } from "@/actions/vendor-actions";
-import { getConventionOrg } from "@/lib/convention";
+import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getVendorConfig } from "@/lib/vendor/config";
 import { prisma } from "@vfurst/db";
@@ -38,6 +38,7 @@ export default async function PublicVendorApplyPage({
   if (!org) {
     notFound();
   }
+  const portalRoot = await getConventionPortalRootForRequest(org);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -72,8 +73,8 @@ export default async function PublicVendorApplyPage({
           <h1>Vendor application</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`/${org.subdomain}/register`} />
-          <Button label="Volunteer" href={`/${org.subdomain}/volunteer`} />
+          <Button label="Register" href={`${portalRoot}/register`} />
+          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
         </div>
       </header>
 

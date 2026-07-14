@@ -1,6 +1,6 @@
 "use server";
 
-import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
+import { normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
 import { deliverOrganizationInvitation } from "@/lib/organization-invitation-email";
@@ -278,35 +278,6 @@ export async function updateCustomDomain(formData: FormData) {
 
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}`);
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/settings`);
-}
-
-export async function verifyCustomDomain(formData: FormData) {
-  const orgId = z.string().uuid().parse(formData.get("orgId"));
-
-  await requireOrgRole(orgId);
-
-  const org = await prisma.organization.findUnique({
-    where: {
-      id: orgId
-    },
-    select: {
-      requestedCustomDomain: true
-    }
-  });
-  const domain = normalizeCustomDomain(org?.requestedCustomDomain ?? "");
-
-  if (!domain) {
-    throw new Error("Save a custom domain before verifying DNS.");
-  }
-
-  const records = getCustomDomainRecords(orgId, domain);
-  const verified = await isCustomDomainVerified(orgId, domain);
-
-  if (!verified) {
-    throw new Error(`TXT record ${records.txtName} does not currently resolve to ${records.txtValue}.`);
-  }
-
-  revalidatePath(`/dashboard/organizations/${orgId}/settings`);
 }
 
 export async function inviteMember(formData: FormData) {

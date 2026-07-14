@@ -254,11 +254,11 @@ test("organization admins can export while ordinary members cannot", async ({ br
   await memberContext.close();
 });
 
-test("platform admins can export the global payout ledger without implicit event membership", async ({ page }) => {
+test("platform admins can export the global payout ledger from the control plane without implicit event membership", async ({ page }) => {
   await login(page, platformAdminEmail, "/platform");
   expect((await page.request.get(registrationExport(eventAId))).status()).toBe(404);
 
-  const response = await page.request.get("/dashboard/settings/payouts/export");
+  const response = await page.request.get("/platform/payments/payouts/export");
   expect(response.status()).toBe(200);
   expect(response.headers()["cache-control"]).toBe("private, no-store");
   const csv = await response.text();

@@ -14,6 +14,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         <div>
           <p className="vf-label">Public account</p>
           <h1>Create your account</h1>
+          <p className="vf-muted">This creates an attendee identity only. Organization workspaces are provisioned by the vFurst platform team and accessed through an owner invitation.</p>
         </div>
         <RegisterForm action={registerUser} returnTo={returnTo} />
         <p className="vf-muted">
