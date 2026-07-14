@@ -2,6 +2,7 @@ import { createSesProvider } from "./providers/ses.js";
 import { createSmtpProvider } from "./providers/smtp.js";
 import { passwordResetTemplate } from "./templates/password-reset.js";
 import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation.js";
+import { organizationInvitationTemplate } from "./templates/organization-invitation.js";
 import { registrationConfirmationTemplate } from "./templates/registration-confirmation.js";
 import { staffMessageTemplate } from "./templates/staff-message.js";
 import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision.js";
@@ -62,6 +63,13 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",
         subject: typeof data.subject === "string" ? data.subject : "Staff update",
         message: typeof data.message === "string" ? data.message : ""
+      });
+    case "organization-invitation":
+      return organizationInvitationTemplate({
+        organizationName: typeof data.organizationName === "string" ? data.organizationName : "an organization",
+        role: typeof data.role === "string" ? data.role : "MEMBER",
+        invitationUrl: typeof data.invitationUrl === "string" ? data.invitationUrl : "",
+        expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : "soon"
       });
     case "password-reset":
       return passwordResetTemplate({

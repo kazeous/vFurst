@@ -6,6 +6,7 @@ export type EmailTemplateName =
   | "volunteer-shift-assignment"
   | "vendor-application-decision"
   | "staff-message"
+  | "organization-invitation"
   | "password-reset";
 
 export type EmailMessage = {

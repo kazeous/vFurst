@@ -27,8 +27,8 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
   }
 
   const emailSettings = org.emailSettings as EmailSettings;
-  const domainRecords = org.customDomain ? getCustomDomainRecords(org.id, org.customDomain) : null;
-  const domainVerified = org.customDomain ? await isCustomDomainVerified(org.id, org.customDomain) : false;
+  const domainRecords = org.requestedCustomDomain ? getCustomDomainRecords(org.id, org.requestedCustomDomain) : null;
+  const domainVerified = org.requestedCustomDomain ? await isCustomDomainVerified(org.id, org.requestedCustomDomain) : false;
 
   return (
     <div className="vf-page">
@@ -104,12 +104,19 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
             <form action={updateCustomDomain} className="vf-form">
               <input type="hidden" name="orgId" value={org.id} />
               <h2>Custom domain</h2>
+              <p className="vf-muted">Submit a domain for verification. Only the vFurst platform operator can activate public routing.</p>
               <label>
-                Domain
-                <input name="customDomain" defaultValue={org.customDomain ?? ""} placeholder="con.example.com" />
+                Requested domain
+                <input name="customDomain" defaultValue={org.requestedCustomDomain ?? ""} placeholder="con.example.com" />
               </label>
-              <Button label="Save domain" type="submit" />
+              <Button label="Save request" type="submit" />
             </form>
+            <dl className="vf-details">
+              <dt>Request status</dt>
+              <dd>{org.customDomainStatus ?? "Not requested"}</dd>
+              <dt>Active public domain</dt>
+              <dd>{org.customDomain ?? "Platform subdomain only"}</dd>
+            </dl>
             {domainRecords ? (
               <div className="vf-stack">
                 <div className={`vf-banner ${domainVerified ? "vf-banner-success" : "vf-banner-warning"}`}>
@@ -127,8 +134,7 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
                 </dl>
                 <form action={verifyCustomDomain}>
                   <input type="hidden" name="orgId" value={org.id} />
-                  <input type="hidden" name="customDomain" value={domainRecords.domain} />
-                  <Button label="Verify DNS" type="submit" variant="primary" />
+                  <Button label="Check DNS" type="submit" variant="primary" />
                 </form>
               </div>
             ) : (

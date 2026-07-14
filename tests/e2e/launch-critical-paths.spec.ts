@@ -307,11 +307,19 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await page.getByLabel("Name").fill("Launch CRUD Org");
   await page.getByLabel("Subdomain slug").fill(crudOrgSlug);
   await page.getByLabel("Contact email").fill("crud@example.com");
+  await page.getByLabel("Initial owner email").fill("crud-owner@example.com");
   await page.getByRole("button", { name: "Create organization" }).click();
   await expect.poll(() => prisma.organization.count({ where: { slug: crudOrgSlug } }), { timeout: 30_000 }).toBe(1);
-  const createdOrg = await prisma.organization.findUniqueOrThrow({ where: { slug: crudOrgSlug } });
-  await page.goto(`/dashboard/organizations/${createdOrg.id}`);
-  await expect(page.getByRole("heading", { name: "Launch CRUD Org" })).toBeVisible({ timeout: 15_000 });
+  const createdOrg = await prisma.organization.findUniqueOrThrow({
+    where: { slug: crudOrgSlug },
+    include: { invitations: true, members: true }
+  });
+  expect(createdOrg.status).toBe("PROVISIONING");
+  expect(createdOrg.members).toHaveLength(0);
+  expect(createdOrg.invitations).toEqual([
+    expect.objectContaining({ email: "crud-owner@example.com", role: "OWNER", acceptedAt: null, revokedAt: null })
+  ]);
+  expect((await page.request.get(`/dashboard/organizations/${createdOrg.id}`)).status()).toBe(404);
 
   await page.goto(`/dashboard/events/${eventId}/check-in`);
   await page.getByPlaceholder("Name, email, badge number, QR code, or registration ID").fill(attendeeEmail);

@@ -1,4 +1,6 @@
 import { inviteMember, removeMember } from "@/actions/org-actions";
+import { revokeOrganizationInvitation } from "@/actions/invitation-actions";
+import { getOrganizationInvitationState } from "@/lib/organization-invitations";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -16,6 +18,15 @@ export default async function OrganizationMembersPage({ params }: { params: Prom
         },
         orderBy: {
           createdAt: "asc"
+        }
+      },
+      invitations: {
+        where: {
+          acceptedAt: null,
+          revokedAt: null
+        },
+        orderBy: {
+          createdAt: "desc"
         }
       }
     }
@@ -66,11 +77,36 @@ export default async function OrganizationMembersPage({ params }: { params: Prom
                 <option value="MEMBER">Member</option>
               </select>
             </label>
-            <Button label="Invite or update" type="submit" variant="primary" />
+            <Button label="Send invitation" type="submit" variant="primary" />
           </form>
         </div>
+      </section>
+      <section className="vf-section">
+        <h2>Pending invitations</h2>
+        {org.invitations.length > 0 ? (
+          <div className="vf-list">
+            {org.invitations.map((invitation) => {
+              const state = getOrganizationInvitationState(invitation);
+
+              return (
+                <div className="vf-list-row" key={invitation.id}>
+                  <span>{invitation.email}</span>
+                  <small>{invitation.role} · {state === "EXPIRED" ? "Expired" : `Expires ${invitation.expiresAt.toLocaleString()}`}</small>
+                  {state === "PENDING" ? (
+                    <form action={revokeOrganizationInvitation}>
+                      <input type="hidden" name="orgId" value={org.id} />
+                      <input type="hidden" name="invitationId" value={invitation.id} />
+                      <Button label="Revoke" type="submit" size="sm" variant="destructive" />
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="vf-muted">No pending invitations.</p>
+        )}
       </section>
     </div>
   );
 }
-

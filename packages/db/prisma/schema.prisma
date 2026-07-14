@@ -18,6 +18,21 @@ enum PlatformRole {
   PLATFORM_ADMIN
 }
 
+enum OrganizationStatus {
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  RETIRED
+}
+
+enum CustomDomainStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  ACTIVE
+  REJECTED
+  DISABLED
+}
+
 enum CurrencyCode {
   USD
   VND
@@ -166,25 +181,40 @@ model User {
   organizerPayoutsCreated   OrganizerPayout[]       @relation("OrganizerPayoutCreatedBy")
   paymentRefundsCreated     PaymentRefund[]         @relation("PaymentRefundCreatedBy")
   paymentExceptionsResolved PaymentException[]      @relation("PaymentExceptionResolvedBy")
+  organizationStatusUpdates Organization[]          @relation("OrganizationStatusUpdatedBy")
+  customDomainsVerified     Organization[]          @relation("OrganizationCustomDomainVerifiedBy")
+  customDomainsActivated    Organization[]          @relation("OrganizationCustomDomainActivatedBy")
+  orgInvitationsSent        OrgInvitation[]         @relation("OrgInvitationInvitedBy")
+  orgInvitationsAccepted    OrgInvitation[]         @relation("OrgInvitationAcceptedBy")
+  orgInvitationsRevoked     OrgInvitation[]         @relation("OrgInvitationRevokedBy")
 
   @@map("users")
 }
 
 model Organization {
-  id                     String                 @id @default(uuid()) @db.Uuid
-  name                   String
-  slug                   String                 @unique
-  subdomain              String                 @unique
-  logo                   String?
-  contactEmail           String
-  customDomain           String?                @unique
-  emailProvider          EmailProviderType      @default(SMTP)
-  emailSettings          Json                   @default("{}")
-  payoutBankCode         String?
-  payoutAccountNumber    String?
-  payoutAccountHolder    String?
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
+  id                         String                  @id @default(uuid()) @db.Uuid
+  name                       String
+  slug                       String                  @unique
+  subdomain                  String                  @unique
+  status                     OrganizationStatus      @default(PROVISIONING)
+  statusUpdatedById          String?                 @db.Uuid
+  statusUpdatedAt            DateTime?
+  logo                       String?
+  contactEmail               String
+  requestedCustomDomain      String?
+  customDomain               String?                 @unique
+  customDomainStatus         CustomDomainStatus?
+  customDomainVerifiedById   String?                 @db.Uuid
+  customDomainVerifiedAt     DateTime?
+  customDomainActivatedById  String?                 @db.Uuid
+  customDomainActivatedAt    DateTime?
+  emailProvider              EmailProviderType       @default(SMTP)
+  emailSettings              Json                    @default("{}")
+  payoutBankCode             String?
+  payoutAccountNumber        String?
+  payoutAccountHolder        String?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
   addOnDefinitions       AddOnDefinition[]
   apiKeys                ApiKey[]
   attendeeNotes          AttendeeNote[]
@@ -196,6 +226,7 @@ model Organization {
   events                 Event[]
   hotelBlocks            HotelBlock[]
   hotelBookings          HotelBooking[]
+  invitations            OrgInvitation[]
   members                OrgMember[]
   orderItems             OrderItem[]
   orders                 Order[]
@@ -214,7 +245,16 @@ model Organization {
   webhookEndpoints       WebhookEndpoint[]
   organizerLedgerEntries OrganizerLedgerEntry[]
   organizerPayouts       OrganizerPayout[]
+  statusUpdatedBy        User?                   @relation("OrganizationStatusUpdatedBy", fields: [statusUpdatedById], references: [id], onDelete: SetNull)
+  customDomainVerifiedBy User?                   @relation("OrganizationCustomDomainVerifiedBy", fields: [customDomainVerifiedById], references: [id], onDelete: SetNull)
+  customDomainActivatedBy User?                  @relation("OrganizationCustomDomainActivatedBy", fields: [customDomainActivatedById], references: [id], onDelete: SetNull)
 
+  @@index([status])
+  @@index([statusUpdatedById])
+  @@index([customDomainStatus])
+  @@index([requestedCustomDomain])
+  @@index([customDomainVerifiedById])
+  @@index([customDomainActivatedById])
   @@map("organizations")
 }
 
@@ -291,6 +331,34 @@ model OrgMember {
   @@index([orgId])
   @@index([userId])
   @@map("org_members")
+}
+
+model OrgInvitation {
+  id           String       @id @default(uuid()) @db.Uuid
+  orgId        String       @db.Uuid
+  email        String
+  role         OrgRole
+  tokenHash    String       @unique @db.Char(64)
+  invitedById  String       @db.Uuid
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById String?      @db.Uuid
+  revokedAt    DateTime?
+  revokedById  String?      @db.Uuid
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("OrgInvitationInvitedBy", fields: [invitedById], references: [id])
+  acceptedBy   User?        @relation("OrgInvitationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+  revokedBy    User?        @relation("OrgInvitationRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, email])
+  @@index([orgId, createdAt])
+  @@index([expiresAt])
+  @@index([invitedById])
+  @@index([acceptedById])
+  @@index([revokedById])
+  @@map("org_invitations")
 }
 
 model StripeConnect {

@@ -29,6 +29,7 @@ export default async function OrganizationsPage() {
     id: org.id,
     name: org.name,
     subdomain: `${org.subdomain}.${rootDomain}`,
+    status: org.status,
     events: org._count.events,
     members: org._count.members,
     href: `/dashboard/organizations/${org.id}`

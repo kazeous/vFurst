@@ -243,7 +243,7 @@ erDiagram
 
 ### Infrastructure, access, and payment operations (13)
 
-These models supplement the original 29 product/tenant entities. The managed-provisioning target schema therefore contains **42 models** in total. Until the invitation migration is implemented, `PROGRESS.md` and the actual Prisma schema remain the ground truth for the current model count.
+These models supplement the original 29 product/tenant entities. The managed-provisioning schema contains **42 models** in total, including the implemented `OrgInvitation`; `PROGRESS.md` and the actual Prisma schema remain the ground truth for implementation status.
 
 | Entity | Purpose |
 |---|---|

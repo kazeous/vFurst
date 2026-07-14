@@ -7,6 +7,7 @@ export type OrganizationTableRow = {
   id: string;
   name: string;
   subdomain: string;
+  status: string;
   events: number;
   members: number;
   href: string;
@@ -27,6 +28,7 @@ export function OrganizationsTable({ rows }: { rows: OrganizationTableRow[] }) {
           width: proportional(2),
           renderCell: (org) => <Link href={org.href}>{org.name}</Link>
         },
+        { key: "status", header: "Status", width: pixel(150) },
         { key: "subdomain", header: "Subdomain", width: proportional(2) },
         { key: "events", header: "Events", width: pixel(120), align: "end" },
         { key: "members", header: "Members", width: pixel(120), align: "end" }

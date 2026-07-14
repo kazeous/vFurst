@@ -19,17 +19,47 @@ Phase 0 is complete under the updated local-development directive:
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
-| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment is implemented, and the current action/export/upload inventory is covered by stored-resource or direct-organization authorization. Invitations, lifecycle, and separated `/platform` routes are not implemented. |
+| 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, and hashed single-use organization invitations are implemented. Platform lifecycle transitions/enforcement and separated `/platform` routes remain. |
 | 2 - Registration & Hotel | Remediation in progress | Event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, and event-day walk-in mutations now derive tenant access from stored resources and pass cross-tenant regression tests. VND walk-in/card-terminal collection is currency-correct and atomic; remaining admin payment correctness still requires remediation. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
-| 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Custom-domain activation is not platform-controlled, fee reports mix USD/VND, and production rate limits remain process-local. |
-| 7 - Launch | Blocked | Managed-tenant containment, the current resource-derived action/export/upload sweep, and fail-closed Stripe callbacks now pass the full 58-test E2E suite, 73 web unit tests, and 21 worker tests. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by invitations/lifecycle, `/platform` route separation, payment correctness/rate-limit follow-ups, the 42-model target schema, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
+| 6 - SaaS Layer | Audit reopened | API-key and outbound-webhook management now use stored-resource authorization; raw credentials are shown once without query-string leakage; webhook fan-out/signing/retry identity and public-target delivery are hardened. Organizer domain changes are staged as requests and no longer activate routing, but the platform activation surface is absent; fee reports mix USD/VND and production rate limits remain process-local. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed Stripe callbacks, the 42-model lifecycle schema, legacy backfill, and organization invitations pass the full 65-test E2E suite plus repository checks. `SEC-01` through `SEC-03` are closed against the current inventory, but deployment remains blocked by `/platform` separation, lifecycle transition/suspension enforcement, payment correctness/rate-limit follow-ups, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, add managed organization lifecycle schema and invitation onboarding
+- Reached the managed-provisioning 42-model target without deleting existing tenant data:
+  - Added `OrganizationStatus` (`PROVISIONING`, `ACTIVE`, `SUSPENDED`, `RETIRED`), lifecycle actor/timestamp fields, staged custom-domain request/status/audit fields, and the `OrgInvitation` model with normalized email, requested role, unique SHA-256 token hash, inviter, expiry, acceptance, and revocation state.
+  - New organizations default to `PROVISIONING`. The provisioning action explicitly records the platform administrator and creates a time-limited owner invitation transactionally; it no longer grants the platform operator an implicit `OrgMember`.
+  - Added an idempotent startup backfill after Prisma schema synchronization. It activated 31 legacy local organizations whose lifecycle marker was null, preserved one already-routed custom domain as active, and returned 0/0 on repeat execution. Explicitly provisioned tenants retain their `PROVISIONING` marker.
+  - Existing users, memberships, registrations, events, orders, and settlement records were preserved. The additive schema applied locally without `--accept-data-loss`.
+- Replaced direct membership grants with real invitation onboarding:
+  - Owner/admin member invitations no longer upsert a bare `User` or create/update `OrgMember`. Raw 256-bit tokens are emailed once; only their SHA-256 hashes are stored.
+  - Acceptance requires an authenticated account with the exact normalized recipient email and atomically claims the unexpired/unrevoked token before creating one membership. Accepted, revoked, expired, wrong-email, suspended/retired-tenant, and replay cases fail safely.
+  - Added pending-invitation visibility and revocation. Organization admins cannot invite or revoke owner invitations; owners retain that authority.
+  - Added a public invitation page plus safe login/register return paths. Public registration remains an identity-only flow and grants no organizer access.
+  - Invitation email rendering escapes HTML and removes header newlines. Delivery failure revokes the unusable invitation and does not grant membership.
+- Staged the custom-domain boundary for the later platform control-plane unit:
+  - Organizer settings now write `requestedCustomDomain` and show request/active state; they no longer write the active routed `customDomain` field.
+  - DNS checking reads the stored request rather than a submitted hostname. Platform verification/activation UI remains intentionally separate work.
+- Added regression evidence:
+  - Added pure tests for token entropy/hash behavior, normalization, invitation state, safe auth return paths, backfill predicates, and escaped invitation email output.
+  - Added seven database-backed E2E cases covering public inspection without membership, wrong-email denial, expiry, revocation, hash-only member invites, atomic acceptance/replay prevention, and platform provisioning without implicit membership.
+  - Updated the previous organization CRUD critical-path expectation to the managed provisioning contract.
+- Verified:
+  - Local Prisma schema synchronized successfully and the exact web `prestart` hook completed with an idempotent 0/0 repeat backfill; Prisma validates and the schema contains 42 models.
+  - Full production-mode Chromium E2E passed 65/65 with four workers. Expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Root tests passed 77/77 web unit tests, 21/21 worker tests, 1/1 database backfill test, and 1/1 email test; repository-wide type-check, lint, Prisma validation, `git diff --check`, script syntax checks, docs/worker/web production builds, and `npm audit --audit-level=moderate` passed. The existing BullMQ dynamic-dependency warning remains non-blocking.
+  - Launch readiness still fails 11 expected environment/external/open-audit gates: Stripe/Sentry/live URL configuration, two verified beta conventions, security-audit closure, and physical screen-reader evidence.
+- Remaining issues / blockers:
+  - Do not deploy. `/platform/*` separation, platform-only lifecycle transitions, and suspension/retirement enforcement remain required before the managed tenant boundary is complete.
+  - Platform custom-domain verification/activation, global payment surface separation, mixed-currency reporting, payment-attempt serialization, shared production rate limiting, recipient transfer acceptance, badge image rendering, physical printer proof, and external launch evidence remain open.
+- Next session should:
+  - Implement the separately guarded `/platform/*` control plane and migrate all-tenant provisioning/inventory plus organization lifecycle transitions into it. Keep `/dashboard/*` membership-only, enforce lifecycle state for new tenant activity while preserving signed callbacks/reconciliation/refunds/settlement, and add legacy-route/persona regressions. Keep domain/payment boundary migration as its following logical unit.
 
 ### 2026-07-14 - Phase 7, make Stripe inbound webhooks fail closed
 - Remediated the `SEC-03` P0 webhook path:

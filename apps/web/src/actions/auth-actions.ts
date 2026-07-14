@@ -4,18 +4,21 @@ import { prisma } from "@vfurst/db";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { safeReturnTo } from "@/lib/return-to";
 
 const registerSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   email: z.string().trim().email("A valid email is required"),
-  password: z.string().min(8, "Password must be at least 8 characters")
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  returnTo: z.string().optional()
 });
 
 export async function registerUser(formData: FormData) {
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    password: formData.get("password")
+    password: formData.get("password"),
+    returnTo: formData.get("returnTo")
   });
 
   if (!parsed.success) {
@@ -46,6 +49,9 @@ export async function registerUser(formData: FormData) {
     }
   });
 
-  redirect("/login?registered=1");
+  const search = new URLSearchParams({
+    registered: "1",
+    returnTo: safeReturnTo(parsed.data.returnTo)
+  });
+  redirect(`/login?${search.toString()}`);
 }
-

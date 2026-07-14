@@ -29,6 +29,11 @@ export default async function NewOrganizationPage() {
             <input name="contactEmail" type="email" required placeholder="ops@example.org" />
           </label>
           <label>
+            Initial owner email
+            <input name="ownerEmail" type="email" required placeholder="owner@example.org" />
+          </label>
+          <p className="vf-muted">The owner receives a single-use invitation. Creating the tenant does not grant membership to the platform operator.</p>
+          <label>
             Logo URL
             <input name="logo" type="url" placeholder="https://..." />
           </label>

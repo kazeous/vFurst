@@ -3,8 +3,14 @@
 import { getCustomDomainRecords, isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { auth } from "@/lib/auth";
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
+import { sendOrgEmail } from "@/lib/email";
+import {
+  createOrganizationInvitationRecord,
+  issueOrganizationInvitation,
+  revokeOrganizationInvitation
+} from "@/lib/organization-invitations";
 import { isPlatformDomain } from "@/lib/platform-hosts";
-import { prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
+import { Prisma, prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -17,14 +23,18 @@ const slugSchema = z
   .max(48)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens.");
 
-const createOrganizationSchema = z.object({
+const organizationDetailsSchema = z.object({
   name: z.string().trim().min(2),
   slug: slugSchema,
   contactEmail: z.string().trim().email(),
   logo: z.string().trim().url().optional().or(z.literal(""))
 });
 
-const updateOrganizationSchema = createOrganizationSchema.extend({
+const createOrganizationSchema = organizationDetailsSchema.extend({
+  ownerEmail: z.string().trim().email()
+});
+
+const updateOrganizationSchema = organizationDetailsSchema.extend({
   orgId: z.string().uuid(),
   emailProvider: z.enum(["SES", "SMTP"]),
   smtpHost: z.string().trim().optional(),
@@ -78,12 +88,38 @@ async function requireOrgRole(orgId: string, allowedRoles: OrgRole[] = ["OWNER",
   };
 }
 
+function invitationUrl(token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
+  return new URL(`/invitations/${encodeURIComponent(token)}`, baseUrl).toString();
+}
+
+async function deliverOrganizationInvitation(input: {
+  org: {
+    contactEmail: string;
+    emailProvider: EmailProviderType;
+    emailSettings: Prisma.JsonValue;
+    name: string;
+  };
+  email: string;
+  role: OrgRole;
+  token: string;
+  expiresAt: Date;
+}) {
+  return sendOrgEmail(input.org, input.email, "organization-invitation", {
+    organizationName: input.org.name,
+    role: input.role,
+    invitationUrl: invitationUrl(input.token),
+    expiresAt: input.expiresAt.toISOString()
+  });
+}
+
 export async function createOrganization(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = createOrganizationSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
     contactEmail: formData.get("contactEmail"),
+    ownerEmail: formData.get("ownerEmail"),
     logo: formData.get("logo")
   });
 
@@ -91,24 +127,63 @@ export async function createOrganization(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization details.");
   }
 
-  const org = await prisma.organization.create({
-    data: {
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      subdomain: parsed.data.slug,
-      contactEmail: parsed.data.contactEmail,
-      logo: parsed.data.logo || null,
-      members: {
-        create: {
-          userId: platformAdmin.id,
-          role: "OWNER"
+  const now = new Date();
+  const provisioned = await prisma.$transaction(
+    async (tx) => {
+      const org = await tx.organization.create({
+        data: {
+          name: parsed.data.name,
+          slug: parsed.data.slug,
+          subdomain: parsed.data.slug,
+          status: "PROVISIONING",
+          statusUpdatedById: platformAdmin.id,
+          statusUpdatedAt: now,
+          contactEmail: parsed.data.contactEmail.toLowerCase(),
+          logo: parsed.data.logo || null
         }
-      }
+      });
+      const invitation = await createOrganizationInvitationRecord(tx, {
+        orgId: org.id,
+        email: parsed.data.ownerEmail,
+        role: "OWNER",
+        invitedById: platformAdmin.id,
+        now
+      });
+
+      return {
+        org,
+        ...invitation
+      };
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     }
-  });
+  );
+
+  try {
+    await deliverOrganizationInvitation({
+      org: provisioned.org,
+      email: provisioned.invitation.email,
+      role: provisioned.invitation.role,
+      token: provisioned.token,
+      expiresAt: provisioned.invitation.expiresAt
+    });
+  } catch (error) {
+    await revokeOrganizationInvitation({
+      invitationId: provisioned.invitation.id,
+      orgId: provisioned.org.id,
+      revokedById: platformAdmin.id
+    });
+    console.error("Initial owner invitation delivery failed", {
+      organizationId: provisioned.org.id,
+      errorName: error instanceof Error ? error.name : "UnknownError"
+    });
+    throw new Error("The organization was provisioned, but its owner invitation could not be delivered.");
+  }
 
   revalidatePath("/dashboard");
-  redirect(`/dashboard/organizations/${org.id}`);
+  revalidatePath("/dashboard/organizations");
+  redirect("/dashboard/organizations");
 }
 
 export async function updateOrganization(formData: FormData) {
@@ -185,12 +260,28 @@ export async function updateCustomDomain(formData: FormData) {
     throw new Error("Use a fully qualified custom domain that is not a vFurst platform domain.");
   }
 
+  const org = await prisma.organization.findUnique({
+    where: {
+      id: parsed.data.orgId
+    },
+    select: {
+      customDomain: true
+    }
+  });
+
+  if (!org) {
+    throw new Error("Organization not found.");
+  }
+
   await prisma.organization.update({
     where: {
       id: parsed.data.orgId
     },
     data: {
-      customDomain: domain || null
+      requestedCustomDomain: domain || null,
+      customDomainStatus: domain ? (domain === org.customDomain ? "ACTIVE" : "PENDING_VERIFICATION") : org.customDomain ? "ACTIVE" : null,
+      customDomainVerifiedAt: domain === org.customDomain ? undefined : null,
+      customDomainVerifiedById: domain === org.customDomain ? undefined : null
     }
   });
 
@@ -200,9 +291,18 @@ export async function updateCustomDomain(formData: FormData) {
 
 export async function verifyCustomDomain(formData: FormData) {
   const orgId = z.string().uuid().parse(formData.get("orgId"));
-  const domain = normalizeCustomDomain(String(formData.get("customDomain") ?? ""));
 
   await requireOrgRole(orgId);
+
+  const org = await prisma.organization.findUnique({
+    where: {
+      id: orgId
+    },
+    select: {
+      requestedCustomDomain: true
+    }
+  });
+  const domain = normalizeCustomDomain(org?.requestedCustomDomain ?? "");
 
   if (!domain) {
     throw new Error("Save a custom domain before verifying DNS.");
@@ -229,34 +329,49 @@ export async function inviteMember(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid member details.");
   }
 
-  await requireOrgRole(parsed.data.orgId);
+  const { userId, membership } = await requireOrgRole(parsed.data.orgId);
+  if (membership.role === "ADMIN" && parsed.data.role === "OWNER") {
+    throw new Error("Only an organization owner can invite another owner.");
+  }
 
-  const user = await prisma.user.upsert({
+  const org = await prisma.organization.findUnique({
     where: {
-      email: parsed.data.email.toLowerCase()
-    },
-    update: {},
-    create: {
-      email: parsed.data.email.toLowerCase()
+      id: parsed.data.orgId
     }
   });
 
-  await prisma.orgMember.upsert({
-    where: {
-      userId_orgId: {
-        userId: user.id,
-        orgId: parsed.data.orgId
-      }
-    },
-    update: {
-      role: parsed.data.role
-    },
-    create: {
-      userId: user.id,
-      orgId: parsed.data.orgId,
-      role: parsed.data.role
-    }
+  if (!org) {
+    throw new Error("Organization not found.");
+  }
+
+  const issued = await issueOrganizationInvitation({
+    orgId: org.id,
+    email: parsed.data.email,
+    role: parsed.data.role,
+    invitedById: userId
   });
+
+  try {
+    await deliverOrganizationInvitation({
+      org,
+      email: issued.invitation.email,
+      role: issued.invitation.role,
+      token: issued.token,
+      expiresAt: issued.invitation.expiresAt
+    });
+  } catch (error) {
+    await revokeOrganizationInvitation({
+      invitationId: issued.invitation.id,
+      orgId: org.id,
+      revokedById: userId
+    });
+    console.error("Organization invitation delivery failed", {
+      organizationId: org.id,
+      invitationId: issued.invitation.id,
+      errorName: error instanceof Error ? error.name : "UnknownError"
+    });
+    throw new Error("The invitation could not be delivered. No membership was granted.");
+  }
 
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/members`);
 }
