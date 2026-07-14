@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-const CHECK_IN_PAGE_SIZE = 100;
+const CHECK_IN_PAGE_SIZE = 25;
 
 function buildRegistrationSearch(eventId: string, query: string): Prisma.RegistrationWhereInput {
   const where: Prisma.RegistrationWhereInput = { eventId };

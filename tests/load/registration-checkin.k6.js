@@ -1,5 +1,6 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { Trend } from "k6/metrics";
 
 const defaultBaseUrl = __ENV.VFURST_K6_RUNTIME === "docker" ? "http://host.docker.internal:3000" : "http://127.0.0.1:3000";
 const baseUrl = __ENV.VFURST_BASE_URL || defaultBaseUrl;
@@ -13,6 +14,8 @@ const loadProfile = __ENV.VFURST_LOAD_PROFILE || "full";
 const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 500));
 const checkInVus = Number(__ENV.VFURST_CHECKIN_VUS || (loadProfile === "smoke" ? 1 : 50));
 const durationThreshold = loadProfile === "smoke" ? "p(95)<10000" : "p(95)<1500";
+const registrationDuration = new Trend("registration_flow_duration", true);
+const checkInDuration = new Trend("checkin_flow_duration", true);
 
 function stagesFor(target) {
   if (loadProfile === "smoke") {
@@ -114,6 +117,7 @@ export function registrationFlow() {
     headers: headers(),
     tags: { flow: "registration", name: "public registration" }
   });
+  registrationDuration.add(response.timings.duration);
 
   check(response, {
     "registration page returned 200": (result) => result.status === 200,
@@ -128,6 +132,7 @@ export function checkInFlow(data) {
     headers: headers(data.cookieHeader ? { Cookie: data.cookieHeader } : {}),
     tags: { flow: "check-in", name: "staff check-in" }
   });
+  checkInDuration.add(response.timings.duration);
 
   check(response, {
     "check-in page returned 200": (result) => result.status === 200,

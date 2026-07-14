@@ -19,6 +19,8 @@ const requiredFiles = [
   "docs/launch/security-audit.md",
   "docs/launch/accessibility-audit.md",
   "docs/launch/performance-load-test.md",
+  "packages/db/src/connection-policy.ts",
+  "packages/db/src/connection-policy.test.ts",
   "apps/web/src/lib/redis-rate-limit.ts",
   "scripts/run-launch-load-proof.mjs",
   "tests/load/registration-checkin.k6.js",
@@ -29,6 +31,14 @@ const requiredFiles = [
 ];
 
 const requiredEnv = [
+  {
+    name: "DATABASE_URL",
+    type: "postgres-url"
+  },
+  {
+    name: "DIRECT_DATABASE_URL",
+    type: "direct-postgres-url"
+  },
   {
     name: "REDIS_URL",
     type: "redis-url"
@@ -60,6 +70,26 @@ const requiredEnv = [
   {
     name: "SENTRY_AUTH_TOKEN",
     type: "text"
+  },
+  {
+    name: "VFURST_DB_CONNECTION_LIMIT",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_DB_POOL_TIMEOUT_SECONDS",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_DB_CONNECTION_BUDGET",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_WEB_REPLICAS",
+    type: "positive-integer"
+  },
+  {
+    name: "VFURST_WORKER_REPLICAS",
+    type: "positive-integer"
   },
   {
     name: "VFURST_API_RATE_LIMIT_PER_MINUTE",
@@ -254,6 +284,28 @@ function validateRedisUrl(name, value) {
   return null;
 }
 
+function validatePostgresUrl(name, value, direct = false) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if ((url.protocol !== "postgres:" && url.protocol !== "postgresql:") || !url.hostname) {
+      return `${name} must be a valid PostgreSQL URL.`;
+    }
+
+    if (direct && url.searchParams.get("pgbouncer")?.toLowerCase() === "true") {
+      return `${name} must bypass PgBouncer for schema and administrative commands.`;
+    }
+  } catch {
+    return `${name} must be a valid PostgreSQL URL.`;
+  }
+
+  return null;
+}
+
 function validatePositiveInteger(name, value) {
   if (!/^\d+$/.test(value) || Number(value) <= 0) {
     return `${name} must be a positive integer.`;
@@ -281,11 +333,49 @@ function validateRequiredEnv({ name, type }) {
     return validateRedisUrl(name, value);
   }
 
+  if (type === "postgres-url") {
+    return validatePostgresUrl(name, value);
+  }
+
+  if (type === "direct-postgres-url") {
+    return validatePostgresUrl(name, value, true);
+  }
+
   if (type === "positive-integer") {
     return validatePositiveInteger(name, value);
   }
 
   return validateTextEnv(name, value);
+}
+
+function checkDatabaseConnectionBudget(failures) {
+  const names = [
+    "VFURST_DB_CONNECTION_LIMIT",
+    "VFURST_DB_CONNECTION_BUDGET",
+    "VFURST_WEB_REPLICAS",
+    "VFURST_WORKER_REPLICAS"
+  ];
+
+  if (names.some((name) => validatePositiveInteger(name, process.env[name] ?? ""))) {
+    return;
+  }
+
+  const connectionLimit = Number(process.env.VFURST_DB_CONNECTION_LIMIT);
+  const budget = Number(process.env.VFURST_DB_CONNECTION_BUDGET);
+  const webReplicas = Number(process.env.VFURST_WEB_REPLICAS);
+  const workerReplicas = Number(process.env.VFURST_WORKER_REPLICAS);
+  const maximumDemand = connectionLimit * (webReplicas + workerReplicas);
+
+  if (maximumDemand <= budget) {
+    ok(
+      `Database pool demand is bounded at ${maximumDemand} connections (${webReplicas} web + ${workerReplicas} worker replicas) within the configured budget of ${budget}.`
+    );
+  } else {
+    fail(
+      failures,
+      `Database pool demand is ${maximumDemand} connections but VFURST_DB_CONNECTION_BUDGET is only ${budget}.`
+    );
+  }
 }
 
 async function readText(path) {
@@ -390,6 +480,8 @@ async function main() {
       ok(`${envConfig.name} is configured.`);
     }
   }
+
+  checkDatabaseConnectionBudget(failures);
 
   await checkBetaEvidence(failures);
 

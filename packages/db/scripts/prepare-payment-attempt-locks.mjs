@@ -1,10 +1,10 @@
-import { PrismaClient } from "@prisma/client";
 import { log } from "node:console";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { backfillPaymentAttemptLocks } from "./backfill-payment-attempt-locks.mjs";
+import { createAdminPrismaClient } from "./prisma-admin-client.mjs";
 
-const prisma = new PrismaClient();
+const prisma = createAdminPrismaClient();
 
 export async function preparePaymentAttemptLocks(client = prisma) {
   const [schemaState] = await client.$queryRaw`

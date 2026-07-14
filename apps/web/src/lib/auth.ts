@@ -1,9 +1,10 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@vfurst/db";
+import { prisma, type CurrencyCode, type OrganizationStatus } from "@vfurst/db";
 import bcrypt from "bcryptjs";
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
+import { cache } from "react";
 import { z } from "zod";
 
 const credentialsSchema = z.object({
@@ -19,14 +20,23 @@ declare module "next-auth" {
         orgId: string;
         orgSlug: string;
         orgName: string;
+        orgLogo: string | null;
+        orgStatus: OrganizationStatus;
         role: string;
+        events: Array<{
+          id: string;
+          name: string;
+          status: string;
+          startDate: string;
+          currency: CurrencyCode;
+        }>;
       }>;
       platformRole: "USER" | "PLATFORM_ADMIN";
     } & DefaultSession["user"];
   }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   adapter: PrismaAdapter(prisma),
   secret: process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "development" ? "vfurst-local-development-secret" : undefined),
   session: {
@@ -91,43 +101,65 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return session;
       }
 
-      const memberships = await prisma.orgMember.findMany({
-        where: {
-          userId: token.sub
-        },
-        include: {
-          org: {
-            select: {
-              id: true,
-              slug: true,
-              name: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: "asc"
-        }
-      });
-
       const user = await prisma.user.findUnique({
         where: {
           id: token.sub
         },
         select: {
-          platformRole: true
+          platformRole: true,
+          orgMemberships: {
+            orderBy: {
+              createdAt: "asc"
+            },
+            select: {
+              role: true,
+              org: {
+                select: {
+                  id: true,
+                  slug: true,
+                  name: true,
+                  logo: true,
+                  status: true,
+                  events: {
+                    orderBy: {
+                      startDate: "desc"
+                    },
+                    select: {
+                      id: true,
+                      name: true,
+                      status: true,
+                      startDate: true,
+                      currency: true
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       });
 
       session.user.id = token.sub;
       session.user.platformRole = user?.platformRole ?? "USER";
-      session.user.orgMemberships = memberships.map((membership) => ({
+      session.user.orgMemberships = (user?.orgMemberships ?? []).map((membership) => ({
         orgId: membership.org.id,
         orgSlug: membership.org.slug,
         orgName: membership.org.name,
-        role: membership.role
+        orgLogo: membership.org.logo,
+        orgStatus: membership.org.status,
+        role: membership.role,
+        events: membership.org.events.map((event) => ({
+          ...event,
+          startDate: event.startDate.toISOString()
+        }))
       }));
 
       return session;
     }
   }
 });
+
+export const handlers = nextAuth.handlers;
+export const signIn = nextAuth.signIn;
+export const signOut = nextAuth.signOut;
+export const auth = cache(nextAuth.auth);

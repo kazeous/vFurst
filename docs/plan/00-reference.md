@@ -110,7 +110,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | **Frontend** | Next.js 15 (App Router) | SSR, API routes, middleware, subdomain routing |
 | **UI Library** | shadcn/ui-style local components (`apps/web/src/components/ui`) | Editable, accessible React primitives owned by the app |
 | **Theme** | Operational Calm tokens in `apps/web/src/app/globals.css` | Light-only warm-canvas/teal system with responsive operational density and reduced-motion support |
-| **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation |
+| **Database** | PostgreSQL + Prisma ORM | Relational data, type-safe queries, row-level isolation, and bounded per-process connection pools |
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect + SePay VietQR | Connected card settlement plus central VND receipt, reconciliation, organizer ledger, and manual payout/refund records |
 | **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
@@ -140,7 +140,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 
 | Service | Image | Replaces (in production) | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:16` | Managed Postgres (e.g. Railway/Neon) | `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vfurst` |
+| `postgres` | `postgres:16` | Managed Postgres (e.g. Railway/Neon) | Runtime traffic uses `DATABASE_URL`; schema/backfill administration prefers `DIRECT_DATABASE_URL`. Prisma pools are bounded by `VFURST_DB_CONNECTION_LIMIT` and `VFURST_DB_POOL_TIMEOUT_SECONDS`. |
 | `redis` | `redis:7` | Railway Redis | Used by BullMQ (`apps/worker`) and the web app's shared Lua-backed rate limits exactly as in production — no code difference |
 | `minio` | `minio/minio` | AWS S3 | S3-API-compatible object storage. `apps/web/src/lib/s3.ts` must read `S3_ENDPOINT` from env — when set (e.g. `http://localhost:9000`), the AWS SDK v3 client points at MinIO instead of AWS; when unset, it defaults to real AWS S3. This is a config-only difference, not a code branch. |
 | `mailpit` | `axllent/mailpit` | AWS SES | A local SMTP catcher with a web UI (`http://localhost:8025`) to view sent emails. Configure the dev org's email provider as SMTP pointing at `localhost:1025` — this uses the SMTP provider path that's already in the plan (`packages/email/src/providers/smtp.ts`), so no email-provider code is local-only special-cased. |
@@ -148,6 +148,14 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 **Stripe** has no local emulator — use test mode and the Stripe CLI webhook forwarder. **SePay** is validated with its Sandbox, HMAC-signed webhooks, and API v2 reconciliation. Provider credentials and the checkout-token secret stay in environment variables; non-secret bank and fee settings live in the platform payment configuration.
 
 **Migration path to cloud (post-Phase 7):** swapping to production infrastructure should be an environment-variable change, not a code change — `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` (removed to fall back to real AWS), and the org's email provider (switched from SMTP to SES) are the only things that differ. If a phase's implementation ever requires code branching on "are we local or cloud," that's a signal the abstraction is leaking and worth flagging in `PROGRESS.md` rather than working around silently.
+
+---
+
+## Database Connection Contract
+
+`DATABASE_URL` is the runtime endpoint and may point at a PgBouncer-compatible pooler. `DIRECT_DATABASE_URL` must bypass transaction pooling for Prisma schema synchronization and administrative backfills. Every web/worker process applies the same positive `VFURST_DB_CONNECTION_LIMIT` and `VFURST_DB_POOL_TIMEOUT_SECONDS`; deployment readiness verifies `(VFURST_WEB_REPLICAS + VFURST_WORKER_REPLICAS) x VFURST_DB_CONNECTION_LIMIT <= VFURST_DB_CONNECTION_BUDGET`.
+
+The launch-sized local default is six web replicas, one worker, and four Prisma connections per process (28 steady-state application connections). The application budget remains 80 against 97 usable local Postgres slots so rollout, administration, and reserved connections retain headroom. Cloud migration must configure both runtime and direct database URLs; it must not require a code branch.
 
 ---
 

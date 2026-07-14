@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import process from "node:process";
+import { PrismaClient } from "@prisma/client";
 
 const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
@@ -21,11 +22,25 @@ function isEnabled(value) {
   return ["1", "true", "yes"].includes(String(value ?? "").toLowerCase());
 }
 
+function positiveInteger(name, value, fallback) {
+  const normalized = String(value ?? fallback ?? "").trim();
+
+  if (!/^\d+$/.test(normalized) || Number(normalized) < 1 || !Number.isSafeInteger(Number(normalized))) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+
+  return Number(normalized);
+}
+
 function readConfig() {
   const serverHost = process.env.VFURST_LOAD_SERVER_HOST ?? "0.0.0.0";
   const appHost = process.env.VFURST_LOAD_APP_HOST ?? (serverHost === "0.0.0.0" ? "127.0.0.1" : serverHost);
   const port = process.env.VFURST_LOAD_SERVER_PORT ?? "3000";
-  const serverReplicas = Math.max(1, Number(process.env.VFURST_LOAD_SERVER_REPLICAS ?? "16"));
+  const serverReplicas = positiveInteger(
+    "VFURST_LOAD_SERVER_REPLICAS",
+    process.env.VFURST_LOAD_SERVER_REPLICAS ?? process.env.VFURST_WEB_REPLICAS,
+    "6"
+  );
   const slug = process.env.VFURST_LOAD_ORG_SLUG ?? `load-full-${Date.now()}`;
 
   return {
@@ -88,27 +103,78 @@ async function loadDotEnv(path) {
 }
 
 function applyDatabaseConnectionLimit() {
-  const limit = process.env.VFURST_LOAD_DB_CONNECTION_LIMIT ?? "";
+  const limit = positiveInteger(
+    "VFURST_LOAD_DB_CONNECTION_LIMIT",
+    process.env.VFURST_LOAD_DB_CONNECTION_LIMIT ?? process.env.VFURST_DB_CONNECTION_LIMIT,
+    "4"
+  );
+  const poolTimeout = positiveInteger(
+    "VFURST_LOAD_DB_POOL_TIMEOUT",
+    process.env.VFURST_LOAD_DB_POOL_TIMEOUT ?? process.env.VFURST_DB_POOL_TIMEOUT_SECONDS,
+    "20"
+  );
+  const budget = positiveInteger("VFURST_DB_CONNECTION_BUDGET", process.env.VFURST_DB_CONNECTION_BUDGET, "80");
 
-  if (!limit || !process.env.DATABASE_URL) {
-    return;
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required for the launch load proof.");
   }
 
   const url = new URL(process.env.DATABASE_URL);
 
   if (!["postgres:", "postgresql:"].includes(url.protocol)) {
-    return;
+    throw new Error("DATABASE_URL must use the postgres: or postgresql: protocol.");
   }
 
-  if (!url.searchParams.has("connection_limit")) {
-    url.searchParams.set("connection_limit", limit);
-  }
-
-  if (!url.searchParams.has("pool_timeout")) {
-    url.searchParams.set("pool_timeout", process.env.VFURST_LOAD_DB_POOL_TIMEOUT ?? "20");
-  }
+  url.searchParams.set("connection_limit", String(limit));
+  url.searchParams.set("pool_timeout", String(poolTimeout));
 
   process.env.DATABASE_URL = url.toString();
+  process.env.VFURST_DB_CONNECTION_LIMIT = String(limit);
+  process.env.VFURST_DB_POOL_TIMEOUT_SECONDS = String(poolTimeout);
+
+  const maximumWebDemand = config.serverReplicas * limit;
+
+  if (maximumWebDemand > budget) {
+    throw new Error(
+      `The load topology can open ${maximumWebDemand} Prisma connections, exceeding VFURST_DB_CONNECTION_BUDGET=${budget}.`
+    );
+  }
+
+  return { budget, limit, maximumWebDemand, poolTimeout };
+}
+
+async function inspectDatabaseCapacity(policy) {
+  const datasourceUrl = process.env.DIRECT_DATABASE_URL?.trim() || process.env.DATABASE_URL;
+  const prisma = new PrismaClient({ datasourceUrl });
+
+  try {
+    const [capacity] = await prisma.$queryRawUnsafe(`
+      SELECT
+        current_setting('max_connections')::integer AS "maxConnections",
+        current_setting('superuser_reserved_connections')::integer AS "reservedConnections"
+    `);
+    const maxConnections = Number(capacity?.maxConnections);
+    const reservedConnections = Number(capacity?.reservedConnections);
+    const usableConnections = maxConnections - reservedConnections;
+
+    if (!Number.isSafeInteger(usableConnections) || usableConnections < 1) {
+      throw new Error("PostgreSQL returned an invalid connection capacity.");
+    }
+
+    if (policy.budget > usableConnections) {
+      throw new Error(
+        `VFURST_DB_CONNECTION_BUDGET=${policy.budget} exceeds PostgreSQL usable capacity ${usableConnections}.`
+      );
+    }
+
+    console.log(
+      `Database capacity: ${maxConnections} max - ${reservedConnections} reserved = ${usableConnections} usable; ` +
+        `${config.serverReplicas} web replicas x ${policy.limit} connections = ${policy.maximumWebDemand} ` +
+        `within application budget ${policy.budget}; pool timeout ${policy.poolTimeout}s.`
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 function run(command, args, options = {}) {
@@ -360,7 +426,8 @@ async function main() {
   await loadDotEnv(".env.local");
   config = readConfig();
   process.env.NODE_ENV = "production";
-  applyDatabaseConnectionLimit();
+  const databasePolicy = applyDatabaseConnectionLimit();
+  await inspectDatabaseCapacity(databasePolicy);
 
   if (!config.skipBuild) {
     const build = await run(process.execPath, [nextBin, "build"], { cwd: webRoot });

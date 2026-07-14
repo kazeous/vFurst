@@ -2,13 +2,18 @@ import { auth } from "@/lib/auth";
 import { prisma, type OrgRole } from "@vfurst/db";
 import { notFound, redirect } from "next/navigation";
 
-export async function requireDashboardUser() {
+export async function requireDashboardSession() {
   const session = await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
   }
 
+  return session;
+}
+
+export async function requireDashboardUser() {
+  const session = await requireDashboardSession();
   return session.user.id;
 }
 
@@ -1077,21 +1082,30 @@ export async function requireVendorApplicationAccess(
 }
 
 export async function requireEventPageAccess(eventId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
-  const userId = await requireDashboardUser();
-  const event = await getEventTenant(eventId);
+  const session = await requireDashboardSession();
+  const membership = session.user.orgMemberships.find(
+    (candidate) =>
+      allowedRoles.includes(candidate.role as OrgRole) && candidate.events.some((event) => event.id === eventId)
+  );
 
-  if (!event) {
+  if (!membership) {
     notFound();
   }
 
-  const membership = await getOrgMembership(userId, event.orgId);
+  const sessionEvent = membership.events.find((event) => event.id === eventId);
 
-  if (!hasAllowedOrgRole(membership, allowedRoles, { allowInactive: true })) {
+  if (!sessionEvent) {
     notFound();
   }
+
+  const event = {
+    id: sessionEvent.id,
+    orgId: membership.orgId,
+    currency: sessionEvent.currency
+  };
 
   return {
-    userId,
+    userId: session.user.id,
     membership,
     event
   };

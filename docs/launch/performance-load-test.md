@@ -21,7 +21,8 @@ The launch proof runner:
 - Builds the web app unless `VFURST_SKIP_BUILD=1` is set.
 - Seeds 1500 confirmed registrations unless `VFURST_LOAD_SEED_REGISTRATIONS` is set.
 - Starts a temporary local production Next launch stack unless `VFURST_SKIP_LOCAL_SERVER=1` is set.
-- Uses `VFURST_LOAD_SERVER_REPLICAS=16` by default, fronted by a local round-robin proxy, to approximate a horizontally scaled launch deployment.
+- Uses the configured `VFURST_WEB_REPLICAS` (six by default) behind a local round-robin proxy. Replica sizing is part of the measured launch topology, not an unlimited scale-up knob on one host.
+- Applies the Prisma runtime pool policy, verifies replica demand stays within `VFURST_DB_CONNECTION_BUDGET`, and queries Postgres capacity through `DIRECT_DATABASE_URL` before build/seed work begins.
 - Runs the full k6 profile with 500 registration VUs and 50 check-in VUs.
 - Stops the temporary production server before exiting.
 
@@ -62,10 +63,12 @@ VFURST_STAFF_PASSWORD=LoadPass123!
 VFURST_HOST_HEADER=localhost:3000
 VFURST_REGISTRATION_VUS=500
 VFURST_CHECKIN_VUS=50
-VFURST_LOAD_SERVER_REPLICAS=16
+VFURST_LOAD_SERVER_REPLICAS=6
 VFURST_LOAD_PROFILE=full
 VFURST_LOAD_SEED_REGISTRATIONS=1500
-VFURST_LOAD_DB_CONNECTION_LIMIT=
+VFURST_LOAD_DB_CONNECTION_LIMIT=4
+VFURST_LOAD_DB_POOL_TIMEOUT=20
+VFURST_DB_CONNECTION_BUDGET=80
 VFURST_SKIP_BUILD=1
 VFURST_SKIP_LOCAL_SERVER=1
 ```
@@ -81,7 +84,8 @@ VFURST_SKIP_LOCAL_SERVER=1
 
 - Event lookup by organization, publication status, and start date.
 - Cached public registration page data with filtered tier registration counts instead of loading attendee rows for capacity checks.
-- Bounded staff check-in page data with server-side search and short-lived cache revalidation.
+- Bounded staff check-in data with server-side search: the page loads at most 25 matching rows, with short-lived cache revalidation and action-driven path invalidation.
+- Request-local Auth.js memoization plus one user/membership/workspace/event snapshot removes duplicate dashboard/event authorization reads without caching authorization across requests.
 - Registration lookup by event/status, event/creation time, event/check-in time, and tier/status.
 - Order reporting lookup by event/status/creation time and organization/status/creation time.
 - Volunteer and vendor review lookup by event/status.
@@ -115,7 +119,14 @@ VFURST_SKIP_LOCAL_SERVER=1
   - 114,049/217,057 checks passed (52.54%)
   - Server evidence repeatedly reports Prisma `P2037` / Postgres `FATAL: sorry, too many clients already`. The local 16-replica topology exhausts the database connection budget before it reaches the response-time target.
   - This is a database connection-pooling/capacity blocker, not a Redis rate-limit rejection: the high-volume public registration path is not rate-limited, and the independent real-Redis multi-client regression proves the shared counter contract.
+- The July 14 connection-capacity remediation adds one production Prisma singleton per process, a default four-connection pool with a 20-second pool timeout, a direct administrative datasource, and replica/budget/Postgres-capacity preflight. A diagnostic 16-replica/pool-4 run completed 87,437 requests with 0.00% HTTP failures and 174,871/174,871 checks; no `P2037` remained, but p95 was 3.16s on the local host.
+- Replica/pool diagnostics and critical read paths were then tested without lowering the 500/50 VU or 1.5-second gate. The latest full diagnostic on July 14 used 1,500 seeded registrations, six web replicas, pool limit 2, pool timeout 20 seconds, and Docker-backed k6. Pool 2 was not retained because the concurrent E2E suite exposed unacceptable queuing; the supported launch default remains pool 4:
+  - Postgres capacity preflight: 100 max - 3 reserved = 97 usable; 12 maximum web connections within application budget 80.
+  - 0.00% `http_req_failed` across 123,831 HTTP requests; no Prisma `P2037` or replica failure.
+  - 247,659/247,659 checks passed.
+  - Registration p95 1.52s; check-in p95 2.49s; overall p95 1.58s.
+  - The connection-exhaustion blocker is closed, but the full launch latency threshold remains failed by 80ms.
 
 ## Remaining proof
 
-The Phase 7 target run has not passed yet after the latest material critical-path change. Bound or pool Prisma connections for the 16-replica topology, rerun the 500-registration/50-check-in proof, and replace this failed result only with a new threshold-passing report. The July 8 result remains a historical baseline, not current launch evidence.
+The Phase 7 target run has not passed yet after the latest material critical-path change. Prisma connection growth is now bounded and the former `P2037`/HTTP-error failure mode is gone. The next performance unit must reduce registration/check-in tail latency enough for a fresh 500-registration/50-check-in full run to meet p95 under 1.5 seconds; do not weaken the threshold or restore a pass claim from the historical July 8 baseline.

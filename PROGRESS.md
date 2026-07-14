@@ -25,11 +25,36 @@ Phase 0 is complete under the updated local-development directive:
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources now use stored-resource authorization, public applications are portal/event-bound, vendor uploads are constrained, and VND booth inputs are corrected with cross-tenant regression coverage. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
 | 6 - SaaS Layer | Audit reopened | API-key/outbound-webhook security, tenant lifecycle, custom-domain activation, global payment operations, currency-separated fee reporting, and shared Redis rate limits now use their intended tenant/control-plane boundaries. Remaining standalone Phase 6 completion evidence has not been rerun. |
-| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, the 42-model lifecycle/backfill, invitations, lifecycle enforcement, domain/payment/acquisition boundaries, `/platform` separation, mixed-currency reporting, payment-attempt serialization, and shared production rate limiting pass the full 79-test E2E suite plus repository checks. The latest 16-replica load rerun is blocked by database connection exhaustion; external beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains open. |
+| 7 - Launch | Blocked | Managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/control-plane separation, payment safety, shared rate limits, and bounded Prisma pools have automated evidence. The former load-test connection exhaustion is closed, but the latest 500/50 full run still misses the latency gate at p95 1.58s; external beta/live/Sentry/SePay Sandbox/screen-reader evidence also remains open. |
 
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-14 - Phase 7, bound Prisma connections and rerun the 500/50 proof
+- Added a production database connection contract:
+  - One Prisma singleton is reused per process in every environment. Runtime URLs receive a validated `connection_limit` and `pool_timeout`; the launch default is four connections per process and a 20-second timeout.
+  - Added `DIRECT_DATABASE_URL` for schema/backfill administration and routed the existing managed-tenancy/payment-lock scripts through it while retaining `DATABASE_URL` fallback for local compatibility.
+  - Launch readiness now validates runtime/direct Postgres URLs, rejects a pooler-marked direct URL, and verifies `(web + worker) x connection limit` stays within the configured application budget. The load runner also checks the budget against live Postgres max/reserved capacity before build or seed.
+  - Local Postgres explicitly advertises `max_connections=100`; the measured usable capacity is 97. The steady launch default is six web replicas plus one worker x pool 4 = 28 application connections, within budget 80.
+- Removed load-path waste without weakening authorization or the load target:
+  - Public convention shell and registration reads use 15-second cached public projections.
+  - Auth.js is memoized only within a request. Its current-user query now includes membership/workspace/event data once, so dashboard and event layouts reuse the same fresh authorization snapshot instead of querying it again.
+  - Check-in loads at most 25 rows and supports server-filtered search; check-in mutations already invalidate the affected paths.
+  - The load script records per-flow duration trends while retaining the original overall p95 <1.5s, checks >99%, and HTTP errors <1% gates.
+- Load evidence:
+  - The first bounded 16-replica/pool-4 full run completed 87,437 requests with 0.00% HTTP failures and 174,871/174,871 checks; Prisma `P2037` was eliminated, while p95 remained 3.16s.
+  - Topology diagnostics found six replicas to be the best local host sizing; 4, 8, and 16 processes produced lower throughput or worse tail latency on the 8-core/16-thread proof host.
+  - The latest full diagnostic used 1,500 registrations, 500 registration VUs, 50 check-in VUs, six replicas, pool 2, and a 20-second timeout. It completed 123,831 HTTP requests with 0.00% failures and 247,659/247,659 checks. Registration p95 was 1.52s, check-in p95 2.49s, and overall p95 1.58s. Pool 2 was not retained: the concurrent E2E suite exposed unacceptable request queuing, so the supported default remains pool 4.
+  - Connection exhaustion is therefore remediated and capacity-proofed. The launch load gate remains failed solely on the unchanged p95 <1.5s latency threshold; no pass claim was restored.
+- Verified:
+  - Root tests passed 88/88 web, 21/21 worker, 12/12 database, and 1/1 email tests. Repository type-check, lint, Prisma validation, production build, and `npm audit --audit-level=moderate` (0 vulnerabilities) passed.
+  - Focused production-mode check-in/accessibility E2E passed 2/2 after retaining the bounded 25-row list. Full production-mode Chromium E2E passed 79/79 with four workers; expected server logs record deliberately rejected cross-tenant and validation attempts.
+  - Launch readiness accepts both Postgres URLs and reports bounded database demand of 28 connections (six web + one worker, pool 4) within budget 80. It correctly remains failed on 11 gates: seven local Stripe/Sentry values, two externally verified beta conventions, the full latency proof, physical screen-reader proof, and a live launch URL.
+- Remaining issues / blockers:
+  - Do not deploy. Reduce registration/check-in tail latency by at least 80ms on a repeatable production-like stack and rerun the exact 500/50 full proof. External beta/live/Sentry/SePay Sandbox/screen-reader evidence, recipient transfer acceptance, badge image rendering, and physical printer proof also remain open.
+- Next session should:
+  - Treat tail latency as the next separately reviewable performance unit. Profile server CPU/render time and production proxy/host contention with per-flow trends, optimize the measured cause, and require a fresh full threshold-passing run before changing load evidence to passed.
 
 ### 2026-07-14 - Phase 7, share production rate limits across replicas
 - Replaced process-local safety counters with one production Redis contract:

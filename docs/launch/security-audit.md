@@ -6,7 +6,7 @@ Last repository remediation update: July 14, 2026
 
 ## Status
 
-**Public launch remains blocked.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, and shared production rate limiting. External launch evidence remains open. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
+**Public launch remains blocked.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, and unbounded Prisma connection growth. The latest full load proof has 0% HTTP failures but still misses the p95 latency target. External launch evidence also remains open. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
 
 ## Scope
 
@@ -24,7 +24,7 @@ Last repository remediation update: July 14, 2026
 | Cryptographic failures | Pass for implemented inbound providers | SePay fails closed on HMAC/timestamp validation. Stripe now rejects missing/placeholder signing configuration with `503`, rejects missing/invalid/stale signatures with `400`, and parses only the exact raw body returned by the Stripe SDK verifier. |
 | Injection | No SQL/CSV injection finding in current scope | Database access uses Prisma query builders. Shared CSV serialization neutralizes spreadsheet formulas in user-controlled strings and escapes quoted content. |
 | Insecure design | Remediated against the current payment inventory | Currency-separated reporting, currency-aware editors/cashier collection, and one schema-backed authoritative payment attempt per order are covered by mixed-currency, concurrent-start, provider-lock, stale-callback, exception-review, and replay regressions. |
-| Security misconfiguration | Repository control remediated; external configuration remains | Launch readiness rejects placeholder Stripe signing configuration, requires a valid shared `REDIS_URL`, and validates every production rate-limit quota as a positive integer. SePay/checkout secrets remain explicit manual go-live gates. |
+| Security misconfiguration | Repository control remediated; external configuration remains | Launch readiness rejects placeholder Stripe signing configuration; requires runtime/direct Postgres URLs, positive pool limits/timeouts, and a replica-aware connection budget; requires a valid shared `REDIS_URL`; and validates every production rate-limit quota as a positive integer. SePay/checkout secrets remain explicit manual go-live gates. |
 | Vulnerable components | Clean | `npm audit --audit-level=moderate` reports 0 vulnerabilities on July 14, 2026. |
 | Identification/auth failures | Pass for the current managed-tenant scope | Auth.js credentials validation, organizer authorization, email-bound single-use invitation onboarding, platform-only lifecycle transitions, and suspension/retirement enforcement are covered by persona and lifecycle regressions. |
 | Software/data integrity failures | Pass for current webhook paths | Outbound webhooks use per-endpoint HMAC, stable delivery IDs, tenant-bound endpoint loading, and public-target enforcement. SePay and Stripe inbound callbacks are signed and idempotent. |
@@ -55,6 +55,7 @@ Card data remains hosted by Stripe Checkout and is not stored by vFurst. The SAQ
 7. **Done:** serialize attempt reservation, provider lock, settlement, exception review, expiry, and replay through one schema-backed active-attempt invariant.
 8. **Done:** constrain store/vendor uploads before reading them into memory.
 9. **Done for shared rate limiting:** replace process-local counters with atomic Redis counters, define route-family failure policy, and add multi-instance/TTL regressions.
-10. Rerun type-check, lint, unit, Prisma, build, dependency, E2E, security, and approved load gates.
+10. **Done for connection exhaustion:** one Prisma singleton per process, bounded runtime pools, a direct administrative datasource, replica/budget/capacity readiness checks, and a zero-error 500/50 rerun replace the previous `P2037` failure mode.
+11. Rerun type-check, lint, unit, Prisma, build, dependency, E2E, security, and approved load gates; the full load p95 latency gate remains open.
 
 The repository rate-limit finding is closed. Public launch remains blocked until external monitoring and the remaining full launch-proof items are completed and the audit is repeated against the deployed environment.

@@ -10,7 +10,7 @@ npm run check:launch
 The checker verifies:
 
 - Marketing, legal, E2E, load-test, and launch audit artifacts exist.
-- Stripe secret-key and webhook-signing environment variables, Sentry production variables, a valid shared Redis URL, and positive rate-limit quotas are configured.
+- Stripe secret-key and webhook-signing environment variables, Sentry production variables, valid runtime/direct Postgres URLs, a bounded database connection budget, a valid shared Redis URL, and positive rate-limit quotas are configured.
 - At least two beta-program slots name real conventions and use `Externally verified` status.
 - Security audit no longer records any blocking application or dependency finding.
 - Full k6 target run is documented as passed.
@@ -36,6 +36,13 @@ NEXT_PUBLIC_ROOT_DOMAIN=your-production-domain.example
 AUTH_URL=https://your-production-domain.example
 AUTH_TRUST_HOST=true
 AUTH_SECRET=...
+DATABASE_URL=postgresql://runtime-user:...@pooler.example:5432/vfurst?pgbouncer=true
+DIRECT_DATABASE_URL=postgresql://admin-user:...@database.example:5432/vfurst
+VFURST_DB_CONNECTION_LIMIT=4
+VFURST_DB_POOL_TIMEOUT_SECONDS=20
+VFURST_DB_CONNECTION_BUDGET=80
+VFURST_WEB_REPLICAS=6
+VFURST_WORKER_REPLICAS=1
 REDIS_URL=rediss://your-managed-redis.example:6379
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
@@ -70,7 +77,9 @@ npx prisma db push
 npm run backfill:managed-tenancy
 ```
 
-The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The idempotent backfill marks only legacy organizations with a null lifecycle marker as `ACTIVE`, preserves already-routed custom domains, and leaves explicitly provisioned tenants in `PROVISIONING`. The production database role therefore needs schema DDL and data-update permission. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
+The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The idempotent backfill marks only legacy organizations with a null lifecycle marker as `ACTIVE`, preserves already-routed custom domains, and leaves explicitly provisioned tenants in `PROVISIONING`. Administrative scripts prefer `DIRECT_DATABASE_URL`; it must be a direct Postgres endpoint without `pgbouncer=true` and its role needs schema DDL/data-update permission. Runtime web/worker traffic uses `DATABASE_URL`, which may be pooler-backed. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
+
+Each process owns one Prisma client and a bounded pool. Before changing replica count or pool size, verify `(web replicas + worker replicas) x per-process connection limit` stays within `VFURST_DB_CONNECTION_BUDGET`, that the budget stays below Postgres usable capacity after reserved/admin slots, and that rolling-deploy overlap retains headroom. The launch runner performs the same capacity preflight before it builds or seeds.
 
 Sentry sample rates remain optional tuning values. Shared fixed-window quotas for Auth.js, public API keys, payment/refund actions, Stripe webhooks, and SePay webhooks are mandatory production values and are validated by the checker together with `REDIS_URL`. All web replicas must use the same Redis deployment and rate-limit prefix. Auth/API/payment controls intentionally fail closed if Redis is unavailable; signed and idempotent Stripe/SePay callbacks fail open while logging degraded protection so settlement is preserved. Blank or placeholder launch values are not sufficient. SePay and checkout secrets above still require an explicit manual go-live check; SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
 
@@ -78,4 +87,4 @@ Sentry source map upload is best-effort during `next build`: upload failures are
 
 If Coolify logs show Turbo/Next completing successfully and then fail at Docker `exporting layers`, treat it as a Docker image export or host-resource failure rather than an application compile failure. First confirm the log contains `Tasks: 3 successful, 3 total` and `#16 exporting layers`; then prune unused Docker images/build cache or add disk to the Coolify host before retrying. The repo includes `.dockerignore` to keep local caches, `.git`, build artifacts, generated service workers, logs, and environment files out of the Docker context.
 
-Current result on July 14, 2026: managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/invitation onboarding, domain/payment/acquisition surface separation, currency-safe reporting, payment-attempt serialization, and shared production rate limiting pass the current automated suite. The latest 16-replica full load rerun fails because the local topology exhausts Postgres connections, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remains incomplete. Do not deploy until those gates are remediated and the full-system audit is rerun.
+Current result on July 14, 2026: managed containment, resource-derived authorization, fail-closed callbacks, lifecycle/invitation onboarding, domain/payment/acquisition surface separation, currency-safe reporting, payment-attempt serialization, shared production rate limiting, and bounded Prisma pools pass their focused automated evidence. Connection exhaustion is no longer reproduced: the latest 500/50 full run completed 123,831 requests with 0.00% HTTP failures and no Prisma `P2037`. It still fails the launch latency gate at p95 1.58s versus the required 1.5s, and external beta/live/Sentry/SePay Sandbox/screen-reader evidence remains incomplete. Do not deploy until those gates are remediated and the full-system audit is rerun.

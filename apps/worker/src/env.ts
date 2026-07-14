@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const requiredWorkerRuntimeVariables = [
   "DATABASE_URL",
+  "VFURST_DB_CONNECTION_LIMIT",
+  "VFURST_DB_POOL_TIMEOUT_SECONDS",
   "REDIS_URL",
   "AWS_REGION",
   "AWS_ACCESS_KEY_ID",
@@ -74,6 +76,13 @@ function optionalPort(name: string) {
   );
 }
 
+function requiredPositiveInteger(name: string) {
+  return z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int(`${name} must be an integer.`).min(1, `${name} must be positive.`)
+  );
+}
+
 function optionalBoolean(name: string) {
   return z.preprocess((value) => {
     if (typeof value !== "string") {
@@ -105,6 +114,8 @@ const envSchema = z
     AWS_SECRET_ACCESS_KEY: requiredText("AWS_SECRET_ACCESS_KEY"),
     AWS_SESSION_TOKEN: optionalText(),
     DATABASE_URL: requiredUrl("DATABASE_URL", ["postgres:", "postgresql:"]),
+    VFURST_DB_CONNECTION_LIMIT: requiredPositiveInteger("VFURST_DB_CONNECTION_LIMIT"),
+    VFURST_DB_POOL_TIMEOUT_SECONDS: requiredPositiveInteger("VFURST_DB_POOL_TIMEOUT_SECONDS"),
     REDIS_URL: requiredUrl("REDIS_URL", ["redis:", "rediss:"]),
     S3_BUCKET_NAME: requiredText("S3_BUCKET_NAME"),
     S3_ENDPOINT: optionalUrl("S3_ENDPOINT"),

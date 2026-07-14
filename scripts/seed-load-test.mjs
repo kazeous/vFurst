@@ -57,6 +57,9 @@ async function main() {
       name: "Load Test Convention",
       slug,
       subdomain: slug,
+      status: "ACTIVE",
+      statusUpdatedAt: new Date(),
+      statusUpdatedById: admin.id,
       contactEmail: "load@example.com",
       members: {
         create: {

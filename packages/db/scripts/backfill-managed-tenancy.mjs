@@ -1,9 +1,9 @@
-import { PrismaClient } from "@prisma/client";
 import { log } from "node:console";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { createAdminPrismaClient } from "./prisma-admin-client.mjs";
 
-const prisma = new PrismaClient();
+const prisma = createAdminPrismaClient();
 
 export async function backfillManagedTenancy(client = prisma) {
   const activatedOrganizations = await client.$executeRaw`
