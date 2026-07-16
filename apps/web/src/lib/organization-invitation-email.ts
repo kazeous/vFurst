@@ -8,6 +8,7 @@ function invitationUrl(token: string) {
 
 export async function deliverOrganizationInvitation(input: {
   org: {
+    id: string;
     contactEmail: string;
     emailProvider: EmailProviderType;
     emailSettings: Prisma.JsonValue;

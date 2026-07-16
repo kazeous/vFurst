@@ -3,6 +3,7 @@ import { createSmtpProvider } from "./providers/smtp.js";
 import { passwordResetTemplate } from "./templates/password-reset.js";
 import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation.js";
 import { organizationInvitationTemplate } from "./templates/organization-invitation.js";
+import { paymentReceiptTemplate } from "./templates/payment-receipt.js";
 import { registrationConfirmationTemplate } from "./templates/registration-confirmation.js";
 import { registrationTransferTemplate } from "./templates/registration-transfer.js";
 import { staffMessageTemplate } from "./templates/staff-message.js";
@@ -11,8 +12,20 @@ import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-appl
 import { volunteerShiftAssignmentTemplate } from "./templates/volunteer-shift-assignment.js";
 import { welcomeTemplate } from "./templates/welcome.js";
 import type { EmailProviderConfig, EmailTemplateName } from "./types.js";
+import { renderCustomEmailTemplate, type EventEmailTemplateOverride } from "./custom.js";
 
 export type { EmailDelivery, EmailMessage, EmailProvider, EmailProviderConfig, EmailTemplateName } from "./types.js";
+export {
+  allowedEventEmailTokens,
+  eventEmailTemplateKeyForName,
+  eventEmailTemplateKeys,
+  getEventEmailTemplate,
+  parseEventEmailTemplate,
+  renderCustomEmailTemplate,
+  type EventEmailTemplate,
+  type EventEmailTemplateKey,
+  type EventEmailTemplateOverride
+} from "./custom.js";
 
 export function createEmailProvider(config: EmailProviderConfig) {
   if (config.type === "SES") {
@@ -32,6 +45,12 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
       return registrationConfirmationTemplate({
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",
         attendeeName: typeof data.attendeeName === "string" ? data.attendeeName : null
+      });
+    case "payment-receipt":
+      return paymentReceiptTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        attendeeName: typeof data.attendeeName === "string" ? data.attendeeName : null,
+        total: typeof data.orderTotal === "string" ? data.orderTotal : typeof data.total === "string" ? data.total : "your payment"
       });
     case "hotel-booking-confirmation":
       return hotelBookingConfirmationTemplate({
@@ -91,10 +110,13 @@ export async function sendEmail(
   providerConfig: EmailProviderConfig,
   to: string,
   template: EmailTemplateName,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  customTemplate?: EventEmailTemplateOverride
 ) {
   const provider = createEmailProvider(providerConfig);
-  const rendered = renderEmailTemplate(template, data);
+  const rendered = customTemplate
+    ? renderCustomEmailTemplate(customTemplate.key, customTemplate.template, data)
+    : renderEmailTemplate(template, data);
 
   return provider.send({
     to,

@@ -3,13 +3,14 @@ import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
+import { allowedEventEmailTokens, renderCustomEmailTemplate, type EventEmailTemplateKey } from "@vfurst/email";
 
 export const dynamic = "force-dynamic";
 
 const templateOptions = [
   { key: "registration-confirmation", label: "Registration confirmation" },
   { key: "payment-receipt", label: "Payment receipt" },
-  { key: "volunteer-approval", label: "Volunteer approval" },
+  { key: "volunteer-approval", label: "Volunteer decision" },
   { key: "vendor-status", label: "Vendor status" },
   { key: "transfer-request", label: "Transfer request" }
 ] as const;
@@ -22,23 +23,23 @@ const defaultTemplates = {
   },
   "payment-receipt": {
     subject: "Receipt for {{event.name}}",
-    html: "<p>We received your payment of {{order.total}} for {{event.name}}.</p>",
-    text: "We received your payment of {{order.total}} for {{event.name}}."
+    html: "<p>We received your payment of {{order.total}} {{order.currency}} for {{event.name}}.</p>",
+    text: "We received your payment of {{order.total}} {{order.currency}} for {{event.name}}."
   },
   "volunteer-approval": {
-    subject: "Volunteer application approved",
-    html: "<p>{{attendee.name}}, you were approved to volunteer at {{event.name}}.</p>",
-    text: "{{attendee.name}}, you were approved to volunteer at {{event.name}}."
+    subject: "Volunteer application {{volunteer.status}}",
+    html: "<p>{{attendee.name}}, your volunteer application for {{event.name}} is {{volunteer.status}}.</p><p>{{volunteer.reason}}</p>",
+    text: "{{attendee.name}}, your volunteer application for {{event.name}} is {{volunteer.status}}.\n\n{{volunteer.reason}}"
   },
   "vendor-status": {
     subject: "Vendor application update",
-    html: "<p>Your vendor application for {{event.name}} is {{vendor.status}}.</p>",
-    text: "Your vendor application for {{event.name}} is {{vendor.status}}."
+    html: "<p>{{vendor.business}}'s vendor application for {{event.name}} is {{vendor.status}}.</p><p>{{vendor.note}}</p>",
+    text: "{{vendor.business}}'s vendor application for {{event.name}} is {{vendor.status}}.\n\n{{vendor.note}}"
   },
   "transfer-request": {
     subject: "Registration transfer request",
-    html: "<p>{{attendee.name}} wants to transfer a {{event.name}} registration to you.</p>",
-    text: "{{attendee.name}} wants to transfer a {{event.name}} registration to you."
+    html: "<p>{{transfer.source}} wants to transfer a {{event.name}} registration to you.</p><p><a href=\"{{transfer.url}}\">Review transfer request</a></p><p>This link expires {{transfer.expiresAt}}.</p>",
+    text: "{{transfer.source}} wants to transfer a {{event.name}} registration to you.\n\n{{transfer.url}}\n\nThis link expires {{transfer.expiresAt}}."
   }
 };
 
@@ -56,12 +57,24 @@ function emailTemplates(value: unknown) {
     : ({} as Partial<Record<TemplateKey, TemplateConfig>>);
 }
 
-function renderPreview(template: string, eventName: string) {
-  return template
-    .replaceAll("{{attendee.name}}", "Sam Rivera")
-    .replaceAll("{{event.name}}", eventName)
-    .replaceAll("{{order.total}}", "$75.00")
-    .replaceAll("{{vendor.status}}", "approved");
+function renderPreview(key: EventEmailTemplateKey, template: TemplateConfig, eventName: string) {
+  try {
+    return renderCustomEmailTemplate(key, template, {
+      attendeeName: "Sam Rivera",
+      eventName,
+      orderTotal: "$75.00",
+      orderCurrency: "USD",
+      status: "approved",
+      reason: "Thanks for applying.",
+      businessName: "Rivera Goods",
+      note: "Your next steps are listed in the portal.",
+      sourceName: "Alex Morgan",
+      transferUrl: "https://example.test/transfer/demo",
+      expiresAt: "tomorrow"
+    }).text;
+  } catch {
+    return "This template contains invalid variables and will use the built-in fallback when delivered.";
+  }
 }
 
 export default async function EmailSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -92,8 +105,8 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
       <section className="vf-section">
         <h2>Available variables</h2>
         <div className="vf-token-row">
-          {["{{attendee.name}}", "{{event.name}}", "{{order.total}}", "{{vendor.status}}"].map((token) => (
-            <code key={token}>{token}</code>
+          {[...new Set(templateOptions.flatMap((option) => allowedEventEmailTokens(option.key as EventEmailTemplateKey)))].map((token) => (
+            <code key={token}>{`{{${token}}}`}</code>
           ))}
         </div>
       </section>
@@ -101,6 +114,7 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
       <section className="vf-email-template-grid">
         {templateOptions.map((option) => {
           const template = templates[option.key] ?? defaultTemplates[option.key];
+          const key = option.key as EventEmailTemplateKey;
 
           return (
             <article key={option.key} className="vf-section">
@@ -124,7 +138,7 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
               </form>
               <div className="vf-preview">
                 <strong>Preview</strong>
-                <p>{renderPreview(template.text, event.name)}</p>
+                <p>{renderPreview(key, template, event.name)}</p>
               </div>
             </article>
           );

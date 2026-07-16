@@ -30,6 +30,7 @@ const defaultJobOptions: JobsOptions = {
 
 export type SendEmailJob = {
   orgId: string;
+  eventId?: string;
   to: string;
   template: EmailTemplateName;
   data: Record<string, unknown>;

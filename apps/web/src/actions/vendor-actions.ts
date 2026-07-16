@@ -268,7 +268,7 @@ export async function approveVendor(formData: FormData) {
     businessName: application.businessName,
     status: "APPROVED",
     note: "Your booth is approved. Please return to the vendor application page to complete booth payment after assignment."
-  });
+  }, application.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/vendors`);
   revalidatePath(`/dashboard/events/${event.id}/vendors/booths`);
@@ -303,17 +303,22 @@ export async function bulkReviewVendors(formData: FormData) {
     return;
   }
 
-  const applicationCount = await prisma.vendorApplication.count({
+  const applications = await prisma.vendorApplication.findMany({
     where: {
       id: {
         in: applicationIds
       },
       orgId: event.orgId,
       eventId: event.id
+    },
+    include: {
+      event: true,
+      org: true,
+      user: true
     }
   });
 
-  if (applicationCount !== applicationIds.length) {
+  if (applications.length !== applicationIds.length) {
     throw new Error("Every vendor application must belong to this event.");
   }
 
@@ -329,6 +334,15 @@ export async function bulkReviewVendors(formData: FormData) {
       status
     }
   });
+
+  for (const application of applications) {
+    await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+      eventName: application.event.name,
+      businessName: application.businessName,
+      status,
+      note: null
+    }, application.event.id);
+  }
 
   revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }
@@ -357,7 +371,7 @@ async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAIT
     businessName: application.businessName,
     status,
     note
-  });
+  }, application.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }

@@ -144,6 +144,14 @@ The focused `tests/e2e/raffle-contract.spec.ts` suite passes 2/2 for paid PURCHA
 3. Sanitize/escape variable values and test both HTML and plain-text rendering.
 4. Add end-to-end tests for registration confirmation, payment receipt, volunteer decision, vendor decision, and transfer request.
 
+#### Implementation update (2026-07-16)
+
+Implemented. The shared email package now owns the five event-template keys, per-message variable allowlists, stored-template validation, HTML-value escaping, plain-text substitution, subject control-character removal, and HTTP(S)-only transfer URL rendering. Invalid legacy/manual JSON fails closed to the existing built-in template; events without an override continue using the built-in renderer. A built-in `payment-receipt` template and paid-order delivery path were added, with settlement idempotency ensuring it is sent only on the first transition to `PAID`.
+
+Both direct web delivery and the BullMQ email worker now load `Event.settings.emailTemplates` through an `eventId + orgId` scoped query before rendering. Registration confirmations, payment receipts, volunteer approvals/rejections (including bulk decisions), vendor decisions (including bulk decisions), and transfer requests pass their stored event context; unrelated organization/platform messages remain built-in-only. The settings action rejects variables outside the allowlist, and the dashboard lists the complete token set and renders previews through the same production renderer.
+
+`tests/e2e/custom-email-delivery.spec.ts` passes 3/3 through SMTP/Mailpit and proves all five required message families use saved subjects, HTML, and plain text with escaped untrusted values and a safe transfer URL. Package tests cover allowlists, invalid-setting fallback, subject sanitization, HTML/text behavior, and unsafe URL rejection; worker tests cover tenant-scoped override loading and foreign-event rejection.
+
 ### GAP-06 — Implement password-reset recovery or remove the unused promise
 
 **Priority: P1. Required for a usable public account.**
@@ -201,7 +209,7 @@ Consult `PROGRESS.md`, `docs/launch/go-live-checklist.md`, `docs/launch/beta-pro
 2. Implement GAP-02 registration-policy enforcement and GAP-03 transfer lifecycle on that foundation.
 3. Implement GAP-06 password recovery before inviting public users to rely on account history.
 4. Complete GAP-04 raffle contract after its product decisions are approved.
-5. Connect GAP-05 custom templates to delivery and complete GAP-07 badge image rendering.
+5. Complete GAP-07 badge image rendering; GAP-05 custom-template delivery is implemented.
 6. Resolve GAP-08/09 explicitly, then run the affected repository and E2E/authorization tests.
 7. Run the external launch evidence separately; do not claim it from automated tests.
 

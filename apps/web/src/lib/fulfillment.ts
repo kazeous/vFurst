@@ -3,6 +3,7 @@ import { queueWebhookEvent } from "@/lib/webhooks";
 import { organizerNetAmount } from "@/lib/payments/ledger";
 import { transitionRegistrationToPaid } from "@/lib/registration-policy";
 import { fulfillPurchasedRaffleEntries } from "@/lib/raffle-policy";
+import { formatCurrency } from "@/lib/registration/pricing";
 import { Prisma, prisma, type PaymentAttempt, type PaymentProvider } from "@vfurst/db";
 
 type ProviderPaymentContext = {
@@ -380,7 +381,7 @@ export async function markOrderPaidWithProvider(
       await sendOrgEmail(order.org, order.user.email, "registration-confirmation", {
         eventName: order.event.name,
         attendeeName: order.user.name
-      });
+      }, order.event.id);
     } catch (error) {
       console.error("Registration confirmation email failed after payment fulfillment.", error);
     }
@@ -391,10 +392,21 @@ export async function markOrderPaidWithProvider(
       await sendOrgEmail(order.org, order.user.email, "hotel-booking-confirmation", {
         eventName: order.event.name,
         attendeeName: order.user.name
-      });
+      }, order.event.id);
     } catch (error) {
       console.error("Hotel confirmation email failed after payment fulfillment.", error);
     }
+  }
+
+  try {
+    await sendOrgEmail(order.org, order.user.email, "payment-receipt", {
+      eventName: order.event.name,
+      attendeeName: order.user.name,
+      orderTotal: formatCurrency(order.total, order.currency),
+      orderCurrency: order.currency
+    }, order.event.id);
+  } catch (error) {
+    console.error("Payment receipt email failed after payment fulfillment.", error);
   }
 
   await queueWebhookEvent({

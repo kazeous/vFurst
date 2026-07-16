@@ -211,9 +211,9 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
     volunteerName: application.user.name,
     roleName: staffRole.roleName,
     shiftLabel: shiftLabel(shift)
-  });
+  }, application.event.id);
 
-  return { assignment, event };
+  return { application, assignment, event };
 }
 
 export async function createDepartment(formData: FormData) {
@@ -422,7 +422,7 @@ export async function approveApplication(formData: FormData) {
   const { userId: reviewerId, volunteerApplication, event } = await requireVolunteerApplicationAccess(applicationId);
   const shift = shiftFromForm(formData);
 
-  await createAssignment(volunteerApplication.id, roleId, shift);
+  const { application } = await createAssignment(volunteerApplication.id, roleId, shift);
   await prisma.volunteerApplication.update({
     where: {
       id: volunteerApplication.id
@@ -431,6 +431,13 @@ export async function approveApplication(formData: FormData) {
       reviewedById: reviewerId
     }
   });
+
+  await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+    eventName: application.event.name,
+    applicantName: application.user.name,
+    status: "APPROVED",
+    reason: null
+  }, application.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/staff`);
   revalidatePath(`/dashboard/events/${event.id}/staff/applications`);
@@ -463,7 +470,7 @@ export async function rejectApplication(formData: FormData) {
     applicantName: application.user.name,
     status: "REJECTED",
     reason
-  });
+  }, application.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/staff`);
   revalidatePath(`/dashboard/events/${event.id}/staff/applications`);
@@ -501,7 +508,10 @@ export async function bulkReviewApplications(formData: FormData) {
     },
     select: {
       id: true,
-      departmentId: true
+      departmentId: true,
+      event: true,
+      org: true,
+      user: true
     }
   });
 
@@ -519,7 +529,7 @@ export async function bulkReviewApplications(formData: FormData) {
     }
 
     for (const applicationId of applicationIds) {
-      await createAssignment(applicationId, staffRole.id, shift);
+      const { application } = await createAssignment(applicationId, staffRole.id, shift);
       await prisma.volunteerApplication.update({
         where: {
           id: applicationId
@@ -528,6 +538,12 @@ export async function bulkReviewApplications(formData: FormData) {
           reviewedById: reviewerId
         }
       });
+      await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+        eventName: application.event.name,
+        applicantName: application.user.name,
+        status: "APPROVED",
+        reason: null
+      }, application.event.id);
     }
   } else {
     await prisma.volunteerApplication.updateMany({
@@ -544,6 +560,14 @@ export async function bulkReviewApplications(formData: FormData) {
         reviewedAt: new Date()
       }
     });
+    for (const application of applications) {
+      await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+        eventName: application.event.name,
+        applicantName: application.user.name,
+        status: "REJECTED",
+        reason: null
+      }, application.event.id);
+    }
   }
 
   revalidatePath(`/dashboard/events/${event.id}/staff`);
@@ -623,7 +647,7 @@ export async function massEmailDepartment(formData: FormData) {
       eventName: department.event.name,
       subject,
       message
-    });
+    }, department.event.id);
   }
 
   revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);

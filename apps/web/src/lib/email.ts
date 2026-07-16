@@ -1,7 +1,7 @@
-import { sendEmail, type EmailProviderConfig, type EmailTemplateName } from "@vfurst/email";
-import type { EmailProviderType, Organization } from "@vfurst/db";
+import { getEventEmailTemplate, sendEmail, type EmailProviderConfig, type EmailTemplateName } from "@vfurst/email";
+import { prisma, type EmailProviderType, type Organization } from "@vfurst/db";
 
-type EmailOrg = Pick<Organization, "contactEmail" | "emailProvider" | "emailSettings" | "name">;
+type EmailOrg = Pick<Organization, "id" | "contactEmail" | "emailProvider" | "emailSettings" | "name">;
 
 function settingsObject(settings: unknown) {
   return settings && typeof settings === "object" && !Array.isArray(settings)
@@ -42,9 +42,26 @@ export async function sendOrgEmail(
   org: EmailOrg,
   to: string,
   template: EmailTemplateName,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  eventId?: string
 ) {
-  return sendEmail(getOrgEmailConfig(org), to, template, data);
+  const event = eventId
+    ? await prisma.event.findFirst({
+        where: {
+          id: eventId,
+          orgId: org.id
+        },
+        select: {
+          settings: true
+        }
+      })
+    : null;
+
+  if (eventId && !event) {
+    throw new Error("Event email context does not belong to this organization.");
+  }
+
+  return sendEmail(getOrgEmailConfig(org), to, template, data, event ? getEventEmailTemplate(event.settings, template) ?? undefined : undefined);
 }
 
 export function getPlatformEmailConfig(): EmailProviderConfig {

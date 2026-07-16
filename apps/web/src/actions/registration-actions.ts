@@ -489,7 +489,7 @@ export async function resendRegistrationEmail(formData: FormData) {
   await sendOrgEmail(registration.org, registration.user.email, "registration-confirmation", {
     eventName: registration.event.name,
     attendeeName: registration.user.name
-  });
+  }, registration.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/${authorizedRegistration.id}`);
 }

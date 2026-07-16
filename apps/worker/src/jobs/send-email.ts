@@ -1,5 +1,5 @@
 import { prisma } from "@vfurst/db";
-import { sendEmail, type EmailProviderConfig } from "@vfurst/email";
+import { getEventEmailTemplate, sendEmail, type EmailProviderConfig } from "@vfurst/email";
 import type { Job } from "bullmq";
 import { workerEnv } from "../env.js";
 import type { SendEmailJob } from "../queues.js";
@@ -56,6 +56,22 @@ export async function processSendEmail(job: Job<SendEmailJob>) {
   });
 
   const settings = emailSettings(org.emailSettings);
+  const event = job.data.eventId
+    ? await prisma.event.findFirst({
+        where: {
+          id: job.data.eventId,
+          orgId: org.id
+        },
+        select: {
+          settings: true
+        }
+      })
+    : null;
+
+  if (job.data.eventId && !event) {
+    throw new Error("Event email context does not belong to this organization.");
+  }
+
   const fallbackFrom = org.contactEmail;
   const providerConfig: EmailProviderConfig =
     org.emailProvider === "SES"
@@ -66,7 +82,13 @@ export async function processSendEmail(job: Job<SendEmailJob>) {
         }
       : resolveSmtpProviderConfig(settings, fallbackFrom);
 
-  const result = await sendEmail(providerConfig, job.data.to, job.data.template, job.data.data);
+  const result = await sendEmail(
+    providerConfig,
+    job.data.to,
+    job.data.template,
+    job.data.data,
+    event ? getEventEmailTemplate(event.settings, job.data.template) ?? undefined : undefined
+  );
 
   return {
     delivered: true,

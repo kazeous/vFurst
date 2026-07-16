@@ -105,7 +105,7 @@ export async function createRegistrationTransferRequest(formData: FormData) {
     recipientName: parsed.recipientName || null,
     transferUrl: getRegistrationTransferUrl(request.id, token.rawToken),
     expiresAt: formatTransferExpiry(token.expiresAt)
-  });
+  }, emailContext.event.id);
 
   revalidatePath(`/dashboard/events/${authorizedEvent.id}/registrations`);
   revalidatePath(`/dashboard/events/${authorizedEvent.id}/registrations/${authorizedRegistration.id}`);

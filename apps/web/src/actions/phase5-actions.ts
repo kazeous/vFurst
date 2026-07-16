@@ -33,6 +33,7 @@ import {
   type RaffleEligibility
 } from "@/lib/raffle-policy";
 import { queueWebhookEvent } from "@/lib/webhooks";
+import { eventEmailTemplateKeys, parseEventEmailTemplate } from "@vfurst/email";
 import { prisma, type Prisma } from "@vfurst/db";
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -53,12 +54,6 @@ const badgeLayoutSchema = z.object({
   width: z.coerce.number().positive(),
   height: z.coerce.number().positive(),
   elements: z.array(badgeElementSchema)
-});
-
-const emailTemplateSchema = z.object({
-  subject: z.string().trim().min(1),
-  html: z.string().trim().min(1),
-  text: z.string().trim().min(1)
 });
 
 function parseRaffleEligibilityForm(formData: FormData): RaffleEligibility {
@@ -124,7 +119,7 @@ function parseEmailTemplates(value: unknown) {
     return {};
   }
 
-  return rawTemplates as Record<string, z.infer<typeof emailTemplateSchema>>;
+  return rawTemplates as Record<string, { subject: string; html: string; text: string }>;
 }
 
 function badgeBarcode(registrationId: string) {
@@ -871,7 +866,7 @@ export async function drawRaffleWinner(formData: FormData) {
       eventName: result.raffle.event.name,
       subject: `You won ${result.prize.name}`,
       message: `Congratulations! You were drawn as a winner for ${result.prize.name} in ${result.raffle.name}.`
-    });
+    }, result.raffle.event.id);
     await prisma.raffleDrawResult.update({ where: { id: result.draw.id }, data: { notifiedAt: new Date() } });
   } catch {
     // The durable result remains visible in the attendee account and can be notified by operations later.
@@ -882,10 +877,8 @@ export async function drawRaffleWinner(formData: FormData) {
 
 export async function saveEmailTemplate(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const templateKey = z
-    .enum(["registration-confirmation", "payment-receipt", "volunteer-approval", "vendor-status", "transfer-request"])
-    .parse(formData.get("templateKey"));
-  const template = emailTemplateSchema.parse({
+  const templateKey = z.enum(eventEmailTemplateKeys).parse(formData.get("templateKey"));
+  const template = parseEventEmailTemplate(templateKey, {
     subject: formData.get("subject"),
     html: formData.get("html"),
     text: formData.get("text")
