@@ -4,6 +4,7 @@ import { passwordResetTemplate } from "./templates/password-reset.js";
 import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation.js";
 import { organizationInvitationTemplate } from "./templates/organization-invitation.js";
 import { registrationConfirmationTemplate } from "./templates/registration-confirmation.js";
+import { registrationTransferTemplate } from "./templates/registration-transfer.js";
 import { staffMessageTemplate } from "./templates/staff-message.js";
 import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision.js";
 import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-application-decision.js";
@@ -63,6 +64,14 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",
         subject: typeof data.subject === "string" ? data.subject : "Staff update",
         message: typeof data.message === "string" ? data.message : ""
+      });
+    case "registration-transfer":
+      return registrationTransferTemplate({
+        eventName: typeof data.eventName === "string" ? data.eventName : "your event",
+        sourceName: typeof data.sourceName === "string" ? data.sourceName : "Another attendee",
+        recipientName: typeof data.recipientName === "string" ? data.recipientName : null,
+        transferUrl: typeof data.transferUrl === "string" ? data.transferUrl : "",
+        expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : "soon"
       });
     case "organization-invitation":
       return organizationInvitationTemplate({

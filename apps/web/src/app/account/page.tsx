@@ -4,15 +4,23 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { requirePublicAccount } from "@/lib/public-account";
 import { prisma } from "@vfurst/db";
+import { normalizeTransferEmail } from "@/lib/registration-transfer";
 
 export default async function AccountOverviewPage() {
   const user = await requirePublicAccount("/account");
-  const [registrationCount, orderCount, hotelCount, volunteerCount, vendorCount, registrations, orders] = await Promise.all([
+  const [registrationCount, orderCount, hotelCount, volunteerCount, vendorCount, transferCount, registrations, orders] = await Promise.all([
     prisma.registration.count({ where: { userId: user.id } }),
     prisma.order.count({ where: { userId: user.id } }),
     prisma.hotelBooking.count({ where: { userId: user.id } }),
     prisma.volunteerApplication.count({ where: { userId: user.id } }),
     prisma.vendorApplication.count({ where: { userId: user.id } }),
+    prisma.registrationTransferRequest.count({
+      where: {
+        recipientEmail: normalizeTransferEmail(user.email),
+        status: "PENDING",
+        expiresAt: { gt: new Date() }
+      }
+    }),
     prisma.registration.findMany({
       where: { userId: user.id },
       include: { event: true, org: true, type: true },
@@ -34,6 +42,7 @@ export default async function AccountOverviewPage() {
         <StatCard label="Orders" value={orderCount.toString()} detail="Payments and purchases" progress={orderCount ? 100 : 10} />
         <StatCard label="Hotel stays" value={hotelCount.toString()} detail="Room-block bookings" progress={hotelCount ? 100 : 10} />
         <StatCard label="Applications" value={(volunteerCount + vendorCount).toString()} detail="Volunteer and vendor" progress={volunteerCount + vendorCount ? 100 : 10} />
+        <StatCard label="Transfers" value={transferCount.toString()} detail="Pending invitations" progress={transferCount ? 100 : 10} />
       </section>
 
       <section className="vf-two-column">

@@ -77,7 +77,7 @@ The plan promises public accounts but does not explicitly choose between authent
 
 **Implementation update (2026-07-16): enforced through one shared server-side policy boundary.** `apps/web/src/lib/registration-policy.ts` is used by public registration creation, provider-neutral payment fulfillment, tier upgrades, cashier walk-ins, and both transfer paths. `PENDING`, `CONFIRMED`, and `CHECKED_IN` registrations reserve a slot; `CANCELLED` and `TRANSFERRED` release it. User and tier capacity checks run in serializable transactions with retry-on-conflict, so concurrent submissions cannot exceed the configured account or tier cap. `requireApproval` is represented by the separate `Registration.approvalStatus` field: payment can move a registration to `CONFIRMED` while approval remains `PENDING`, and organizer approval changes only `approvalStatus`. `allowTransfers=false` rejects both request and completion actions at the server boundary. The public registration page uses the same active reservation statuses for sold-out counts.
 
-Focused unit coverage passes 3/3 and browser regressions pass 3/3 for approval/payment separation, concurrent account caps, and disabled transfer rejection. Recipient-owned accept/decline remains GAP-03.
+Focused unit coverage passes 3/3 and browser regressions pass 3/3 for approval/payment separation, concurrent account caps, and disabled transfer rejection. Recipient-owned accept/decline is now implemented under GAP-03.
 
 ### GAP-03 — Complete the recipient-owned registration-transfer workflow
 
@@ -92,6 +92,12 @@ The dashboard can send a message about a transfer, but there is no durable trans
 3. Put the accept/decline UI under the public account area, not under the organizer dashboard.
 4. On accepted transfer, move ownership transactionally, invalidate/regenerate the badge as needed, and retain transfer history.
 5. Let organizers review the state, but do not make staff intervention the normal recipient path.
+
+#### Implementation update (2026-07-16)
+
+Implemented. `RegistrationTransferRequest` is now a durable, tenant-scoped, expiring state machine (`PENDING`, `ACCEPTED`, `DECLINED`, `EXPIRED`, `CANCELLED`) with a single-use SHA-256 token digest, source registration, requester, and recipient identity. Dashboard request actions cancel prior pending requests for the same source and email a signed `/transfer/:requestId?token=...` handoff. The handoff preserves a safe return path through central login and lands in `/account/transfers/:requestId`, where only the normalized invited email can accept or decline. Acceptance uses the serializable registration-policy transaction, moves add-ons and ownership, retains `transferredFromId` history, and clears/rekeys badge artifacts before best-effort regeneration; replay, wrong-account, and expiry paths are rejected. Organizers have a reviewable request history and an explicitly labelled admin override for support exceptions.
+
+The focused `tests/e2e/registration-transfer.spec.ts` suite passes 4/4 for accept-once, recipient identity enforcement, decline, and expiry. Existing registration-policy and resource-authorization transfer regressions pass 11/11 together.
 
 ### GAP-04 — Finish the raffle product contract and add the attendee-facing portion only after that contract is chosen
 

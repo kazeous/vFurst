@@ -147,6 +147,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           <h2>Transfer</h2>
           {transfersAllowed ? (
             <form action={transferRegistration} className="vf-form">
+              <p className="vf-muted">The recipient must sign in with the invited email and accept before ownership changes.</p>
               <input type="hidden" name="registrationId" value={registration.id} />
               <label>
                 New attendee name

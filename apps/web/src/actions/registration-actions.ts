@@ -6,6 +6,7 @@ import {
   requireRegistrationAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { createRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getConventionPortalRootForRequest } from "@/lib/convention";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
@@ -18,33 +19,14 @@ import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import {
   assertRegistrationCapacity,
-  assertTransfersAllowed,
   getRegistrationApprovalStatus,
   registrationReservationStatuses,
   runRegistrationPolicyTransaction
 } from "@/lib/registration-policy";
-import { prisma, type Prisma } from "@vfurst/db";
+import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function findOrCreateTransferRecipient(
-  email: string,
-  name: string,
-  client: Pick<Prisma.TransactionClient, "user"> = prisma
-) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await client.user.findUnique({ where: { email: normalizedEmail } });
-
-  if (existing) {
-    if (!existing.name && name) {
-      return client.user.update({ where: { id: existing.id }, data: { name } });
-    }
-    return existing;
-  }
-
-  return client.user.create({ data: { email: normalizedEmail, name } });
-}
 
 function getVoucherRestrictions(value: unknown) {
   if (!value || typeof value !== "object") {
@@ -544,48 +526,7 @@ export async function upgradeTier(formData: FormData) {
 }
 
 export async function transferRegistration(formData: FormData) {
-  const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-  const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
-  const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
-  const { registration: source, event } = await requireRegistrationAccess(registrationId);
-  assertTransfersAllowed(event.settings);
-
-  await runRegistrationPolicyTransaction(async (tx) => {
-    const attendee = await findOrCreateTransferRecipient(attendeeEmail, attendeeName, tx);
-    await assertRegistrationCapacity(tx, {
-      eventId: event.id,
-      userId: attendee.id,
-      typeId: source.typeId
-    });
-
-    const moved = await tx.registration.updateMany({
-      where: {
-        id: source.id,
-        eventId: event.id,
-        orgId: event.orgId,
-        status: { in: [...registrationReservationStatuses] }
-      },
-      data: { status: "TRANSFERRED" }
-    });
-
-    if (moved.count !== 1) {
-      throw new Error("This registration is no longer eligible for transfer.");
-    }
-
-    await tx.registration.create({
-      data: {
-        orgId: event.orgId,
-        eventId: event.id,
-        userId: attendee.id,
-        typeId: source.typeId,
-        status: "CONFIRMED",
-        approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
-        transferredFromId: source.id
-      }
-    });
-  });
-
-  revalidatePath(`/dashboard/events/${event.id}/registrations`);
+  await createRegistrationTransferRequest(formData);
 }
 
 export async function createAttendeeNote(formData: FormData) {

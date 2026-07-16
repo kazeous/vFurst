@@ -3,6 +3,7 @@ import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { cancelRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,19 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
   const transferable = event.registrations.filter((registration) => registration.status !== "TRANSFERRED" && registration.status !== "CANCELLED");
   const transferred = event.registrations.filter((registration) => registration.status === "TRANSFERRED" || registration.transferredFromId);
   const transfersAllowed = getCoreEventSettings(event.settings).allowTransfers;
+  await prisma.registrationTransferRequest.updateMany({
+    where: { eventId: event.id, orgId: event.orgId, status: "PENDING", expiresAt: { lte: new Date() } },
+    data: { status: "EXPIRED" }
+  });
+  const requests = await prisma.registrationTransferRequest.findMany({
+    where: { eventId: event.id, orgId: event.orgId },
+    include: {
+      requester: true,
+      recipient: true,
+      sourceRegistration: { include: { type: true, user: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
 
   return (
     <div className="vf-page">
@@ -44,7 +58,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         <div>
           <p className="vf-label">Registration</p>
           <h1>Transfers</h1>
-          <p className="vf-muted">Send transfer requests and complete staff-approved ownership changes.</p>
+          <p className="vf-muted">Invite recipients to accept ownership from their own account and review every decision.</p>
         </div>
       </header>
 
@@ -69,7 +83,8 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         </form>
 
         <form action={adminTransferRegistration} className="vf-section vf-form">
-          <h2>Complete transfer</h2>
+          <h2>Admin override</h2>
+          <p className="vf-muted">Use only when support must complete a transfer without recipient self-service.</p>
           <label>
             Source registration
             <select name="registrationId" required>
@@ -91,6 +106,31 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
           <Button label="Transfer registration" type="submit" />
         </form>
       </section> : <section className="vf-section"><h2>Transfers disabled</h2><p className="vf-muted">Enable transfers in event settings before sending or completing a transfer.</p></section>}
+
+      <section className="vf-section">
+        <h2>Transfer requests</h2>
+        <div className="vf-list">
+          {requests.map((request) => {
+            const status = request.status;
+            return (
+              <div key={request.id} className="vf-list-row">
+                <span>{request.sourceRegistration.user.name ?? request.sourceRegistration.user.email} → {request.recipientEmail}</span>
+                <small>
+                  {request.sourceRegistration.type.name} · {status} · expires {request.expiresAt.toLocaleString()}
+                  {request.recipient ? ` · claimed by ${request.recipient.name ?? request.recipient.email}` : ""}
+                </small>
+                {request.status === "PENDING" ? (
+                  <form action={cancelRegistrationTransferRequest}>
+                    <input type="hidden" name="requestId" value={request.id} />
+                    <Button label="Cancel request" type="submit" size="sm" variant="destructive" />
+                  </form>
+                ) : null}
+              </div>
+            );
+          })}
+          {requests.length === 0 ? <p className="vf-empty">No transfer requests have been created.</p> : null}
+        </div>
+      </section>
 
       <section className="vf-section">
         <h2>History</h2>

@@ -105,6 +105,14 @@ enum RegistrationApprovalStatus {
   REJECTED
 }
 
+enum RegistrationTransferRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
 enum VolunteerApplicationStatus {
   PENDING
   APPROVED
@@ -196,6 +204,8 @@ model User {
   orgInvitationsSent        OrgInvitation[]         @relation("OrgInvitationInvitedBy")
   orgInvitationsAccepted    OrgInvitation[]         @relation("OrgInvitationAcceptedBy")
   orgInvitationsRevoked     OrgInvitation[]         @relation("OrgInvitationRevokedBy")
+  registrationTransferRequestsCreated RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
+  registrationTransferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
 
   @@map("users")
 }
@@ -244,6 +254,7 @@ model Organization {
   registrationTypes      RegistrationType[]
   registrationAddOns     RegistrationAddOn[]
   registrations          Registration[]
+  registrationTransferRequests RegistrationTransferRequest[]
   staffAssignments       StaffAssignment[]
   staffRoles             StaffRole[]
   storeProducts          StoreProduct[]
@@ -406,6 +417,7 @@ model Event {
   raffles               Raffle[]
   registrationTypes     RegistrationType[]
   registrations         Registration[]
+  registrationTransferRequests RegistrationTransferRequest[]
   storeProducts         StoreProduct[]
   vendorApplications    VendorApplication[]
   volunteerApplications VolunteerApplication[]
@@ -480,6 +492,7 @@ model Registration {
   org               Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   transferredFrom   Registration?       @relation("RegistrationTransfer", fields: [transferredFromId], references: [id])
   transferredTo     Registration[]      @relation("RegistrationTransfer")
+  transferRequests  RegistrationTransferRequest[] @relation("RegistrationTransferSource")
   type              RegistrationType    @relation(fields: [typeId], references: [id])
   user              User                @relation(fields: [userId], references: [id])
 
@@ -494,6 +507,35 @@ model Registration {
   @@index([typeId])
   @@index([typeId, status])
   @@map("registrations")
+}
+
+model RegistrationTransferRequest {
+  id                   String                              @id @default(uuid()) @db.Uuid
+  orgId                String                              @db.Uuid
+  eventId              String                              @db.Uuid
+  sourceRegistrationId String                              @db.Uuid
+  requesterUserId      String                              @db.Uuid
+  recipientEmail       String
+  recipientUserId      String?                             @db.Uuid
+  tokenHash            String                              @unique @db.Char(64)
+  status               RegistrationTransferRequestStatus   @default(PENDING)
+  expiresAt            DateTime
+  acceptedAt           DateTime?
+  declinedAt           DateTime?
+  createdAt            DateTime                            @default(now())
+  updatedAt            DateTime                            @updatedAt
+  event                Event                               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org                  Organization                        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sourceRegistration   Registration                        @relation("RegistrationTransferSource", fields: [sourceRegistrationId], references: [id], onDelete: Cascade)
+  requester            User                                @relation("RegistrationTransferRequester", fields: [requesterUserId], references: [id])
+  recipient            User?                               @relation("RegistrationTransferRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([orgId, status])
+  @@index([sourceRegistrationId, status])
+  @@index([recipientEmail, status])
+  @@index([expiresAt])
+  @@map("registration_transfer_requests")
 }
 
 model RegistrationAddOn {

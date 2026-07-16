@@ -1,6 +1,7 @@
 "use server";
 
 import { badgeQueue } from "@/lib/badge-queue";
+import { createRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 import {
   requireBadgeAccess,
   requireBadgeTemplateAccess,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/registration-policy";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
+import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -526,30 +528,7 @@ export async function createWalkInRegistration(formData: FormData) {
 }
 
 export async function requestRegistrationTransfer(formData: FormData) {
-  const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-  const recipientEmail = z.string().email().parse(formData.get("recipientEmail"));
-  const { registration: authorizedRegistration, event } = await requireRegistrationAccess(registrationId);
-
-  const registration = await prisma.registration.findUniqueOrThrow({
-    where: {
-      id: authorizedRegistration.id
-    },
-    include: {
-      event: true,
-      org: true,
-      user: true
-    }
-  });
-
-  assertTransfersAllowed(registration.event.settings);
-
-  await sendOrgEmail(registration.org, recipientEmail, "staff-message", {
-    eventName: registration.event.name,
-    subject: "Registration transfer request",
-    message: `${registration.user.name ?? registration.user.email} requested to transfer a registration to ${recipientEmail}. Staff can complete the transfer from the dashboard.`
-  });
-
-  revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
+  await createRegistrationTransferRequest(formData);
 }
 
 export async function adminTransferRegistration(formData: FormData) {
@@ -559,43 +538,98 @@ export async function adminTransferRegistration(formData: FormData) {
   const { registration: source, event } = await requireRegistrationAccess(registrationId);
   assertTransfersAllowed(event.settings);
 
-  await runRegistrationPolicyTransaction(async (tx) => {
+  const result = await runRegistrationPolicyTransaction(async (tx) => {
+    const current = await tx.registration.findUnique({
+      where: { id: source.id },
+      include: { addOns: true, badges: true }
+    });
+
+    if (!current || current.eventId !== event.id || current.orgId !== event.orgId) {
+      throw new Error("This registration is no longer eligible for transfer.");
+    }
+
     const attendee = await findOrCreateUser(attendeeEmail, attendeeName, tx);
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
       userId: attendee.id,
-      typeId: source.typeId
+      typeId: current.typeId,
+      excludeRegistrationId: current.id
     });
 
     const moved = await tx.registration.updateMany({
       where: {
-        id: source.id,
+        id: current.id,
         eventId: event.id,
         orgId: event.orgId,
         status: { in: [...registrationReservationStatuses] }
       },
-      data: { status: "TRANSFERRED" }
+      data: { status: "TRANSFERRED", badgeNumber: null }
     });
 
     if (moved.count !== 1) {
       throw new Error("This registration is no longer eligible for transfer.");
     }
 
-    await tx.registration.create({
+    const registration = await tx.registration.create({
       data: {
         orgId: event.orgId,
         eventId: event.id,
         userId: attendee.id,
-        typeId: source.typeId,
+        typeId: current.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
-        transferredFromId: source.id
+        badgeNumber: current.badgeNumber,
+        transferredFromId: current.id
       }
     });
+
+    await tx.registrationAddOn.updateMany({
+      where: { registrationId: current.id, orgId: event.orgId },
+      data: { registrationId: registration.id }
+    });
+
+    const badgeJobs: Array<{ id: string; templateId: string }> = [];
+    for (const badge of current.badges) {
+      const changed = await tx.badge.update({
+        where: { id: badge.id },
+        data: {
+          registrationId: registration.id,
+          barcodeData: `VF-${registration.id}-${randomBytes(8).toString("hex")}`,
+          nfcTag: null,
+          pdfUrl: null,
+          zplData: null,
+          generatedAt: null,
+          printedAt: null
+        },
+        select: { id: true, templateId: true }
+      });
+      badgeJobs.push(changed);
+    }
+
+    await tx.registrationTransferRequest.updateMany({
+      where: { sourceRegistrationId: current.id, status: "PENDING" },
+      data: { status: "CANCELLED" }
+    });
+
+    return { registrationId: registration.id, badgeJobs };
   });
+
+  for (const badge of result.badgeJobs) {
+    try {
+      await badgeQueue.add("generate-badges", {
+        orgId: event.orgId,
+        eventId: event.id,
+        templateId: badge.templateId,
+        badgeIds: [badge.id]
+      });
+    } catch {
+      // The invalidated badge stays pending and can be regenerated from the event badge queue.
+    }
+  }
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
+  revalidatePath(`/account/registrations/${result.registrationId}`);
 }
 
 export async function createRaffle(formData: FormData) {
