@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export function PaymentStatusPoller({ orderId, token }: { orderId: string; token: string }) {
+export function PaymentStatusPoller({ orderId, token, message = "Waiting for payment confirmation. This page checks automatically every three seconds." }: { orderId: string; token: string; message?: string }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -37,5 +37,5 @@ export function PaymentStatusPoller({ orderId, token }: { orderId: string; token
     };
   }, [orderId, router, token]);
 
-  return <p className="vf-muted">Waiting for bank confirmation. This page checks automatically every three seconds.</p>;
+  return <p className="vf-muted">{message}</p>;
 }

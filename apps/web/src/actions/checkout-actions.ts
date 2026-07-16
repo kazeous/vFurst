@@ -5,6 +5,8 @@ import { requireCheckoutOrder } from "@/lib/payments/checkout";
 import { getEligiblePaymentProviders } from "@/lib/payments/platform";
 import { createSePayPaymentCode } from "@/lib/payments/sepay";
 import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { resolveStripeCheckoutSession } from "@/lib/payments/stripe-checkout-session";
+import { markOrderPaidWithProvider } from "@/lib/fulfillment";
 import {
   PAYMENT_ATTEMPT_TTL_MS,
   Prisma,
@@ -75,6 +77,44 @@ async function persistStripeSession(attempt: PaymentAttempt, session: { id: stri
 
       if (updatedOrder.count !== 1) {
         throw new Error("The order changed while Stripe checkout was being created.");
+      }
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+    }
+  );
+}
+
+async function expireStripeAttempt(attempt: PaymentAttempt) {
+  await prisma.$transaction(
+    async (tx) => {
+      const expired = await tx.paymentAttempt.updateMany({
+        where: {
+          id: attempt.id,
+          orderId: attempt.orderId,
+          activeOrderId: attempt.orderId,
+          provider: "STRIPE",
+          status: "PENDING"
+        },
+        data: {
+          status: "EXPIRED",
+          activeOrderId: null
+        }
+      });
+
+      if (expired.count === 1 && attempt.providerReference) {
+        await tx.order.updateMany({
+          where: {
+            id: attempt.orderId,
+            status: "PENDING",
+            paymentProvider: "STRIPE",
+            paymentReference: attempt.providerReference
+          },
+          data: {
+            paymentProvider: null,
+            paymentReference: null
+          }
+        });
       }
     },
     {
@@ -159,8 +199,37 @@ export async function startStripePayment(formData: FormData) {
         }
       );
 
+  if (attempt.providerReference) {
+    const outcome = resolveStripeCheckoutSession(session);
+
+    if (outcome.type === "paid") {
+      await markOrderPaidWithProvider(order.id, "STRIPE", outcome.paymentIntentId, {
+        paymentAttemptId: attempt.id,
+        attemptProviderReference: session.id
+      });
+      redirect(`${checkoutUrl}&returned=stripe`);
+    }
+
+    if (outcome.type === "expired") {
+      await expireStripeAttempt(attempt);
+      redirect(`${checkoutUrl}&expired=stripe`);
+    }
+
+    if (outcome.type === "pending") {
+      redirect(`${checkoutUrl}&returned=stripe`);
+    }
+
+    redirect(outcome.url);
+  }
+
   if (!session.url) {
-    throw new Error("Stripe did not return a Checkout URL.");
+    try {
+      await stripe.checkout.sessions.expire(session.id);
+    } catch (expiryError) {
+      console.error("Failed to expire a Stripe Checkout Session without a URL.", expiryError);
+    }
+    await expireStripeAttempt(attempt);
+    redirect(`${checkoutUrl}&expired=stripe`);
   }
 
   if (!attempt.providerReference) {

@@ -269,6 +269,43 @@ test("public registration completes and creates a paid zero-dollar order", async
   expect(registration.orderItems.some((item) => item.order.status === "PAID")).toBeTruthy();
 });
 
+test("Stripe returns wait for webhook confirmation instead of offering a second checkout", async ({ page }) => {
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
+  const token = randomBytes(32).toString("base64url");
+  const order = await prisma.order.create({
+    data: {
+      orgId,
+      eventId,
+      userId: admin.id,
+      total: 10_000,
+      platformFee: 1_000,
+      currency: "USD",
+      paymentProvider: "STRIPE",
+      paymentReference: `cs_return_${runId}`,
+      checkoutTokenHash: createHmac("sha256", checkoutSecret).update(token).digest("hex"),
+      checkoutSuccessPath: "/pricing",
+      checkoutCancelPath: "/pricing",
+      checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+  await prisma.paymentAttempt.create({
+    data: {
+      orderId: order.id,
+      activeOrderId: order.id,
+      provider: "STRIPE",
+      amount: order.total,
+      currency: order.currency,
+      providerReference: `cs_return_${runId}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+    }
+  });
+
+  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&returned=stripe`);
+  await expect(page.getByText("Stripe returned you to vFurst. We are confirming the payment before showing the next step.")).toBeVisible();
+  await expect(page.getByText("Waiting for Stripe confirmation. This page checks automatically every three seconds.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue active payment" })).toHaveCount(0);
+});
+
 test("public vendor application submits for organizer review", async ({ page }) => {
   await page.goto(`/${orgSlug}/vendor-apply`);
   await page.getByLabel("Contact name").fill("Launch Vendor");

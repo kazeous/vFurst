@@ -22,9 +22,9 @@ function checkoutItemLabel(itemType: string) {
   return "Order item";
 }
 
-export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ orderId: string }>; searchParams: Promise<{ token?: string; cancelled?: string }> }) {
+export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ orderId: string }>; searchParams: Promise<{ token?: string; cancelled?: string; returned?: string; expired?: string }> }) {
   const { orderId } = await params;
-  const { token = "", cancelled } = await searchParams;
+  const { token = "", cancelled, returned, expired } = await searchParams;
   const order = await requireCheckoutOrder(orderId, token);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
   const activeAttempt =
@@ -34,6 +34,7 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   const branding = getEffectiveEventBranding(order.event.settings, order.org.logo);
   const style = { "--event-accent": branding.accentColor, "--event-accent-foreground": branding.accentForeground } as CSSProperties;
   const logoStyle = branding.logoUrl ? { backgroundImage: `url("${branding.logoUrl.replaceAll('"', "%22")}")` } : undefined;
+  const confirmingStripePayment = returned === "stripe" && activeAttempt?.provider === "STRIPE" && activeAttempt.status === "PENDING";
 
   if (order.status === "PAID" && order.checkoutSuccessPath) {
     return (
@@ -60,8 +61,14 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
         <section className="vf-checkout-payment">
           <div className="vf-checkout-heading"><p className="vf-label">Secure checkout</p><h1>{activeAttempt?.status === "REVIEW" ? "Payment under review" : activeAttempt?.provider === "SEPAY" ? "Complete bank transfer" : activeAttempt?.provider === "STRIPE" ? "Continue card payment" : "Choose how to pay"}</h1><p>Order {order.id.slice(0, 8).toUpperCase()}</p></div>
           {cancelled ? <Alert variant="warning">Stripe checkout was cancelled. No payment was captured.</Alert> : null}
+          {expired ? <Alert variant="warning">The previous Stripe checkout expired. You can start a new payment attempt below.</Alert> : null}
 
-          {activeAttempt?.status === "REVIEW" ? (
+          {confirmingStripePayment ? (
+            <div>
+              <Alert variant="info">Stripe returned you to vFurst. We are confirming the payment before showing the next step.</Alert>
+              <PaymentStatusPoller orderId={order.id} token={token} message="Waiting for Stripe confirmation. This page checks automatically every three seconds." />
+            </div>
+          ) : activeAttempt?.status === "REVIEW" ? (
             <Alert variant="warning">A received payment is under platform review. Do not send another payment while this review is open.</Alert>
           ) : activeAttempt?.provider === "SEPAY" && activeAttempt.paymentCode && sepaySettings ? (
             <div className="vf-sepay-payment-card">

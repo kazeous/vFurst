@@ -31,6 +31,23 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
 
+### 2026-07-16 - Phase 7, prevent duplicate Stripe retries after the hosted checkout return
+- Investigated the two reported Sentry share events. The first captured the earlier active-attempt race; the second captured the reproducible follow-up failure, `Stripe did not return a Checkout URL`, when a completed Stripe Session was reopened from the local checkout page before its webhook had settled the order.
+- Fixed the return/retry path:
+  - Stripe success returns now render a confirmation state with the existing payment-status poller instead of a second `Continue active payment` button while the authoritative attempt is still pending.
+  - Retrying an authoritative Stripe attempt now interprets completed paid Sessions as settlement (idempotently calling the shared fulfillment transition), keeps incomplete/no-URL Sessions in local confirmation, and expires stale Sessions/locks without surfacing a server error.
+  - Added a focused Stripe Session outcome helper and unit coverage for paid, pending, expired, and resumable Session states.
+  - Added a launch-critical E2E regression covering the `returned=stripe` UI state.
+- Verified:
+  - `npm run test` passed: 95 web, 21 worker, 12 database, and 1 email test.
+  - `npm run type-check`, `npm run lint`, and `npm run build` passed. The build retains the known BullMQ dynamic-dependency warning and emits expected `ECONNREFUSED` logs while no local database is running during static generation.
+  - Playwright test discovery includes the new regression. The focused launch-critical E2E could not execute because Docker/Postgres is not running (`localhost:5432` and `127.0.0.1:55432` were unreachable); no E2E pass claim was added.
+- Remaining issues / blockers:
+  - Re-run the focused launch-critical E2E with the local Docker Postgres/Redis stack running before treating the browser regression as verified.
+  - Phase 7 remains blocked on the previously documented external beta/live/Sentry/SePay Sandbox/screen-reader evidence and other launch gates.
+- Next session should:
+  - Start the local Compose stack, rerun `tests/e2e/launch-critical-paths.spec.ts`, and review the Stripe return flow against a real test-mode Checkout Session/webhook before closing this payment issue.
+
 ### 2026-07-14 - Phase 7, remove registration render contention and pass the supported 500/50 proof
 - Measured the supported six-replica/pool-4 topology before changing code:
   - The full baseline completed 149,150 HTTP requests with 298,297/298,297 checks and 0.00% failures, but overall p95 was 1.79s. Registration p95 was 1.72s and check-in p95 spiked to 9.03s.
