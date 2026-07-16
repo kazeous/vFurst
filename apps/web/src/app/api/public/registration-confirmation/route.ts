@@ -1,6 +1,7 @@
 import { prisma } from "@vfurst/db";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 
 const querySchema = z.object({
   orgSlug: z.string().trim().min(1).max(253),
@@ -13,6 +14,14 @@ const responseHeaders = {
 };
 
 export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    // Registration confirmations are private account data. Return the same
+    // response shape as an unknown registration so this endpoint cannot be
+    // used to probe registration IDs before signing in.
+    return NextResponse.json({ confirmed: false }, { status: 404, headers: responseHeaders });
+  }
+
   const parsed = querySchema.safeParse({
     orgSlug: request.nextUrl.searchParams.get("orgSlug"),
     registrationId: request.nextUrl.searchParams.get("registrationId")
@@ -40,7 +49,8 @@ export async function GET(request: NextRequest) {
   const registration = await prisma.registration.findFirst({
     where: {
       id: parsed.data.registrationId,
-      orgId: organization.id
+      orgId: organization.id,
+      userId: session.user.id
     },
     select: {
       event: {

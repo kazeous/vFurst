@@ -92,6 +92,8 @@ const nextAuth = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
+        const account = await prisma.user.findUnique({ where: { id: user.id }, select: { authVersion: true } });
+        token.authVersion = account?.authVersion ?? 0;
       }
 
       return token;
@@ -106,6 +108,7 @@ const nextAuth = NextAuth({
           id: token.sub
         },
         select: {
+          authVersion: true,
           platformRole: true,
           orgMemberships: {
             orderBy: {
@@ -138,6 +141,13 @@ const nextAuth = NextAuth({
           }
         }
       });
+
+      if (!user || token.authVersion !== user.authVersion) {
+        // Auth.js JWT sessions are otherwise valid until cookie expiry. Returning
+        // a null session makes every token issued before a password reset
+        // unauthorized without adding another database read to each request.
+        return null as never;
+      }
 
       session.user.id = token.sub;
       session.user.platformRole = user?.platformRole ?? "USER";

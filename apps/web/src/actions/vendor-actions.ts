@@ -18,40 +18,10 @@ import {
   validateVendorDocumentUrl
 } from "@/lib/vendor/document-upload-policy";
 import { prisma, type Prisma } from "@vfurst/db";
+import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-
-async function findOrCreateUser(email: string, name: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({
-    where: {
-      email: normalizedEmail
-    }
-  });
-
-  if (existing) {
-    if (!existing.name && name) {
-      return prisma.user.update({
-        where: {
-          id: existing.id
-        },
-        data: {
-          name
-        }
-      });
-    }
-
-    return existing;
-  }
-
-  return prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      name
-    }
-  });
-}
 
 function settingsObject(settings: unknown): Record<string, unknown> {
   return settings && typeof settings === "object" && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {};
@@ -243,15 +213,17 @@ export async function submitApplication(formData: FormData) {
   const selectedAmenities = config.amenities.filter((amenity) => amenityIds.includes(amenity.id));
   const boothPrice = (selectedTable?.price ?? 0) + selectedAmenities.reduce((sum, amenity) => sum + amenity.price, 0);
   const files = await filesFromForm(event.orgId, event.id, formData);
-  const vendor = await findOrCreateUser(parsed.data.contactEmail, parsed.data.contactName);
+  const vendor = await requirePublicAccount(`/${event.org.subdomain}/vendor-apply`);
+  assertPublicAccountEmail(vendor, parsed.data.contactEmail);
+  const account = await syncPublicAccountName(vendor, parsed.data.contactName);
 
   const application = await prisma.vendorApplication.create({
     data: {
       orgId: event.orgId,
       eventId: event.id,
-      userId: vendor.id,
-      contactName: parsed.data.contactName,
-      contactEmail: parsed.data.contactEmail,
+      userId: account.id,
+      contactName: account.name ?? parsed.data.contactName,
+      contactEmail: account.email,
       businessName: parsed.data.businessName,
       website: parsed.data.website,
       productDescription: parsed.data.productDescription,
@@ -493,10 +465,13 @@ export async function payVendorBooth(formData: FormData) {
     throw new Error("Organization not found.");
   }
 
+  const account = await requirePublicAccount(`/${org.subdomain}/vendor-apply`);
+
   const application = await prisma.vendorApplication.findFirstOrThrow({
     where: {
       id: applicationId,
       orgId: org.id,
+      userId: account.id,
       event: {
         status: "PUBLISHED"
       }

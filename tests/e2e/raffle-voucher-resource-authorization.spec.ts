@@ -412,12 +412,13 @@ test("public voucher application derives event from the user-owned cart", async 
 });
 
 test("public registration rejects an internally cross-tenant voucher before creating identity or order data", async ({ page }) => {
+  await login(page, buyerEmail);
   const pathname = `/${orgASlug}/register`;
   await page.goto(pathname);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name").fill("Poisoned Voucher Attendee");
-  await page.getByLabel("Email").fill(poisonedRegistrationEmail);
+  await expect(page.getByLabel("Email")).toHaveValue(buyerEmail);
   await page.getByLabel("Voucher code").fill("POISON");
   await page.getByRole("button", { name: "Review" }).click();
   const form = page.getByRole("button", { name: "Complete registration" }).locator("xpath=ancestor::form");

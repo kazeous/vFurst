@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { Check, ChevronLeft, ChevronRight, LockKeyhole } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 
 type AddOn = { id: string; name: string; price: number; isComplimentary: boolean; maxQuantity: number };
 type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; remaining?: number; addOns: AddOn[] };
@@ -12,6 +13,7 @@ type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; 
 const stepLabels = ["Ticket", "Attendee", "Review"];
 
 export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string; currency: "USD" | "VND"; tiers: Tier[] }) {
+  const { data: session } = useSession();
   const availableTier = tiers.find((tier) => !tier.soldOut);
   const [step, setStep] = useState(0);
   const [isReady, setIsReady] = useState(false);
@@ -31,6 +33,12 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
   useEffect(() => {
     setIsReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    setAttendeeName((current) => current || session.user.name || "");
+    setAttendeeEmail((current) => current || session.user.email || "");
+  }, [session?.user?.email, session?.user?.name]);
 
   return (
     <section className="vf-registration-experience" aria-labelledby="registration-flow-title" data-registration-ready={isReady || undefined}>
@@ -65,7 +73,7 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
               <div><p className="vf-label">Step 2 of 3</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">We will use this information for the attendee record and confirmation.</p></div>
               <div className="vf-form-grid">
                 <label>Full name<input name="attendee-preview-name" autoComplete="name" value={attendeeName} onChange={(event) => setAttendeeName(event.target.value)} required /></label>
-                <label>Email<input name="attendee-preview-email" type="email" autoComplete="email" value={attendeeEmail} onChange={(event) => setAttendeeEmail(event.target.value)} required /></label>
+                <label>Email<input name="attendee-preview-email" type="email" autoComplete="email" value={attendeeEmail} readOnly required /></label>
               </div>
               {selectedTier?.addOns.length ? (
                 <div className="vf-stack"><div><h3>Enhance your ticket</h3><p className="vf-muted">Optional add-ons for {selectedTier.name}.</p></div>

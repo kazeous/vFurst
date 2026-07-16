@@ -1,5 +1,7 @@
 import { bookRoom } from "@/actions/hotel-actions";
+import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { auth } from "@/lib/auth";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -14,13 +16,16 @@ export default async function PublicHotelPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string; cancelled?: string }>;
 }) {
-  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
   const org = await getConventionOrg(orgSlug);
 
   if (!org) {
     notFound();
   }
   const portalRoot = await getConventionPortalRootForRequest(org);
+  const centralPath = getCentralPortalPath(org.subdomain, "/hotel");
+  const loginHref = getCentralLoginUrl(centralPath);
+  const registerHref = getCentralRegistrationUrl(centralPath);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -42,22 +47,24 @@ export default async function PublicHotelPage({
     }
   });
 
-  const successBooking = query.success
-    ? await prisma.hotelBooking.findFirst({
-        where: {
-          id: query.success,
-          block: {
-            event: {
-              orgId: org.id
+  const successBooking =
+    query.success && session?.user?.id
+      ? await prisma.hotelBooking.findFirst({
+          where: {
+            id: query.success,
+            userId: session.user.id,
+            block: {
+              event: {
+                orgId: org.id
+              }
             }
+          },
+          include: {
+            block: true,
+            user: true
           }
-        },
-        include: {
-          block: true,
-          user: true
-        }
-      })
-    : null;
+        })
+      : null;
 
   return (
     <main className="vf-public-page">
@@ -71,8 +78,18 @@ export default async function PublicHotelPage({
           <Button label="Store" href={`${portalRoot}/store`} />
           <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
           <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
+          <Button label="Account" href={getCentralAppUrl("/account")} />
         </div>
       </header>
+
+      {!session?.user?.id ? (
+        <section className="vf-section">
+          <p className="vf-label">Public account required</p>
+          <h2>Sign in before booking a room</h2>
+          <p className="vf-muted">Your reservation and confirmation will be saved to your central vFurst account.</p>
+          <div className="vf-actions"><Button label="Log in" href={loginHref} variant="primary" /><Button label="Create account" href={registerHref} /></div>
+        </section>
+      ) : null}
 
       {successBooking ? (
         <section className="vf-section">
@@ -101,7 +118,7 @@ export default async function PublicHotelPage({
           {event.hotelBlocks.map((block) => {
             const roomTypes = parseRoomTypes(block.roomTypes);
 
-            return (
+            return session?.user?.id ? (
               <form key={block.id} action={bookRoom} className="vf-section">
                 <input type="hidden" name="eventId" value={event.id} />
                 <input type="hidden" name="blockId" value={block.id} />
@@ -136,16 +153,16 @@ export default async function PublicHotelPage({
                 <div className="vf-form-grid">
                   <label>
                     Guest name
-                    <input name="guestName" required />
+                    <input name="guestName" defaultValue={session.user.name ?? ""} required />
                   </label>
                   <label>
                     Guest email
-                    <input name="guestEmail" type="email" required />
+                    <input name="guestEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
                   </label>
                 </div>
                 <Button label="Continue to checkout" type="submit" variant="primary" />
               </form>
-            );
+            ) : null;
           })}
           {event.hotelBlocks.length === 0 ? (
             <section className="vf-section">

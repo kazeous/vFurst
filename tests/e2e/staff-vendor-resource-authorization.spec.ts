@@ -47,10 +47,10 @@ test.beforeAll(async () => {
   const [ownerA, ownerB, volunteerA, volunteerB, vendorA, vendorB] = await Promise.all([
     prisma.user.create({ data: { email: ownerAEmail, name: "Staff Vendor Owner A", passwordHash } }),
     prisma.user.create({ data: { email: ownerBEmail, name: "Staff Vendor Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: volunteerAEmail, name: "Volunteer A" } }),
-    prisma.user.create({ data: { email: volunteerBEmail, name: "Volunteer B" } }),
-    prisma.user.create({ data: { email: vendorAEmail, name: "Vendor Contact A" } }),
-    prisma.user.create({ data: { email: vendorBEmail, name: "Vendor Contact B" } })
+    prisma.user.create({ data: { email: volunteerAEmail, name: "Volunteer A", passwordHash } }),
+    prisma.user.create({ data: { email: volunteerBEmail, name: "Volunteer B", passwordHash } }),
+    prisma.user.create({ data: { email: vendorAEmail, name: "Vendor Contact A", passwordHash } }),
+    prisma.user.create({ data: { email: vendorBEmail, name: "Vendor Contact B", passwordHash } })
   ]);
 
   const [orgA, orgB] = await Promise.all([
@@ -302,6 +302,16 @@ async function loginAsOwnerA(page: Page) {
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+async function loginAs(page: Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
+}
+
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -402,12 +412,13 @@ function sectionForHeading(page: Page, heading: string) {
 }
 
 test("public volunteer and vendor forms bind submissions and success lookups to the portal tenant", async ({ page }) => {
+  await loginAs(page, volunteerAEmail);
   const volunteerPath = `/${orgASlug}/volunteer`;
   await page.goto(volunteerPath);
   const volunteerForm = page.getByRole("heading", { name: "Volunteer application" }).locator("xpath=ancestor::form");
   await expect(volunteerForm.locator('input[name="orgId"], input[name="eventId"]')).toHaveCount(0);
   await volunteerForm.getByLabel("Full name").fill("Tampered Volunteer");
-  await volunteerForm.getByLabel("Email").fill(tamperedVolunteerEmail);
+  await expect(volunteerForm.getByLabel("Email")).toHaveValue(volunteerAEmail);
   await submitTamperedAction(page, volunteerPath, volunteerForm, "Submit application", "departmentId", departmentBId);
   expect(await prisma.volunteerApplication.count({ where: { user: { email: tamperedVolunteerEmail } } })).toBe(0);
 
@@ -493,11 +504,12 @@ test("vendor review, booth assignment, and bulk review reject foreign applicatio
 });
 
 test("vendor file policy rejects unsupported and forged uploads before persistence", async ({ page }) => {
+  await loginAs(page, vendorAEmail);
   const vendorPath = `/${orgASlug}/vendor-apply`;
   await page.goto(vendorPath);
   let form = page.getByRole("heading", { name: "Apply for dealer space" }).locator("xpath=ancestor::form");
+  await expect(form.getByLabel("Contact email")).toHaveValue(vendorAEmail);
   await form.getByLabel("Contact name").fill("Invalid Vendor");
-  await form.getByLabel("Contact email").fill(invalidVendorEmail);
   await form.getByLabel("Business name").fill(invalidVendorName);
   await form.getByLabel("Product description").fill("Unsafe vendor upload test");
   await form.getByLabel("Upload file").setInputFiles({
@@ -511,7 +523,7 @@ test("vendor file policy rejects unsupported and forged uploads before persisten
   await navigateAfterRejectedAction(page, vendorPath);
   form = page.getByRole("heading", { name: "Apply for dealer space" }).locator("xpath=ancestor::form");
   await form.getByLabel("Contact name").fill("Forged Vendor");
-  await form.getByLabel("Contact email").fill(forgedVendorEmail);
+  await expect(form.getByLabel("Contact email")).toHaveValue(vendorAEmail);
   await form.getByLabel("Business name").fill(forgedVendorName);
   await form.getByLabel("Product description").fill("Forged vendor upload test");
   await form.getByLabel("Upload file").setInputFiles({

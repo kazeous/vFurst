@@ -5,8 +5,9 @@ import { Divider } from "@/components/ui/separator";
 import Link from "next/link";
 import { safeReturnTo } from "@/lib/return-to";
 import { LoginForm } from "./login-form";
+import { Alert } from "@/components/ui/alert";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ returnTo?: string | string[] }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string; returnTo?: string | string[] }> }) {
   const query = await searchParams;
   const returnTo = safeReturnTo(query.returnTo);
 
@@ -36,6 +37,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h1>Log in to vFurst</h1>
         </div>
         <LoginForm action={loginWithCredentials} />
+        {query.reset ? <Alert variant="success">Password updated. You can log in now.</Alert> : null}
+        <p className="vf-muted"><Link href={`/forgot-password?returnTo=${encodeURIComponent(returnTo)}`}>Forgot your password?</Link></p>
         <Divider label="or" />
         <form action={loginWithGoogle}>
           <Button label="Continue with Google" type="submit" />

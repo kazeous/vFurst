@@ -1,5 +1,7 @@
 import { submitVolunteerApplication } from "@/actions/staff-actions";
+import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { auth } from "@/lib/auth";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -34,13 +36,14 @@ export default async function PublicVolunteerPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string }>;
 }) {
-  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
   const org = await getConventionOrg(orgSlug);
 
   if (!org) {
     notFound();
   }
   const portalRoot = await getConventionPortalRootForRequest(org);
+  const centralPath = getCentralPortalPath(org.subdomain, "/volunteer");
 
   const event = await prisma.event.findFirst({
     where: {
@@ -60,6 +63,9 @@ export default async function PublicVolunteerPage({
   });
   const selectedDepartment = event?.departments[0] ?? null;
   const fields = selectedDepartment ? parseSchema(selectedDepartment.formSchema) : [];
+  const successApplication = query.success && session?.user?.id && event
+    ? await prisma.volunteerApplication.findFirst({ where: { id: query.success, orgId: org.id, userId: session.user.id, eventId: event.id } })
+    : null;
 
   return (
     <main className="vf-public-page">
@@ -71,10 +77,11 @@ export default async function PublicVolunteerPage({
         <div className="vf-actions">
           <Button label="Register" href={`${portalRoot}/register`} />
           <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
+          <Button label="Account" href={getCentralAppUrl("/account")} />
         </div>
       </header>
 
-      {query.success ? (
+      {successApplication ? (
         <section className="vf-section">
           <h2>Application submitted</h2>
           <p className="vf-muted">The volunteer team can now review your responses and availability.</p>
@@ -91,6 +98,13 @@ export default async function PublicVolunteerPage({
           <h2>No departments yet</h2>
           <p className="vf-muted">Volunteer applications will open once departments are configured.</p>
         </section>
+      ) : !session?.user?.id ? (
+        <section className="vf-section">
+          <p className="vf-label">Public account required</p>
+          <h2>Sign in before applying</h2>
+          <p className="vf-muted">Your application status and approved shifts will be saved to your central vFurst account.</p>
+          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
+        </section>
       ) : (
         <form action={submitVolunteerApplication} className="vf-section vf-form">
           <input type="hidden" name="orgSlug" value={org.subdomain} />
@@ -102,11 +116,11 @@ export default async function PublicVolunteerPage({
           <div className="vf-form-grid">
             <label>
               Full name
-              <input name="applicantName" required />
+              <input name="applicantName" defaultValue={session.user.name ?? ""} required />
             </label>
             <label>
               Email
-              <input name="applicantEmail" type="email" required />
+              <input name="applicantEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
             </label>
           </div>
           <div className="vf-form-grid">

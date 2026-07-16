@@ -46,3 +46,21 @@ export async function sendOrgEmail(
 ) {
   return sendEmail(getOrgEmailConfig(org), to, template, data);
 }
+
+export function getPlatformEmailConfig(): EmailProviderConfig {
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  return {
+    type: "SMTP",
+    host: process.env.SMTP_HOST ?? "127.0.0.1",
+    port: Number(process.env.SMTP_PORT ?? 1025),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: user && pass ? { user, pass } : undefined,
+    fromEmail: process.env.SMTP_FROM_EMAIL ?? "no-reply@localhost"
+  };
+}
+
+export async function sendPlatformEmail(to: string, template: EmailTemplateName, data: Record<string, unknown>) {
+  return sendEmail(getPlatformEmailConfig(), to, template, data);
+}

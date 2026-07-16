@@ -32,7 +32,8 @@ test.beforeAll(async () => {
   const attendee = await prisma.user.create({
     data: {
       email: attendeeEmail,
-      name: "Launch Accessibility Attendee"
+      name: "Launch Accessibility Attendee",
+      passwordHash: await bcrypt.hash(password, 12)
     }
   });
 
@@ -175,6 +176,16 @@ async function login(page: Page) {
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+async function loginAsAttendee(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(attendeeEmail);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
+}
+
 async function expectNoSeriousAccessibilityViolations(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
   const violations = results.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
@@ -215,6 +226,7 @@ test("marketing pages expose landmarks, alt text, keyboard order, and calculator
 test("public launch forms expose labels, names, and submit actions", async ({ page }) => {
   const clientErrors: string[] = [];
   page.on("pageerror", (error) => clientErrors.push(error.stack ?? error.message));
+  await loginAsAttendee(page);
   await page.goto(`/${orgSlug}/register`);
   await expect.poll(async () => ({ ready: await page.locator('[data-registration-ready="true"]').isVisible(), clientErrors }), { timeout: 30_000 }).toEqual({ ready: true, clientErrors: [] });
 
@@ -225,7 +237,7 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   await expect(page.getByLabel("Full name")).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveAttribute("type", "email");
   await page.getByLabel("Full name").fill("Accessibility Attendee");
-  await page.getByLabel("Email").fill("accessibility-form@example.com");
+  await expect(page.getByLabel("Email")).toHaveValue(attendeeEmail);
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByRole("button", { name: "Complete registration" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to cart" })).toBeVisible();
@@ -236,6 +248,7 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   await expect(page.getByRole("heading", { name: "Vendor application" })).toBeVisible();
   await expect(page.getByLabel("Contact name")).toBeVisible();
   await expect(page.getByLabel("Contact email")).toHaveAttribute("type", "email");
+  await expect(page.getByLabel("Contact email")).toHaveValue(attendeeEmail);
   await expect(page.getByLabel("Business name")).toBeVisible();
   await expect(page.getByLabel("Product description")).toBeVisible();
   await expect(page.getByLabel("Table type")).toBeVisible();

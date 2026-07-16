@@ -10,6 +10,7 @@ import {
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { prisma, type Prisma } from "@vfurst/db";
+import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -35,37 +36,6 @@ const shiftSlotSchema = z.object({
 });
 
 type ShiftSlot = z.infer<typeof shiftSlotSchema>;
-
-async function findOrCreateUser(email: string, name: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({
-    where: {
-      email: normalizedEmail
-    }
-  });
-
-  if (existing) {
-    if (!existing.name && name) {
-      return prisma.user.update({
-        where: {
-          id: existing.id
-        },
-        data: {
-          name
-        }
-      });
-    }
-
-    return existing;
-  }
-
-  return prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      name
-    }
-  });
-}
 
 async function assertLeadBelongsToOrg(leadUserId: string | undefined, orgId: string) {
   if (!leadUserId) {
@@ -428,13 +398,15 @@ export async function submitVolunteerApplication(formData: FormData) {
     .filter(Boolean)
     .join(" > ");
 
-  const volunteer = await findOrCreateUser(parsed.data.applicantEmail, parsed.data.applicantName);
+  const volunteer = await requirePublicAccount(`/${org.subdomain}/volunteer`);
+  assertPublicAccountEmail(volunteer, parsed.data.applicantEmail);
+  const account = await syncPublicAccountName(volunteer, parsed.data.applicantName);
   const application = await prisma.volunteerApplication.create({
     data: {
       orgId: org.id,
       eventId: event.id,
       departmentId: department.id,
-      userId: volunteer.id,
+      userId: account.id,
       formResponses: responses,
       availability: availabilityFromForm(formData)
     }

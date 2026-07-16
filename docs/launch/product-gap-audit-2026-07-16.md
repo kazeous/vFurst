@@ -29,6 +29,8 @@ The current public volunteer and vendor submission pages are therefore correctly
 
 **Priority: P0. Dependency for every attendee self-service feature.**
 
+**Implementation update (2026-07-16): public-account foundation implemented.** The app now has authenticated `/account` overview, profile, registration/detail, order/detail, hotel, and volunteer/vendor application views. Registration, store, hotel, volunteer, and vendor entry points require a central-domain account before mutation or checkout; server actions bind new records to `session.user.id`, reject a different submitted email, and owner-filter durable success/detail reads. Portal headers use a safe central login/register handoff instead of relying on a cookie on a customer-controlled custom domain. Historic email-created attendees claim their existing `User` record through the hashed, one-hour, single-use recovery flow documented under GAP-06. Incoming transfer decisions remain intentionally open under GAP-03 because the current transfer data model has no recipient-pending lifecycle to display safely.
+
 The reference explicitly promises a central public account area for identity, orders, registrations, applications, and invitation acceptance. It also grants public users the right to view their own public records. There is no `/account` route tree in the repository; the only public identity pages are login, registration, and invitation acceptance.
 
 Current public create actions accept a name/email and call a `findOrCreate...` helper instead of requiring `auth().user.id`:
@@ -133,11 +135,9 @@ The Phase 5 plan requires eligibility rules and AUTO/MANUAL/PURCHASED entry meth
 
 **Priority: P1. Required for a usable public account.**
 
-The email package has a `password-reset` template, but the app has no forgot-password route, reset-token storage/verification, reset action, or UI link. The only password flow is account registration and credentials login.
+**Implementation update (2026-07-16): implemented with the public-account foundation.** `/forgot-password` returns a non-enumerating acknowledgement and applies the shared auth rate limit. Reset links carry a random secret while the database stores only its SHA-256 digest; tokens expire after one hour, are atomically consumed once, set the password on the existing `User`, mark the email verified, delete persisted sessions, and increment `authVersion` so JWT sessions issued before the reset resolve unauthenticated. Safe `returnTo` state is retained through recovery. Browser regressions cover unknown-email acknowledgement, expiry, replay rejection, JWT invalidation, and claiming registrations already attached to an email-created user.
 
-#### Required work
-
-Implement a rate-limited, non-enumerating reset request; hashed, expiring, single-use reset tokens; a reset page/action; session invalidation policy; and tests for expiry, replay, email binding, and account enumeration resistance. Reuse Auth.js primitives only if they satisfy these properties.
+The remaining work for this gap is operational: configure a production email transport and monitor delivery/bounce outcomes for the new reset template. The implementation and security regression coverage are complete in the current codebase.
 
 ### GAP-07 — Complete badge image rendering and physical output validation
 

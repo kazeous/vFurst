@@ -137,9 +137,10 @@ test.beforeAll(async () => {
   blockAId = blockA.id;
   blockBId = blockB.id;
 
-  const [guestA, guestB] = await Promise.all([
-    prisma.user.create({ data: { email: guestAEmail, name: "Hotel Guest A" } }),
-    prisma.user.create({ data: { email: guestBEmail, name: "Hotel Guest B" } })
+  const [guestA, guestB, validGuest] = await Promise.all([
+    prisma.user.create({ data: { email: guestAEmail, name: "Hotel Guest A", passwordHash } }),
+    prisma.user.create({ data: { email: guestBEmail, name: "Hotel Guest B", passwordHash } }),
+    prisma.user.create({ data: { email: validGuestEmail, name: "Valid Hotel Guest", passwordHash } })
   ]);
 
   const [bookingA, bookingB] = await Promise.all([
@@ -199,6 +200,16 @@ async function loginAsOwnerA(page: Page) {
   ]);
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+}
+
+async function loginAs(page: Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
 }
 
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
@@ -282,6 +293,7 @@ async function expectOriginalHotelResources() {
 }
 
 test("public hotel success lookup is tenant-scoped and booking binds block to event", async ({ page }) => {
+  await loginAs(page, guestAEmail);
   await page.goto(`/${orgASlug}/hotel?success=${bookingBId}`);
   await expect(page.getByRole("heading", { name: "Hotel booking confirmed" })).toHaveCount(0);
   await expect(page.getByText("Hotel Guest B")).toHaveCount(0);
@@ -295,7 +307,6 @@ test("public hotel success lookup is tenant-scoped and booking binds block to ev
   await publicForm.getByLabel("Check-in").fill("2028-04-10");
   await publicForm.getByLabel("Check-out").fill("2028-04-11");
   await publicForm.getByLabel("Guest name").fill("Rejected Guest");
-  await publicForm.getByLabel("Guest email").fill(tamperedGuestEmail);
   await submitTamperedAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout", "blockId", blockBId);
   expect(await prisma.hotelBooking.count({ where: { user: { email: tamperedGuestEmail } } })).toBe(0);
 });
@@ -343,12 +354,12 @@ test("hotel block and booking mutations derive access from stored resources", as
 });
 
 test("public VND hotel booking creates an event-scoped order", async ({ page }) => {
+  await loginAs(page, validGuestEmail);
   await page.goto(`/${orgASlug}/hotel`);
   const publicForm = page.getByRole("heading", { name: blockAName }).locator("xpath=ancestor::form");
   await publicForm.getByLabel("Check-in").fill("2028-04-10");
   await publicForm.getByLabel("Check-out").fill("2028-04-11");
   await publicForm.getByLabel("Guest name").fill("Valid Hotel Guest");
-  await publicForm.getByLabel("Guest email").fill(validGuestEmail);
   await submitAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout");
 
   const booking = await prisma.hotelBooking.findFirstOrThrow({ where: { user: { email: validGuestEmail } } });

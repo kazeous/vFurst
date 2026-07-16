@@ -1,4 +1,5 @@
 import { getEffectiveEventBranding } from "@/lib/event-branding";
+import { getCentralAppUrl } from "@/lib/central-url";
 import { formatDateRange } from "@/lib/i18n";
 import type { Prisma } from "@vfurst/db";
 import { ArrowRight, MapPin } from "lucide-react";
@@ -33,7 +34,10 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
             <span className="vf-portal-logo" style={imageStyle(branding.logoUrl)}>{branding.logoUrl ? null : initials(event?.name ?? org.name)}</span>
             <span><strong>{event?.name ?? org.name}</strong><small>Official convention portal</small></span>
           </PortalLink>
-          <Link className="vf-portal-powered" href="/">Powered by <strong>vFurst</strong></Link>
+          <div className="vf-actions">
+            <Link className="vf-portal-powered" href={getCentralAppUrl("/account")}>Account</Link>
+            <Link className="vf-portal-powered" href="/">Powered by <strong>vFurst</strong></Link>
+          </div>
         </div>
         <PortalNav subdomain={org.subdomain} />
       </header>

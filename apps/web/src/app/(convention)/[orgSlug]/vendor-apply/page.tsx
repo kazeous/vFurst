@@ -1,5 +1,7 @@
 import { payVendorBooth, submitApplication } from "@/actions/vendor-actions";
+import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { auth } from "@/lib/auth";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getVendorConfig } from "@/lib/vendor/config";
 import { prisma } from "@vfurst/db";
@@ -32,13 +34,14 @@ export default async function PublicVendorApplyPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string; cancelled?: string }>;
 }) {
-  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
   const org = await getConventionOrg(orgSlug);
 
   if (!org) {
     notFound();
   }
   const portalRoot = await getConventionPortalRootForRequest(org);
+  const centralPath = getCentralPortalPath(org.subdomain, "/vendor-apply");
 
   const event = await prisma.event.findFirst({
     where: {
@@ -49,13 +52,14 @@ export default async function PublicVendorApplyPage({
       startDate: "asc"
     }
   });
-  const successApplication = query.success
+  const successApplication = query.success && session?.user?.id
     ? event
       ? await prisma.vendorApplication.findFirst({
         where: {
           id: query.success,
           orgId: org.id,
-          eventId: event.id
+          eventId: event.id,
+          userId: session.user.id
         },
         include: {
           event: true
@@ -75,6 +79,7 @@ export default async function PublicVendorApplyPage({
         <div className="vf-actions">
           <Button label="Register" href={`${portalRoot}/register`} />
           <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
+          <Button label="Account" href={getCentralAppUrl("/account")} />
         </div>
       </header>
 
@@ -114,6 +119,13 @@ export default async function PublicVendorApplyPage({
           <h2>No published event</h2>
           <p className="vf-muted">Vendor applications will open after the organizer publishes an event.</p>
         </section>
+      ) : !session?.user?.id ? (
+        <section className="vf-section">
+          <p className="vf-label">Public account required</p>
+          <h2>Sign in before applying</h2>
+          <p className="vf-muted">Your application, booth assignment, and payment status will be saved to your central vFurst account.</p>
+          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
+        </section>
       ) : (
         <form action={submitApplication} className="vf-section vf-form">
           <input type="hidden" name="orgSlug" value={org.subdomain} />
@@ -125,11 +137,11 @@ export default async function PublicVendorApplyPage({
           <div className="vf-form-grid">
             <label>
               Contact name
-              <input name="contactName" required />
+              <input name="contactName" defaultValue={session.user.name ?? ""} required />
             </label>
             <label>
               Contact email
-              <input name="contactEmail" type="email" required />
+              <input name="contactEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
             </label>
           </div>
           <div className="vf-form-grid">

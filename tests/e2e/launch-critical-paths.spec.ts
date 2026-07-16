@@ -36,6 +36,22 @@ test.beforeAll(async () => {
     }
   });
 
+  await prisma.user.create({
+    data: {
+      email: vendorEmail,
+      name: "Launch Vendor",
+      passwordHash: await bcrypt.hash(password, 12)
+    }
+  });
+
+  await prisma.user.create({
+    data: {
+      email: attendeeEmail,
+      name: "Launch Attendee",
+      passwordHash: await bcrypt.hash(password, 12)
+    }
+  });
+
   const org = await prisma.organization.create({
     data: {
       name: "Launch Test Convention",
@@ -156,6 +172,16 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
+async function loginAsPublic(page: Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
+}
+
 async function ensureConfirmedRegistration() {
   if (registrationId) {
     return;
@@ -225,11 +251,12 @@ test("marketing and legal launch pages render", async ({ page }) => {
 });
 
 test("public registration completes and creates a paid zero-dollar order", async ({ page }) => {
+  await loginAsPublic(page, attendeeEmail);
   await page.goto(`/${orgSlug}/register`);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name").fill("Launch Attendee");
-  await page.getByLabel("Email").fill(attendeeEmail);
+  await expect(page.getByLabel("Email")).toHaveValue(attendeeEmail);
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Complete registration" }).click();
 
@@ -261,7 +288,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   });
 
   await page.goto(`/${orgSlug}/register?success=${registration.id}`);
-  await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
 
   registrationId = registration.id;
   expect(registration.typeId).toBe(registrationTypeId);
@@ -288,6 +315,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
       checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
     }
   });
+
   await prisma.paymentAttempt.create({
     data: {
       orderId: order.id,
@@ -307,9 +335,10 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
 });
 
 test("public vendor application submits for organizer review", async ({ page }) => {
+  await loginAsPublic(page, vendorEmail);
   await page.goto(`/${orgSlug}/vendor-apply`);
   await page.getByLabel("Contact name").fill("Launch Vendor");
-  await page.getByLabel("Contact email").fill(vendorEmail);
+  await expect(page.getByLabel("Contact email")).toHaveValue(vendorEmail);
   await page.getByLabel("Business name").fill("Launch Vendor Studio");
   await page.getByLabel("Product description").fill("Original convention merchandise and attendee accessories.");
   await page.getByRole("button", { name: "Submit vendor application" }).click();

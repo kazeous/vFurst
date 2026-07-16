@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createHash, randomBytes } from "node:crypto";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -9,6 +10,10 @@ const ownerAEmail = `registration-owner-a-${runId}@example.com`;
 const ownerBEmail = `registration-owner-b-${runId}@example.com`;
 const attendeeAEmail = `registration-attendee-a-${runId}@example.com`;
 const attendeeBEmail = `registration-attendee-b-${runId}@example.com`;
+const historicAttendeeEmail = `registration-historic-${runId}@example.com`;
+const historicAttendeeName = `Registration Historic Attendee ${runId}`;
+const claimedPassword = "ClaimedAttendeePass123!";
+const rotatedPassword = "RotatedAttendeePass123!";
 const transferEmail = `registration-transfer-${runId}@example.com`;
 const adminTransferEmail = `registration-admin-transfer-${runId}@example.com`;
 const phase5TransferEmail = `registration-phase5-transfer-${runId}@example.com`;
@@ -26,6 +31,7 @@ let tierAId: string;
 let tierBId: string;
 let registrationAId: string;
 let registrationBId: string;
+let historicAttendeeId: string;
 let noteAId: string;
 let noteBId: string;
 
@@ -35,12 +41,14 @@ test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
   const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, attendeeA, attendeeB] = await Promise.all([
+  const [ownerA, ownerB, attendeeA, attendeeB, historicAttendee] = await Promise.all([
     prisma.user.create({ data: { email: ownerAEmail, name: "Registration Owner A", passwordHash } }),
     prisma.user.create({ data: { email: ownerBEmail, name: "Registration Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeAEmail, name: attendeeAName } }),
-    prisma.user.create({ data: { email: attendeeBEmail, name: attendeeBName } })
+    prisma.user.create({ data: { email: attendeeAEmail, name: attendeeAName, passwordHash } }),
+    prisma.user.create({ data: { email: attendeeBEmail, name: attendeeBName, passwordHash } }),
+    prisma.user.create({ data: { email: historicAttendeeEmail, name: historicAttendeeName } })
   ]);
+  historicAttendeeId = historicAttendee.id;
 
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
@@ -109,6 +117,9 @@ test.beforeAll(async () => {
   ]);
   registrationAId = registrationA.id;
   registrationBId = registrationB.id;
+  await prisma.registration.create({
+    data: { orgId: orgA.id, eventId: eventAId, userId: historicAttendee.id, typeId: tierA.id, status: "PENDING" }
+  });
 
   const [noteA, noteB] = await Promise.all([
     prisma.attendeeNote.create({
@@ -124,6 +135,9 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: { in: [orgASlug, orgBSlug] } } });
+  if (historicAttendeeId) {
+    await prisma.verificationToken.deleteMany({ where: { identifier: `password-reset:${historicAttendeeId}` } });
+  }
   await prisma.user.deleteMany({
     where: {
       email: {
@@ -132,6 +146,7 @@ test.afterAll(async () => {
           ownerBEmail,
           attendeeAEmail,
           attendeeBEmail,
+          historicAttendeeEmail,
           transferEmail,
           adminTransferEmail,
           phase5TransferEmail
@@ -152,6 +167,18 @@ async function loginAsOwnerA(page: Page) {
   ]);
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+}
+
+async function loginAsAttendeeA(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(attendeeAEmail);
+  await page.getByLabel("Password").fill(password);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
+    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
+  ]);
+  await page.goto("/account/registrations");
+  await expect(page.getByRole("heading", { name: "My registrations" })).toBeVisible({ timeout: 30_000 });
 }
 
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
@@ -212,7 +239,13 @@ async function expectOriginalRegistrations() {
   expect(registrationB.typeId).toBe(tierBId);
 }
 
-test("public success lookup cannot disclose a registration from another tenant", async ({ page }) => {
+test("attendee account and success lookup expose only registrations owned by the session", async ({ page }) => {
+  await loginAsAttendeeA(page);
+  await expect(page.getByText("Registration Event A")).toBeVisible();
+  await expect(page.getByText("Registration Event B")).toHaveCount(0);
+  expect((await page.request.get(`/account/registrations/${registrationAId}`)).status()).toBe(200);
+  expect((await page.request.get(`/account/registrations/${registrationBId}`)).status()).toBe(404);
+
   await page.goto(`/${orgASlug}/register?success=${registrationBId}`);
   await expect(page.getByText(attendeeBName)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toHaveCount(0);
@@ -220,6 +253,95 @@ test("public success lookup cannot disclose a registration from another tenant",
   await page.goto(`/${orgASlug}/register?success=${registrationAId}`);
   await expect(page.getByText(attendeeAName)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
+});
+
+test("password recovery gives an unknown email the same generic acknowledgement", async ({ page }) => {
+  const unknownEmail = `registration-unknown-${runId}@example.com`;
+  await page.goto("/forgot-password?returnTo=%2Faccount");
+  await page.getByLabel("Email").fill(unknownEmail);
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page).toHaveURL(/\/forgot-password\?sent=1/);
+  await expect(page.getByText("If an account exists for that email, a one-hour reset link has been sent.")).toBeVisible();
+  expect(await prisma.user.count({ where: { email: unknownEmail } })).toBe(0);
+});
+
+test("a legacy email-created attendee can securely claim their existing records with a one-time reset token", async ({ page }) => {
+  const expiredRawToken = randomBytes(32).toString("hex");
+  const identifier = `password-reset:${historicAttendeeId}`;
+  await prisma.verificationToken.create({
+    data: {
+      identifier,
+      token: createHash("sha256").update(expiredRawToken).digest("hex"),
+      expires: new Date(Date.now() - 1_000)
+    }
+  });
+
+  await page.goto(`/reset-password?token=${expiredRawToken}`);
+  await page.getByLabel("New password").fill(claimedPassword);
+  await page.getByLabel("Confirm password").fill(claimedPassword);
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page).toHaveURL(/\/reset-password\?invalid=1/);
+  expect((await prisma.user.findUniqueOrThrow({ where: { id: historicAttendeeId } })).passwordHash).toBeNull();
+  await prisma.verificationToken.deleteMany({ where: { identifier } });
+
+  const rawToken = randomBytes(32).toString("hex");
+  await prisma.verificationToken.create({
+    data: {
+      identifier,
+      token: createHash("sha256").update(rawToken).digest("hex"),
+      expires: new Date(Date.now() + 60_000)
+    }
+  });
+
+  await page.goto(`/reset-password?token=${rawToken}&returnTo=${encodeURIComponent("/account/registrations")}`);
+  await page.getByLabel("New password").fill(claimedPassword);
+  await page.getByLabel("Confirm password").fill(claimedPassword);
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page).toHaveURL(/\/login\?/, { timeout: 30_000 });
+  await expect(page.getByText("Password updated. You can log in now.")).toBeVisible();
+
+  await page.goto(`/reset-password?token=${rawToken}`);
+  await page.getByLabel("New password").fill("ReplayAttemptPass123!");
+  await page.getByLabel("Confirm password").fill("ReplayAttemptPass123!");
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page).toHaveURL(/\/reset-password\?invalid=1/);
+
+  await page.goto("/login?returnTo=%2Faccount%2Fregistrations");
+  await page.getByLabel("Email").fill(historicAttendeeEmail);
+  await page.getByLabel("Password").fill(claimedPassword);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/\/account\/registrations$/, { timeout: 30_000 });
+  await expect(page.getByText("Registration Event A")).toBeVisible();
+
+  expect(await prisma.verificationToken.count({ where: { identifier } })).toBe(0);
+  expect((await prisma.user.findUniqueOrThrow({ where: { id: historicAttendeeId } })).passwordHash).not.toBeNull();
+});
+
+test("password recovery invalidates JWT sessions issued before the credential change", async ({ page }) => {
+  await page.goto("/login?returnTo=%2Faccount");
+  await page.getByLabel("Email").fill(historicAttendeeEmail);
+  await page.getByLabel("Password").fill(claimedPassword);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/\/account$/, { timeout: 30_000 });
+
+  const rawToken = randomBytes(32).toString("hex");
+  const identifier = `password-reset:${historicAttendeeId}`;
+  await prisma.verificationToken.create({
+    data: {
+      identifier,
+      token: createHash("sha256").update(rawToken).digest("hex"),
+      expires: new Date(Date.now() + 60_000)
+    }
+  });
+
+  await page.goto(`/reset-password?token=${rawToken}`);
+  await page.getByLabel("New password").fill(rotatedPassword);
+  await page.getByLabel("Confirm password").fill(rotatedPassword);
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page).toHaveURL(/\/login\?reset=1/);
+
+  await page.goto("/account");
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount/, { timeout: 30_000 });
 });
 
 test("status, refund, and email actions reject a foreign registration ID", async ({ page }) => {

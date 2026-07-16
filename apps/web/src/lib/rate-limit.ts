@@ -74,8 +74,8 @@ export class RateLimitUnavailableError extends Error {
 }
 
 export class RateLimitExceededError extends Error {
-  constructor(public readonly result: RateLimitResult) {
-    super("Too many payment attempts. Please wait a minute and try again.");
+  constructor(public readonly result: RateLimitResult, message = "Too many payment attempts. Please wait a minute and try again.") {
+    super(message);
     this.name = "RateLimitExceededError";
   }
 }
@@ -207,5 +207,19 @@ export async function assertActionRateLimit(
 
   if (result.limited) {
     throw new RateLimitExceededError(result);
+  }
+}
+
+export async function assertAuthActionRateLimit(namespace: string, key: string) {
+  const result = await applyFixedWindowRateLimit({
+    namespace,
+    key,
+    limit: AUTH_RATE_LIMIT_PER_MINUTE,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    failureMode: RATE_LIMIT_FAILURE_MODES.auth
+  });
+
+  if (result.limited) {
+    throw new RateLimitExceededError(result, "Too many account-recovery requests. Please wait a minute and try again.");
   }
 }

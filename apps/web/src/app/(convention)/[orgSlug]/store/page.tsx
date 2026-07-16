@@ -1,6 +1,7 @@
 import { addToCart } from "@/actions/cart-actions";
 import { StoreCart } from "@/components/store/cart";
 import { auth } from "@/lib/auth";
+import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getStripe } from "@/lib/payments/stripe";
@@ -281,6 +282,7 @@ export default async function PublicStorePage({
           <Button label="Hotel" href={`${portalRoot}/hotel`} />
           <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
           <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
+          <Button label="Account" href={getCentralAppUrl("/account")} />
         </div>
       </header>
 
@@ -302,6 +304,15 @@ export default async function PublicStorePage({
         <section className="vf-section">
           <h2>Checkout cancelled</h2>
           <p className="vf-muted">No payment was captured. Your cart is still available.</p>
+        </section>
+      ) : null}
+
+      {showStore && !session?.user?.id ? (
+        <section className="vf-section">
+          <p className="vf-label">Public account required</p>
+          <h2>Sign in before adding products to your cart</h2>
+          <p className="vf-muted">Your cart and receipts are saved to your central vFurst account and follow you across devices.</p>
+          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(getCentralPortalPath(org.subdomain, "/store"))} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(getCentralPortalPath(org.subdomain, "/store"))} /></div>
         </section>
       ) : null}
 
@@ -338,7 +349,7 @@ export default async function PublicStorePage({
                     <strong>{formatCurrency(price, event.currency)}</strong>
                     {getSurchargeTotal(product.surcharges) > 0 ? <small className="vf-muted"> with surcharges</small> : null}
                   </p>
-                  <form action={addToCart} className="vf-form">
+                  {session?.user?.id ? <form action={addToCart} className="vf-form">
                     <input type="hidden" name="productId" value={product.id} />
                     {options.map((option) => (
                       <label key={option.name}>
@@ -357,7 +368,7 @@ export default async function PublicStorePage({
                       <input name="quantity" type="number" min="1" max={product.stock} defaultValue="1" />
                     </label>
                     <Button label="Add to cart" type="submit" variant="primary" />
-                  </form>
+                  </form> : null}
                 </Card>
               );
             })}
@@ -368,13 +379,15 @@ export default async function PublicStorePage({
               </section>
             ) : null}
           </section>
-          <StoreCart
-            cart={cart}
-            currency={event.currency}
-            returnPath={storePath}
-            successPath={storePath}
-            cancelPath={storePath}
-          />
+          {session?.user?.id ? (
+            <StoreCart
+              cart={cart}
+              currency={event.currency}
+              returnPath={storePath}
+              successPath={storePath}
+              cancelPath={storePath}
+            />
+          ) : null}
         </div>
       ) : null}
     </main>

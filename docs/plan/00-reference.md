@@ -221,7 +221,7 @@ erDiagram
 
 | Entity | Key Fields | Purpose |
 |--------|-----------|---------|
-| **User** | id, email, name, avatar, emailVerified, platformRole | Platform-wide identity for public participation and optional organization memberships; a normal account has no organizer privileges by default |
+| **User** | id, email, name, avatar, emailVerified, authVersion, platformRole | Platform-wide identity for public participation and optional organization memberships; `authVersion` invalidates older JWT sessions after credential recovery; a normal account has no organizer privileges by default |
 | **Organization** | id, name, slug, subdomain, status (PROVISIONING/ACTIVE/SUSPENDED/RETIRED), statusUpdatedBy/At, logo, contactEmail, requestedCustomDomain, customDomain, customDomainStatus, customDomainVerified/ActivatedBy/At, payoutBankCode, payoutAccountNumber, payoutAccountHolder | Platform-provisioned tenant, convention organizing body, and SePay payout destination; `customDomain` is only the active routed hostname, while requests/verification are staged separately; retirement is non-destructive |
 | **OrgMember** | userId, orgId, role (OWNER/ADMIN/MEMBER) | Explicit tenant membership and role; this is the organizer-access grant |
 | **StripeConnect** | orgId, stripeAccountId, onboardingComplete | Stripe Connect account link |

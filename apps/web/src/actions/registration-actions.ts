@@ -1,6 +1,5 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import {
   requireAttendeeNoteAccess,
   requireEventAccess,
@@ -16,50 +15,24 @@ import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
+import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-async function findOrCreateAttendee(email: string, name: string) {
+async function findOrCreateTransferRecipient(email: string, name: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({
-    where: {
-      email: normalizedEmail
-    }
-  });
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
   if (existing) {
     if (!existing.name && name) {
-      return prisma.user.update({
-        where: {
-          id: existing.id
-        },
-        data: {
-          name
-        }
-      });
+      return prisma.user.update({ where: { id: existing.id }, data: { name } });
     }
-
     return existing;
   }
 
-  return prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      name
-    }
-  });
-}
-
-async function requireCartUserId() {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  return session.user.id;
+  return prisma.user.create({ data: { email: normalizedEmail, name } });
 }
 
 function getVoucherRestrictions(value: unknown) {
@@ -133,8 +106,6 @@ export async function createRegistration(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration.");
   }
 
-  await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${parsed.data.attendeeEmail.toLowerCase()}`);
-
   const event = await prisma.event.findFirstOrThrow({
     where: {
       id: parsed.data.eventId,
@@ -157,6 +128,11 @@ export async function createRegistration(formData: FormData) {
 
   assertOrganizationActive(event.org.status);
   const portalRoot = await getConventionPortalRootForRequest(event.org);
+  const attendee = await requirePublicAccount(`/${event.org.subdomain}/register`);
+  assertPublicAccountEmail(attendee, parsed.data.attendeeEmail);
+  const account = await syncPublicAccountName(attendee, parsed.data.attendeeName);
+
+  await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${account.id}`);
 
   const type = event.registrationTypes.find((registrationType) => registrationType.id === parsed.data.typeId);
 
@@ -191,13 +167,11 @@ export async function createRegistration(formData: FormData) {
     await assertPaidCheckoutAvailable(event.orgId, event.currency);
   }
 
-  const attendee = await findOrCreateAttendee(parsed.data.attendeeEmail, parsed.data.attendeeName);
-
   const registration = await prisma.registration.create({
     data: {
       orgId: event.orgId,
       eventId: event.id,
-      userId: attendee.id,
+      userId: account.id,
       typeId: type.id,
       status: "PENDING",
       addOns: {
@@ -217,14 +191,14 @@ export async function createRegistration(formData: FormData) {
     type: "registration.created",
     data: {
       registrationId: registration.id,
-      userId: attendee.id,
+      userId: account.id,
       typeId: type.id,
       status: registration.status
     }
   });
 
   if (parsed.data.checkoutMode === "cart") {
-    const buyerId = await requireCartUserId();
+    const buyerId = account.id;
     const restrictions = voucher ? getVoucherRestrictions(voucher.restrictions) : null;
 
     if (restrictions?.compedRegistration) {
@@ -249,8 +223,8 @@ export async function createRegistration(formData: FormData) {
               unitPrice: registrationPrice,
               quantity: 1,
               metadata: {
-                attendeeName: attendee.name,
-                attendeeEmail: attendee.email,
+                attendeeName: account.name,
+                attendeeEmail: account.email,
                 registrationType: type.name
               }
             },
@@ -282,8 +256,8 @@ export async function createRegistration(formData: FormData) {
               unitPrice: registrationPrice,
               quantity: 1,
               metadata: {
-                attendeeName: attendee.name,
-                attendeeEmail: attendee.email,
+                attendeeName: account.name,
+                attendeeEmail: account.email,
                 registrationType: type.name
               }
             },
@@ -310,7 +284,7 @@ export async function createRegistration(formData: FormData) {
   const order = await prisma.order.create({
     data: {
       orgId: event.orgId,
-      userId: attendee.id,
+      userId: account.id,
       eventId: event.id,
       total,
       platformFee,
@@ -545,7 +519,7 @@ export async function transferRegistration(formData: FormData) {
   const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
   const { registration: source, event } = await requireRegistrationAccess(registrationId);
-  const attendee = await findOrCreateAttendee(attendeeEmail, attendeeName);
+  const attendee = await findOrCreateTransferRecipient(attendeeEmail, attendeeName);
 
   await prisma.$transaction([
     prisma.registration.update({
