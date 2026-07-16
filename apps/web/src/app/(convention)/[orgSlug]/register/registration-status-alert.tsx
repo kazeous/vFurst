@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 type RegistrationConfirmation = {
   attendee: string;
+  approvalStatus: "APPROVED" | "PENDING" | "REJECTED";
   confirmed: true;
   event: string;
   tier: string;
@@ -44,6 +45,15 @@ export function RegistrationStatusAlert({ orgSlug }: { orgSlug: string }) {
   }, [orgSlug, registrationId]);
 
   if (confirmation) {
+    if (confirmation.approvalStatus === "PENDING") {
+      return (
+        <Alert variant="warning">
+          <h2>Registration awaiting approval</h2>
+          <p>Payment is complete for {confirmation.attendee}. The organizer must approve the {confirmation.tier} registration for {confirmation.event} before check-in.</p>
+        </Alert>
+      );
+    }
+
     return (
       <Alert variant="success">
         <h2>Registration confirmed</h2>

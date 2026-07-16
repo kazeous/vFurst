@@ -13,6 +13,13 @@ import { sendOrgEmail } from "@/lib/email";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { parseMoney } from "@/lib/registration/pricing";
+import {
+  assertRegistrationCapacity,
+  assertTransfersAllowed,
+  getRegistrationApprovalStatus,
+  registrationReservationStatuses,
+  runRegistrationPolicyTransaction
+} from "@/lib/registration-policy";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -222,6 +229,7 @@ export async function generateBadgesForEvent(formData: FormData) {
     where: {
       orgId: event.orgId,
       eventId: event.id,
+      approvalStatus: "APPROVED",
       status: {
         in: ["CONFIRMED", "CHECKED_IN"]
       }
@@ -325,6 +333,10 @@ export async function checkInRegistration(formData: FormData) {
     throw new Error("This registration is not eligible for check-in.");
   }
 
+  if (registration.approvalStatus !== "APPROVED") {
+    throw new Error("This registration still requires organizer approval before check-in.");
+  }
+
   if (registration.status === "CHECKED_IN") {
     return;
   }
@@ -411,8 +423,14 @@ export async function createWalkInRegistration(formData: FormData) {
     (typeof settings.defaultBadgeTemplateId === "string" ? settings.defaultBadgeTemplateId : undefined);
   const template = event.badgeTemplates.find((candidate) => candidate.id === preferredTemplateId) ?? event.badgeTemplates[0];
   const checkedInAt = new Date();
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await runRegistrationPolicyTransaction(async (tx) => {
     const attendee = await findOrCreateUser(parsed.data.attendeeEmail, parsed.data.attendeeName, tx);
+    await assertRegistrationCapacity(tx, {
+      eventId: event.id,
+      userId: attendee.id,
+      typeId: registrationType.id
+    });
+
     const registration = await tx.registration.create({
       data: {
         orgId: event.orgId,
@@ -420,6 +438,7 @@ export async function createWalkInRegistration(formData: FormData) {
         userId: attendee.id,
         typeId: registrationType.id,
         status: "CHECKED_IN",
+        approvalStatus: getRegistrationApprovalStatus(event.settings, "CASHIER"),
         checkedInAt
       }
     });
@@ -522,6 +541,8 @@ export async function requestRegistrationTransfer(formData: FormData) {
     }
   });
 
+  assertTransfersAllowed(registration.event.settings);
+
   await sendOrgEmail(registration.org, recipientEmail, "staff-message", {
     eventName: registration.event.name,
     subject: "Registration transfer request",
@@ -536,28 +557,42 @@ export async function adminTransferRegistration(formData: FormData) {
   const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
   const { registration: source, event } = await requireRegistrationAccess(registrationId);
-  const attendee = await findOrCreateUser(attendeeEmail, attendeeName);
+  assertTransfersAllowed(event.settings);
 
-  await prisma.$transaction([
-    prisma.registration.update({
+  await runRegistrationPolicyTransaction(async (tx) => {
+    const attendee = await findOrCreateUser(attendeeEmail, attendeeName, tx);
+    await assertRegistrationCapacity(tx, {
+      eventId: event.id,
+      userId: attendee.id,
+      typeId: source.typeId
+    });
+
+    const moved = await tx.registration.updateMany({
       where: {
-        id: source.id
+        id: source.id,
+        eventId: event.id,
+        orgId: event.orgId,
+        status: { in: [...registrationReservationStatuses] }
       },
-      data: {
-        status: "TRANSFERRED"
-      }
-    }),
-    prisma.registration.create({
+      data: { status: "TRANSFERRED" }
+    });
+
+    if (moved.count !== 1) {
+      throw new Error("This registration is no longer eligible for transfer.");
+    }
+
+    await tx.registration.create({
       data: {
         orgId: event.orgId,
         eventId: event.id,
         userId: attendee.id,
         typeId: source.typeId,
         status: "CONFIRMED",
+        approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
         transferredFromId: source.id
       }
-    })
-  ]);
+    });
+  });
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
   revalidatePath(`/dashboard/events/${event.id}/registrations`);

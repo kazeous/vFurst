@@ -1,6 +1,7 @@
 import { sendOrgEmail } from "@/lib/email";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { organizerNetAmount } from "@/lib/payments/ledger";
+import { transitionRegistrationToPaid } from "@/lib/registration-policy";
 import { Prisma, prisma, type PaymentAttempt, type PaymentProvider } from "@vfurst/db";
 
 type ProviderPaymentContext = {
@@ -287,13 +288,10 @@ export async function markOrderPaidWithProvider(
 
     for (const item of order.items) {
       if (item.itemType === "REGISTRATION" && item.registrationId) {
-        await tx.registration.update({
-          where: {
-            id: item.registrationId
-          },
-          data: {
-            status: "CONFIRMED"
-          }
+        await transitionRegistrationToPaid(tx, {
+          registrationId: item.registrationId,
+          eventId: order.eventId,
+          orgId: order.orgId
         });
       }
 

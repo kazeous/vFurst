@@ -41,7 +41,10 @@ export function getCoreEventSettings(settings: Prisma.JsonValue): CoreEventSetti
     requireApproval: value.requireApproval === true,
     allowTransfers: value.allowTransfers !== false,
     maxRegistrationsPerUser:
-      typeof value.maxRegistrationsPerUser === "number" && Number.isInteger(value.maxRegistrationsPerUser)
+      typeof value.maxRegistrationsPerUser === "number" &&
+      Number.isInteger(value.maxRegistrationsPerUser) &&
+      value.maxRegistrationsPerUser >= 1 &&
+      value.maxRegistrationsPerUser <= 20
         ? value.maxRegistrationsPerUser
         : 1
   };

@@ -43,7 +43,7 @@ export default async function AccountOverviewPage() {
             {registrations.map((registration) => (
               <div key={registration.id} className="vf-list-row">
                 <span><strong>{registration.event.name}</strong><small>{registration.org.name} · {registration.type.name}</small></span>
-                <AccountStatus status={registration.status} />
+                <span className="vf-inline-status"><AccountStatus status={registration.status} />{registration.approvalStatus === "PENDING" ? <small>Awaiting approval</small> : null}</span>
               </div>
             ))}
             {registrations.length === 0 ? <p className="vf-empty">No registrations yet.</p> : null}

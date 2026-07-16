@@ -20,7 +20,7 @@ Phase 0 is complete under the updated local-development directive:
 |-------|--------|-------|
 | 0 - Foundation | Verified complete | Monorepo, Next app, Prisma schema, API contracts, CI, env templates, local Docker Compose stack, local verification, and GitHub Actions CI are verified. |
 | 1 - Core Infrastructure | Remediation in progress | Managed-tenant containment, the 42-model lifecycle schema, safe legacy-tenant backfill, hashed single-use invitations, separately guarded `/platform` routes, platform-only lifecycle enforcement, and audited custom-domain activation are implemented. |
-| 2 - Registration & Hotel | Remediation in progress | Public registration/hotel records are now session-owned and exposed through the central attendee account; organizer event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, event-day walk-in, and provider transitions derive stored authority. Registration policy and recipient transfer acceptance remain open. |
+| 2 - Registration & Hotel | Remediation in progress | Public registration/hotel records are now session-owned and exposed through the central attendee account; organizer event/tier/add-on, registration/note/transfer, store/order, hotel block/booking, voucher-backed registration, event-day walk-in, provider transitions, and event registration policy derive stored authority. Recipient transfer acceptance remains open. |
 | 3 - Store & Add-ons | Remediation in progress | Product CRUD, organizer refunds, cart tenant integrity, voucher creation/application/fulfillment integrity, VND product/voucher inputs, and product-image validation are remediated and covered. Other add-on-adjacent action families remain. |
 | 4 - Volunteers & Vendors | Remediation in progress | Staff/vendor resources use stored-resource authorization; public applications are portal/event/session-owner-bound and visible in the attendee account; vendor uploads are constrained; VND booth inputs are currency-correct. Remaining Phase 4 completion evidence has not been rerun as a standalone phase gate. |
 | 5 - Advanced Features | Audit reopened | Badge render artifacts are persisted and exposed through PDF/WebUSB controls, print timestamps require successful/direct or explicit PDF confirmation, cashier payment/currency behavior is remediated, and raffle mutations now derive access from the stored raffle/event with enforced prize configuration and quantities. Recipient accept/decline, actual image-layer rendering, and physical printer evidence remain incomplete. |
@@ -30,6 +30,14 @@ Phase 0 is complete under the updated local-development directive:
 Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
+
+### 2026-07-16 - Product gap remediation, event registration policy (GAP-02)
+- Added `apps/web/src/lib/registration-policy.ts` as the single policy boundary for registration capacity, approval semantics, transfer eligibility, serializable retries, and payment fulfillment transitions.
+- Added `Registration.approvalStatus` (`APPROVED`/`PENDING`/`REJECTED`) so `requireApproval` never overloads payment/check-in `status`. A paid registration can be `CONFIRMED` while awaiting organizer approval.
+- Enforced account and tier caps for public registration, cashier walk-ins, tier upgrades, payment fulfillment, and transfer creation. Active reservations are `PENDING`, `CONFIRMED`, or `CHECKED_IN`; cancelled/transferred rows release capacity. Serializable transactions retry conflicts.
+- Rejected transfer request/completion actions when `allowTransfers` is disabled; updated dashboard/account displays to show payment and approval independently.
+- Verified `npm run test` (101 web, 21 worker, 12 database, and 1 email test), type-check, lint, Prisma schema push/validate, and production build. Focused policy E2E passed 3/3 (approval/check-in separation, concurrent cap, disabled transfer); registration/account authorization passed 8/8; badge/check-in authorization passed 4/4. The known BullMQ dynamic-dependency warning remains.
+- GAP-02 is implemented. GAP-03 recipient-owned transfer accept/decline remains the next P0 unit.
 
 ### 2026-07-16 - Product gap remediation, attendee account ownership and recovery
 - Built the first P0 product-gap unit from `docs/launch/product-gap-audit-2026-07-16.md`:
@@ -45,8 +53,8 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
   - The attempted full 81-test dev-mode E2E run exceeded the shell's 10-minute limit. Four tests reported auth/navigation/confirmation timeouts under four-worker contention; all four passed when rerun with one worker. No full-suite pass claim is made for this session.
 - Remaining product gaps:
   - GAP-01's ownership/account foundation is implemented, but incoming transfer decisions remain part of GAP-03 because the current transfer lifecycle creates the recipient registration immediately.
-  - GAP-02 registration-policy enforcement and GAP-03 recipient accept/decline are the next P0 unit. GAP-04 raffle contract, GAP-05 custom-template delivery, GAP-07 badge image layers, and the GAP-08/GAP-09 decisions remain open. GAP-06 recovery is implemented.
-- Next session should: implement one shared registration-policy helper for `requireApproval`, `allowTransfers`, and `maxRegistrationsPerUser`, with atomic enforcement and explicit counting/status rules; then build recipient-owned transfer accept/decline on that policy foundation.
+  - GAP-03 recipient accept/decline is the next P0 unit. GAP-04 raffle contract, GAP-05 custom-template delivery, GAP-07 badge image layers, and the GAP-08/GAP-09 decisions remain open. GAP-02 and GAP-06 are implemented.
+- Next session should: build recipient-owned transfer accept/decline on the now-enforced registration-policy foundation.
 
 ### 2026-07-16 - Product-plan versus implementation gap audit
 - Built: No application-code changes. Added `docs/launch/product-gap-audit-2026-07-16.md`, a behavior-level reconciliation of the full Phase 0-7 product plan, maintained reference, launch audits, schema, routes, actions, workers, email delivery, and current tests.

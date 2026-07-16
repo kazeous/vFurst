@@ -45,6 +45,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
             email: registration.user.email,
             type: registration.type.name,
             status: registration.status,
+            approvalStatus: registration.approvalStatus,
             createdAt: registration.createdAt.toLocaleDateString()
           }))}
         />

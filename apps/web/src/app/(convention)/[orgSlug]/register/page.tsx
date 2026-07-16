@@ -32,7 +32,7 @@ const getPublicRegistrationData = unstable_cache(
           select: {
             id: true, maxCapacity: true, name: true, price: true, scheduledPricing: true,
             addOns: { orderBy: { sortOrder: "asc" } },
-            _count: { select: { registrations: { where: { status: { not: "CANCELLED" } } } } }
+            _count: { select: { registrations: { where: { status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } } } } }
           }
         }
       }

@@ -16,23 +16,34 @@ import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pric
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
-import { prisma } from "@vfurst/db";
+import {
+  assertRegistrationCapacity,
+  assertTransfersAllowed,
+  getRegistrationApprovalStatus,
+  registrationReservationStatuses,
+  runRegistrationPolicyTransaction
+} from "@/lib/registration-policy";
+import { prisma, type Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-async function findOrCreateTransferRecipient(email: string, name: string) {
+async function findOrCreateTransferRecipient(
+  email: string,
+  name: string,
+  client: Pick<Prisma.TransactionClient, "user"> = prisma
+) {
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const existing = await client.user.findUnique({ where: { email: normalizedEmail } });
 
   if (existing) {
     if (!existing.name && name) {
-      return prisma.user.update({ where: { id: existing.id }, data: { name } });
+      return client.user.update({ where: { id: existing.id }, data: { name } });
     }
     return existing;
   }
 
-  return prisma.user.create({ data: { email: normalizedEmail, name } });
+  return client.user.create({ data: { email: normalizedEmail, name } });
 }
 
 function getVoucherRestrictions(value: unknown) {
@@ -119,8 +130,7 @@ export async function createRegistration(formData: FormData) {
             orderBy: {
               sortOrder: "asc"
             }
-          },
-          registrations: true
+          }
         }
       }
     }
@@ -138,10 +148,6 @@ export async function createRegistration(formData: FormData) {
 
   if (!type) {
     throw new Error("Registration tier is not available.");
-  }
-
-  if (type.maxCapacity != null && type.registrations.filter((registration) => registration.status !== "CANCELLED").length >= type.maxCapacity) {
-    throw new Error("That registration tier is sold out.");
   }
 
   const selectedAddOns = type.addOns
@@ -167,22 +173,37 @@ export async function createRegistration(formData: FormData) {
     await assertPaidCheckoutAvailable(event.orgId, event.currency);
   }
 
-  const registration = await prisma.registration.create({
-    data: {
-      orgId: event.orgId,
+  const restrictions = voucher ? getVoucherRestrictions(voucher.restrictions) : null;
+
+  if (parsed.data.checkoutMode === "cart" && restrictions?.compedRegistration) {
+    throw new Error("Comped registration vouchers can only be used with direct registration checkout.");
+  }
+
+  const registration = await runRegistrationPolicyTransaction(async (tx) => {
+    await assertRegistrationCapacity(tx, {
       eventId: event.id,
       userId: account.id,
-      typeId: type.id,
-      status: "PENDING",
-      addOns: {
-        create: selectedAddOns.map((addOn) => ({
-          orgId: event.orgId,
-          addOnDefinitionId: addOn.id,
-          price: addOn.isComplimentary ? 0 : addOn.price,
-          quantity: addOn.quantity
-        }))
+      typeId: type.id
+    });
+
+    return tx.registration.create({
+      data: {
+        orgId: event.orgId,
+        eventId: event.id,
+        userId: account.id,
+        typeId: type.id,
+        status: "PENDING",
+        approvalStatus: getRegistrationApprovalStatus(event.settings),
+        addOns: {
+          create: selectedAddOns.map((addOn) => ({
+            orgId: event.orgId,
+            addOnDefinitionId: addOn.id,
+            price: addOn.isComplimentary ? 0 : addOn.price,
+            quantity: addOn.quantity
+          }))
+        }
       }
-    }
+    });
   });
 
   await queueWebhookEvent({
@@ -199,11 +220,6 @@ export async function createRegistration(formData: FormData) {
 
   if (parsed.data.checkoutMode === "cart") {
     const buyerId = account.id;
-    const restrictions = voucher ? getVoucherRestrictions(voucher.restrictions) : null;
-
-    if (restrictions?.compedRegistration) {
-      throw new Error("Comped registration vouchers can only be used with direct registration checkout.");
-    }
 
     await prisma.cart.upsert({
       where: {
@@ -330,12 +346,16 @@ export async function confirmRegistration(formData: FormData) {
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const { registration, event } = await requireRegistrationAccess(registrationId);
 
+  if (registration.status === "CANCELLED" || registration.status === "TRANSFERRED") {
+    throw new Error("This registration cannot be approved.");
+  }
+
   await prisma.registration.update({
     where: {
       id: registration.id
     },
     data: {
-      status: "CONFIRMED"
+      approvalStatus: "APPROVED"
     }
   });
 
@@ -367,7 +387,7 @@ const registrationIdListSchema = z
 
 export async function bulkUpdateRegistrations(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const action = z.enum(["CONFIRMED", "CANCELLED"]).parse(formData.get("action"));
+  const action = z.enum(["APPROVED", "CANCELLED"]).parse(formData.get("action"));
   const registrationIds = registrationIdListSchema.parse(
     z.string().parse(formData.get("registrationIds")).split(",").filter(Boolean)
   );
@@ -390,18 +410,26 @@ export async function bulkUpdateRegistrations(formData: FormData) {
     throw new Error("One or more registrations do not belong to this event.");
   }
 
-  await prisma.registration.updateMany({
-    where: {
-      id: {
-        in: registrationIds
+  if (action === "APPROVED") {
+    await prisma.registration.updateMany({
+      where: {
+        id: { in: registrationIds },
+        eventId: event.id,
+        orgId: event.orgId,
+        status: { in: [...registrationReservationStatuses] }
       },
-      eventId: event.id,
-      orgId: event.orgId
-    },
-    data: {
-      status: action
-    }
-  });
+      data: { approvalStatus: "APPROVED" }
+    });
+  } else {
+    await prisma.registration.updateMany({
+      where: {
+        id: { in: registrationIds },
+        eventId: event.id,
+        orgId: event.orgId
+      },
+      data: { status: "CANCELLED" }
+    });
+  }
 
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
@@ -488,27 +516,28 @@ export async function upgradeTier(formData: FormData) {
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const typeId = z.string().uuid().parse(formData.get("typeId"));
   const { registration, event } = await requireRegistrationAccess(registrationId);
-  const targetType = await prisma.registrationType.findFirst({
-    where: {
-      id: typeId,
-      eventId: event.id
-    },
-    select: {
-      id: true
-    }
-  });
+  await runRegistrationPolicyTransaction(async (tx) => {
+    const current = await tx.registration.findUnique({
+      where: { id: registration.id },
+      select: { id: true, eventId: true, orgId: true, userId: true, status: true }
+    });
 
-  if (!targetType) {
-    throw new Error("Registration tier does not belong to this event.");
-  }
-
-  await prisma.registration.update({
-    where: {
-      id: registration.id
-    },
-    data: {
-      typeId: targetType.id
+    if (!current || current.eventId !== event.id || current.orgId !== event.orgId || ["CANCELLED", "TRANSFERRED"].includes(current.status)) {
+      throw new Error("This registration cannot be upgraded.");
     }
+
+    const targetType = await assertRegistrationCapacity(tx, {
+      eventId: event.id,
+      userId: current.userId,
+      typeId,
+      excludeRegistrationId: current.id,
+      enforceUserLimit: false
+    });
+
+    await tx.registration.update({
+      where: { id: current.id },
+      data: { typeId: targetType.type.id }
+    });
   });
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/${registration.id}`);
@@ -519,28 +548,42 @@ export async function transferRegistration(formData: FormData) {
   const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
   const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
   const { registration: source, event } = await requireRegistrationAccess(registrationId);
-  const attendee = await findOrCreateTransferRecipient(attendeeEmail, attendeeName);
+  assertTransfersAllowed(event.settings);
 
-  await prisma.$transaction([
-    prisma.registration.update({
+  await runRegistrationPolicyTransaction(async (tx) => {
+    const attendee = await findOrCreateTransferRecipient(attendeeEmail, attendeeName, tx);
+    await assertRegistrationCapacity(tx, {
+      eventId: event.id,
+      userId: attendee.id,
+      typeId: source.typeId
+    });
+
+    const moved = await tx.registration.updateMany({
       where: {
-        id: source.id
+        id: source.id,
+        eventId: event.id,
+        orgId: event.orgId,
+        status: { in: [...registrationReservationStatuses] }
       },
-      data: {
-        status: "TRANSFERRED"
-      }
-    }),
-    prisma.registration.create({
+      data: { status: "TRANSFERRED" }
+    });
+
+    if (moved.count !== 1) {
+      throw new Error("This registration is no longer eligible for transfer.");
+    }
+
+    await tx.registration.create({
       data: {
         orgId: event.orgId,
         eventId: event.id,
         userId: attendee.id,
         typeId: source.typeId,
         status: "CONFIRMED",
+        approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
         transferredFromId: source.id
       }
-    })
-  ]);
+    });
+  });
 
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }

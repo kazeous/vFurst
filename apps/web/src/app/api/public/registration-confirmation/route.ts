@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
       userId: session.user.id
     },
     select: {
+      approvalStatus: true,
       event: {
         select: {
           name: true
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
     registration
       ? {
           attendee: registration.user.name ?? registration.user.email,
+          approvalStatus: registration.approvalStatus,
           confirmed: true,
           event: registration.event.name,
           tier: registration.type.name

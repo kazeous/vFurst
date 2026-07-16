@@ -13,6 +13,7 @@ type CheckInRow = {
   email: string;
   type: string;
   status: string;
+  approvalStatus: "APPROVED" | "PENDING" | "REJECTED";
   badgeNumber: string | null;
   paid: boolean;
   checkedInAt: string | null;
@@ -110,7 +111,7 @@ export function CheckInPanel({
               <div>
                 <h3>{row.attendee}</h3>
                 <p className="vf-muted">
-                  {row.email} - {row.type} - {row.status}
+                  {row.email} - {row.type} - {row.status} - approval {row.approvalStatus}
                 </p>
                 <p className="vf-muted">
                   Payment {row.paid ? "paid" : "unpaid"} - Badge{" "}
@@ -127,7 +128,7 @@ export function CheckInPanel({
               <div className="vf-inline-forms">
                 <form action={checkInRegistration}>
                   <input type="hidden" name="registrationId" value={row.id} />
-                  <Button label={row.checkedInAt ? "Checked in" : "Check in"} type="submit" variant={row.checkedInAt ? "secondary" : "primary"} />
+                  <Button label={row.checkedInAt ? "Checked in" : row.approvalStatus === "APPROVED" ? "Check in" : "Approval required"} type="submit" disabled={row.approvalStatus !== "APPROVED"} variant={row.checkedInAt ? "secondary" : "primary"} />
                 </form>
                 {row.badge ? (
                   <BadgePrintControls

@@ -2,6 +2,7 @@ import { adminTransferRegistration, requestRegistrationTransfer } from "@/action
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getCoreEventSettings } from "@/lib/event-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
 
   const transferable = event.registrations.filter((registration) => registration.status !== "TRANSFERRED" && registration.status !== "CANCELLED");
   const transferred = event.registrations.filter((registration) => registration.status === "TRANSFERRED" || registration.transferredFromId);
+  const transfersAllowed = getCoreEventSettings(event.settings).allowTransfers;
 
   return (
     <div className="vf-page">
@@ -46,7 +48,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         </div>
       </header>
 
-      <section className="vf-two-column">
+      {transfersAllowed ? <section className="vf-two-column">
         <form action={requestRegistrationTransfer} className="vf-section vf-form">
           <h2>Request transfer</h2>
           <label>
@@ -88,7 +90,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
           </label>
           <Button label="Transfer registration" type="submit" />
         </form>
-      </section>
+      </section> : <section className="vf-section"><h2>Transfers disabled</h2><p className="vf-muted">Enable transfers in event settings before sending or completing a transfer.</p></section>}
 
       <section className="vf-section">
         <h2>History</h2>

@@ -81,6 +81,7 @@ const getCheckInData = unstable_cache(
           orgId: true,
           eventId: true,
           status: true,
+          approvalStatus: true,
           badgeNumber: true,
           checkedInAt: true,
           addOns: {
@@ -181,6 +182,7 @@ export default async function CheckInPage({
           email: registration.user.email,
           type: registration.type.name,
           status: registration.status,
+          approvalStatus: registration.approvalStatus,
           badgeNumber: registration.badgeNumber,
           paid: registration.orderItems.some((item) => item.order.status === "PAID"),
           checkedInAt: registration.checkedInAt ? new Date(registration.checkedInAt).toISOString() : null,

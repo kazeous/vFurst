@@ -117,6 +117,7 @@ async function getRegistrationTenant(registrationId: string) {
       typeId: true,
       userId: true,
       status: true,
+      approvalStatus: true,
       type: {
         select: {
           id: true,
@@ -128,7 +129,8 @@ async function getRegistrationTenant(registrationId: string) {
         select: {
           id: true,
           orgId: true,
-          currency: true
+          currency: true,
+          settings: true
         }
       }
     }

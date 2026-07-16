@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventSettingsSchema, mergeCoreEventSettings } from "./event-settings";
+import { eventSettingsSchema, getCoreEventSettings, mergeCoreEventSettings } from "./event-settings";
 
 const validSettings = {
   eventId: "5b367793-542f-47c3-9e72-e6fc67756473",
@@ -56,5 +56,11 @@ describe("mergeCoreEventSettings", () => {
       allowTransfers: false,
       maxRegistrationsPerUser: 3
     });
+  });
+});
+
+describe("getCoreEventSettings", () => {
+  it.each([0, 21, -1])("fails closed to one registration for an invalid stored limit of %s", (maxRegistrationsPerUser) => {
+    expect(getCoreEventSettings({ ...validSettings, maxRegistrationsPerUser }).maxRegistrationsPerUser).toBe(1);
   });
 });

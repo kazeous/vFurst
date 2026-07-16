@@ -16,6 +16,7 @@ type RegistrationRow = {
   email: string;
   type: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "TRANSFERRED" | "CHECKED_IN";
+  approvalStatus: "APPROVED" | "PENDING" | "REJECTED";
   createdAt: string;
 };
 
@@ -124,6 +125,12 @@ export function RegistrationsTable({ rows, eventId }: { rows: RegistrationRow[];
         width: proportional(1),
         renderCell: (row) => <Badge label={row.status} variant={badgeVariant(row.status)} />
       },
+      {
+        key: "approvalStatus",
+        header: "Approval",
+        width: proportional(1),
+        renderCell: (row) => <Badge label={row.approvalStatus} variant={row.approvalStatus === "APPROVED" ? "success" : row.approvalStatus === "REJECTED" ? "error" : "warning"} />
+      },
       { key: "createdAt", header: "Created", width: proportional(1) }
     ],
     [selected]
@@ -136,8 +143,8 @@ export function RegistrationsTable({ rows, eventId }: { rows: RegistrationRow[];
         <form action={bulkUpdateRegistrations}>
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="registrationIds" value={selectedIds} />
-          <input type="hidden" name="action" value="CONFIRMED" />
-          <Button label="Confirm selected" type="submit" size="sm" />
+          <input type="hidden" name="action" value="APPROVED" />
+          <Button label="Approve selected" type="submit" size="sm" />
         </form>
         <form action={bulkUpdateRegistrations}>
           <input type="hidden" name="eventId" value={eventId} />

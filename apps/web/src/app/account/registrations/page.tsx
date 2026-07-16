@@ -25,7 +25,7 @@ export default async function AccountRegistrationsPage() {
         <article key={registration.id} className="vf-section">
           <div className="vf-page-header">
             <div><p className="vf-label">{registration.org.name}</p><h3>{registration.event.name}</h3><p className="vf-muted">{registration.type.name} · {registration.addOns.length} add-on(s)</p></div>
-            <AccountStatus status={registration.status} />
+            <span className="vf-inline-status"><AccountStatus status={registration.status} />{registration.approvalStatus === "PENDING" ? <small>Awaiting approval</small> : null}</span>
           </div>
           <div className="vf-actions">
             <Button label="View registration" href={`/account/registrations/${registration.id}`} variant="primary" size="sm" />

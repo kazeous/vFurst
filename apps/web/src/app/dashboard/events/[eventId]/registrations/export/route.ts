@@ -24,12 +24,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   });
 
   const rows = [
-    ["Name", "Email", "Type", "Status", "Badge Number", "Created"],
+    ["Name", "Email", "Type", "Status", "Approval", "Badge Number", "Created"],
     ...registrations.map((registration) => [
       registration.user.name ?? "",
       registration.user.email,
       registration.type.name,
       registration.status,
+      registration.approvalStatus,
       registration.badgeNumber ?? "",
       registration.createdAt.toISOString()
     ])

@@ -99,6 +99,12 @@ enum RegistrationStatus {
   CHECKED_IN
 }
 
+enum RegistrationApprovalStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
 enum VolunteerApplicationStatus {
   PENDING
   APPROVED
@@ -460,6 +466,7 @@ model Registration {
   userId            String              @db.Uuid
   typeId            String              @db.Uuid
   status            RegistrationStatus  @default(PENDING)
+  approvalStatus    RegistrationApprovalStatus @default(APPROVED)
   checkedInAt       DateTime?
   badgeNumber       String?
   transferredFromId String?             @db.Uuid
@@ -480,6 +487,7 @@ model Registration {
   @@index([orgId])
   @@index([eventId])
   @@index([eventId, status])
+  @@index([eventId, userId, status])
   @@index([eventId, createdAt])
   @@index([eventId, checkedInAt])
   @@index([userId])

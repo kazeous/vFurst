@@ -228,7 +228,7 @@ erDiagram
 | **Event** | id, orgId, name, slug, startDate, endDate, venue, status, currency, settings | A convention with immutable USD/VND monetary context |
 | **RegistrationType** | id, eventId, name, price, maxCapacity, scheduledPricing (JSON) | Attendance tiers (General, VIP, Sponsor) |
 | **AddOnDefinition** | id, registrationTypeId, name, price, isComplimentary, maxQuantity, sortOrder | Defines an available add-on for a specific registration tier. Scoped to `RegistrationType` (not Event) so different tiers can offer different add-ons. `RegistrationAddOn` instances reference this. |
-| **Registration** | id, eventId, userId, typeId, status, checkedInAt, badgeNumber, transferredFromId | An attendee's event registration |
+| **Registration** | id, eventId, userId, typeId, status, approvalStatus, checkedInAt, badgeNumber, transferredFromId | An attendee's event registration; payment/check-in status is separate from organizer approval (`APPROVED`/`PENDING`/`REJECTED`) |
 | **RegistrationAddOn** | id, registrationId, addOnDefinitionId, price, quantity | An attendee's selected add-on. References `AddOnDefinition` for the catalog entry and `Registration` for the attendee. `price` is snapshotted at checkout time (in case the definition price changes later). |
 | **Badge** | id, registrationId, templateId, barcodeData, nfcTag, printedAt | Physical/digital badge |
 | **BadgeTemplate** | id, eventId, name, layout (JSON), dimensions | Badge design template |
@@ -286,7 +286,7 @@ Several entities use JSON fields. To prevent ambiguity, their schemas are define
 | **Raffle.prizes** | `Array<{ name: string, description: string, quantity: number }>` | `[{ name: "VIP Pass", description: "Free upgrade", quantity: 3 }]` |
 | **VendorApplication.assistants** | `Array<{ name: string, email: string }>` | `[{ name: "Jane Doe", email: "jane@example.com" }]` |
 | **StoreProduct.surcharges** | `Array<{ name: string, amount: number }>` | `[{ name: "Shipping", amount: 500 }]` (in cents) |
-| **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string, branding?: { logoUrl?: string, coverImageUrl?: string, accentColor?: "#RRGGBB" } }` | Event-level configuration flags and constrained public-portal branding. |
+| **Event.settings** | `{ requireApproval: boolean, allowTransfers: boolean, maxRegistrationsPerUser: number, emailProviderId?: string, branding?: { logoUrl?: string, coverImageUrl?: string, accentColor?: "#RRGGBB" } }` | Event-level configuration flags and constrained public-portal branding; active registration reservations are `PENDING`, `CONFIRMED`, or `CHECKED_IN`, while cancelled/transferred records release a slot. |
 
 > [!NOTE]
 > Monetary values are integers in their currency's minor unit: USD uses cents and VND uses whole đồng. The owning Event and Order carry an immutable currency so values are never interpreted without currency context. Zod and TypeScript contracts are colocated with their owning actions and libraries rather than kept in empty shared-package stubs.

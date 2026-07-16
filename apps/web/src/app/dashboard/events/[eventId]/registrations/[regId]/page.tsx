@@ -9,6 +9,7 @@ import {
   upgradeTier
 } from "@/actions/registration-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
+import { getCoreEventSettings } from "@/lib/event-settings";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -59,6 +60,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
   }
 
   const order = registration.orderItems[0]?.order;
+  const transfersAllowed = getCoreEventSettings(registration.event.settings).allowTransfers;
 
   return (
     <div className="vf-page">
@@ -67,7 +69,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           <p className="vf-label">Registration detail</p>
           <h1>{registration.user.name ?? registration.user.email}</h1>
           <p className="vf-muted">
-            {registration.type.name} - {registration.status}
+            {registration.type.name} - payment {registration.status} - approval {registration.approvalStatus}
           </p>
         </div>
         <div className="vf-actions">
@@ -143,21 +145,23 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
             <Button label="Upgrade" type="submit" />
           </form>
           <h2>Transfer</h2>
-          <form action={transferRegistration} className="vf-form">
-            <input type="hidden" name="registrationId" value={registration.id} />
-            <label>
-              New attendee name
-              <input name="attendeeName" required />
-            </label>
-            <label>
-              New attendee email
-              <input name="attendeeEmail" type="email" required />
-            </label>
-            <Button label="Transfer registration" type="submit" />
-          </form>
+          {transfersAllowed ? (
+            <form action={transferRegistration} className="vf-form">
+              <input type="hidden" name="registrationId" value={registration.id} />
+              <label>
+                New attendee name
+                <input name="attendeeName" required />
+              </label>
+              <label>
+                New attendee email
+                <input name="attendeeEmail" type="email" required />
+              </label>
+              <Button label="Transfer registration" type="submit" />
+            </form>
+          ) : <p className="vf-muted">Transfers are disabled in this event's registration policy.</p>}
           <form action={confirmRegistration}>
             <input type="hidden" name="registrationId" value={registration.id} />
-            <Button label="Confirm" type="submit" size="sm" />
+            <Button label="Approve registration" type="submit" size="sm" />
           </form>
         </div>
       </section>

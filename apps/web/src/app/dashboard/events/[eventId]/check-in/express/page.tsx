@@ -14,6 +14,7 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
     include: {
       registrations: {
         where: {
+          approvalStatus: "APPROVED",
           status: {
             in: ["CONFIRMED", "CHECKED_IN"]
           }

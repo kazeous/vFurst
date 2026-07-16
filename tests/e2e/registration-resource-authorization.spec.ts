@@ -349,7 +349,7 @@ test("status, refund, and email actions reject a foreign registration ID", async
   const detailPath = `/dashboard/events/${eventAId}/registrations/${registrationAId}`;
   expect((await page.request.get(`/dashboard/events/${eventAId}/registrations/${registrationBId}`)).status()).toBe(404);
 
-  for (const buttonName of ["Confirm", "Cancel", "Refund", "Resend email"]) {
+  for (const buttonName of ["Approve registration", "Cancel", "Refund", "Resend email"]) {
     await navigateAfterRejectedAction(page, detailPath);
     const form = page.getByRole("button", { name: buttonName, exact: true }).locator("xpath=ancestor::form");
     await submitTamperedAction(page, detailPath, form, buttonName, "registrationId", registrationBId);

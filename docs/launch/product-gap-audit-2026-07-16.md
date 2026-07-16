@@ -71,17 +71,13 @@ The plan promises public accounts but does not explicitly choose between authent
 
 ### GAP-02 — Enforce event registration policy instead of only storing it
 
-**Priority: P0. Existing event settings are operationally misleading.**
+**Priority: P0. Implemented 2026-07-16.**
 
-`requireApproval`, `allowTransfers`, and `maxRegistrationsPerUser` are configured in the event wizard/settings and stored in `Event.settings`, but no public registration or transfer action reads/enforces them. A search of implementation code finds these values only in parsing, persistence, and settings UI.
+`requireApproval`, `allowTransfers`, and `maxRegistrationsPerUser` are configured in the event wizard/settings and stored in `Event.settings`.
 
-#### Required work
+**Implementation update (2026-07-16): enforced through one shared server-side policy boundary.** `apps/web/src/lib/registration-policy.ts` is used by public registration creation, provider-neutral payment fulfillment, tier upgrades, cashier walk-ins, and both transfer paths. `PENDING`, `CONFIRMED`, and `CHECKED_IN` registrations reserve a slot; `CANCELLED` and `TRANSFERRED` release it. User and tier capacity checks run in serializable transactions with retry-on-conflict, so concurrent submissions cannot exceed the configured account or tier cap. `requireApproval` is represented by the separate `Registration.approvalStatus` field: payment can move a registration to `CONFIRMED` while approval remains `PENDING`, and organizer approval changes only `approvalStatus`. `allowTransfers=false` rejects both request and completion actions at the server boundary. The public registration page uses the same active reservation statuses for sold-out counts.
 
-1. Add a single server-side policy helper used by registration creation, fulfillment, upgrades, transfers, and any cashier equivalent.
-2. Enforce `maxRegistrationsPerUser` atomically against the authenticated account and define whether cancelled/refunded/pending records count.
-3. Define `requireApproval` status semantics. Payment/order status and registration approval must remain separate; a paid registration may await organizer approval rather than silently becoming confirmed.
-4. Reject transfer initiation when `allowTransfers` is false.
-5. Cover concurrent submissions so the configured registration cap cannot be exceeded.
+Focused unit coverage passes 3/3 and browser regressions pass 3/3 for approval/payment separation, concurrent account caps, and disabled transfer rejection. Recipient-owned accept/decline remains GAP-03.
 
 ### GAP-03 — Complete the recipient-owned registration-transfer workflow
 
