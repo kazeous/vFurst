@@ -15,6 +15,7 @@ The checker verifies:
 - Security audit no longer records any blocking application or dependency finding.
 - Full k6 target run is documented as passed.
 - Physical screen-reader pass is explicitly documented as complete with tester, assistive-technology, and flow evidence.
+- Physical badge output is documented with event/template/badge identifiers, printer model, browser, direct WebUSB result, legible image/barcode evidence, and tester/timestamp. If direct Zebra output is unavailable, record an explicit successful PDF fallback print before confirming the badge as printed.
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence is recorded before SePay is enabled.
 - A production transactional email provider is configured and tested for password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
 - `VFURST_LAUNCH_URL` returns live marketing/legal routes with expected vFurst launch content.

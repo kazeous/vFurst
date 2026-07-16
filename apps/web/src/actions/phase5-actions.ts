@@ -11,6 +11,7 @@ import {
   requireRegistrationTypeAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { parseMoney } from "@/lib/registration/pricing";
@@ -35,7 +36,7 @@ import {
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { eventEmailTemplateKeys, parseEventEmailTemplate } from "@vfurst/email";
 import { prisma, type Prisma } from "@vfurst/db";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -47,7 +48,8 @@ const badgeElementSchema = z.object({
   w: z.coerce.number().positive(),
   h: z.coerce.number().positive(),
   field: z.string().trim().optional(),
-  value: z.string().trim().optional()
+  value: z.string().trim().optional(),
+  assetKey: z.string().trim().optional()
 });
 
 const badgeLayoutSchema = z.object({
@@ -55,6 +57,75 @@ const badgeLayoutSchema = z.object({
   height: z.coerce.number().positive(),
   elements: z.array(badgeElementSchema)
 });
+
+const BADGE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const badgeImageTypes = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"]
+]);
+
+function isTenantAssetKey(key: string, orgId: string) {
+  const segments = key.split("/");
+  return (
+    key.startsWith(`${orgId}/`) &&
+    !key.includes("\\") &&
+    !Array.from(key).some((character) => character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127) &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
+async function prepareBadgeImageAssets(
+  layout: z.infer<typeof badgeLayoutSchema>,
+  formData: FormData,
+  orgId: string,
+  eventId: string
+) {
+  const elements = await Promise.all(
+    layout.elements.map(async (element) => {
+      if (element.type !== "image") return element;
+
+      const upload = formData.get(`badgeImage:${element.id}`);
+      let assetKey = element.assetKey?.trim();
+
+      if (upload instanceof File && upload.size > 0) {
+        const extension = badgeImageTypes.get(upload.type);
+        if (!extension) throw new Error("Badge images must be PNG or JPEG files.");
+        if (upload.size > BADGE_IMAGE_MAX_BYTES) throw new Error("Badge images must be 5 MB or smaller.");
+        const bytes = Buffer.from(await upload.arrayBuffer());
+        const hasPngSignature =
+          bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        const hasJpegSignature = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+        if ((extension === "png" && !hasPngSignature) || (extension === "jpg" && !hasJpegSignature)) {
+          throw new Error("Badge image content does not match its PNG or JPEG file type.");
+        }
+
+        assetKey = buildObjectKey(
+          orgId,
+          `event-${eventId}-badge-assets`,
+          `${randomUUID()}.${extension}`
+        );
+        await uploadFromBuffer(assetKey, bytes, upload.type);
+      }
+
+      if (!assetKey) {
+        throw new Error(`Upload a PNG or JPEG file for image layer ${element.id}.`);
+      }
+      if (!isTenantAssetKey(assetKey, orgId)) {
+        throw new Error(`Image layer ${element.id} does not reference an asset owned by this organization.`);
+      }
+
+      return {
+        ...element,
+        assetKey
+      };
+    })
+  );
+
+  return {
+    ...layout,
+    elements
+  };
+}
 
 function parseRaffleEligibilityForm(formData: FormData): RaffleEligibility {
   const kind = z
@@ -154,6 +225,7 @@ export async function saveBadgeTemplate(formData: FormData) {
     ? await requireBadgeTemplateAccess(parsed.data.templateId)
     : await requireStoredEventAccess(parsed.data.eventId);
   const event = authorized.event;
+  const layout = await prepareBadgeImageAssets(parsed.data.layout, formData, event.orgId, event.id);
   const defaultTypeIds = [...new Set(parsed.data.defaultTypeIds)];
   const validDefaultTypes = await prisma.registrationType.count({
     where: {
@@ -170,8 +242,8 @@ export async function saveBadgeTemplate(formData: FormData) {
   }
 
   const dimensions = {
-    width: parsed.data.layout.width,
-    height: parsed.data.layout.height,
+    width: layout.width,
+    height: layout.height,
     units: "pt"
   };
 
@@ -183,7 +255,7 @@ export async function saveBadgeTemplate(formData: FormData) {
           },
           data: {
             name: parsed.data.name,
-            layout: parsed.data.layout as Prisma.InputJsonValue,
+            layout: layout as Prisma.InputJsonValue,
             dimensions
           }
         })
@@ -192,7 +264,7 @@ export async function saveBadgeTemplate(formData: FormData) {
             orgId: event.orgId,
             eventId: event.id,
             name: parsed.data.name,
-            layout: parsed.data.layout as Prisma.InputJsonValue,
+            layout: layout as Prisma.InputJsonValue,
             dimensions
           }
         });

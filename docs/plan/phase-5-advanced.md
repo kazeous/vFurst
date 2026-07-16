@@ -7,12 +7,13 @@
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/badges/designer/page.tsx`
 Visual badge template designer:
 - **`react-konva`** canvas editor — renders `BadgeTemplate.layout` elements as Konva nodes (Rect, Text, Image, Group) on an HTML5 Canvas via React declarative API
-- Add: text fields, images, barcodes, QR codes, attendee data placeholders
+- Add: text fields, tenant-owned PNG/JPEG image assets, barcodes, QR codes, attendee data placeholders
 - Drag-and-drop positioning and resizing via Konva's built-in `Transformer`
 - Layer management (z-order) via Konva layer ordering
 - Preview with sample registration data
 - Save/load templates, set as default for registration types
 - Output: saves element positions/sizes to `BadgeTemplate.layout` JSON (same schema used by `generate-badges.ts` for server-side rendering via `pdf-lib`)
+- Image output stores an organization-prefixed S3/MinIO `assetKey`; arbitrary remote URLs and cross-tenant keys are not valid badge sources.
 
 ##### [NEW] `apps/web/src/app/dashboard/events/[eventId]/badges/page.tsx`
 Badge management:
@@ -34,6 +35,7 @@ BullMQ job processor for `badgeQueue`:
 - **Dual output format**:
   - **PDF** (`pdf-lib`): reads `BadgeTemplate.layout` JSON, creates a PDF page per badge, positions text/images/barcodes according to layout coordinates. Pure JS — no native Canvas/Cairo bindings, runs on Railway without platform issues.
   - **ZPL** (string generation): converts the same layout JSON into ZPL command strings for Zebra thermal printers. Sent directly to printer via WebUSB on the client side.
+- Image layers are fetched only from the configured bucket after tenant-prefix validation. PNG/JPEG bytes, content type, size, and dimensions are checked; PDF embeds the source image and ZPL uses a thresholded `^GFA` bitmap.
 - **Barcode/QR rendering** (`bwip-js`): generates barcode/QR PNG buffers which are embedded into the PDF via `pdf-lib`'s image embedding, or converted to ZPL `^BQ`/`^BC` commands for thermal output
 - Uploads generated PDF badge sheets to S3 via `lib/s3.ts`
 - Updates `Badge` record with `barcodeData` and generation status

@@ -164,14 +164,16 @@ Both direct web delivery and the BullMQ email worker now load `Event.settings.em
 
 **Priority: P1 for feature completion; external hardware proof remains a launch gate.**
 
-Badge PDF/ZPL artifacts and print controls are now exposed, but `apps/worker/src/jobs/generate-badges.ts` renders every image element as an `IMAGE` placeholder rather than the selected asset. It therefore does not meet the badge-layout contract for actual image layers.
+**Implementation update (2026-07-17): application work complete; physical proof pending.** The designer now uploads PNG/JPEG layers into an organization-prefixed S3/MinIO key and previews the stored asset. The save boundary rejects absent, malformed, or cross-tenant keys. The worker fetches only from the configured bucket, validates key ownership, body size, content type, file signature, decodability, and dimensions, embeds the real PNG/JPEG in PDF, and converts the same pixels into a monochrome ZPL `^GFA` graphic.
+
+Worker coverage proves successful PDF/ZPL image output, missing-object failure, invalid-body failure, and rejection of a foreign-tenant key before S3 access. Automated application evidence is complete. A physical Zebra direct-print (or explicit PDF fallback print) still has to be recorded; `printedAt` must continue to be written only after direct WebUSB success or explicit PDF-print confirmation.
 
 #### Required work
 
-1. Define which image sources are valid (controlled S3/MinIO assets only is preferred) and fetch/validate them safely in the worker.
-2. Embed/rasterize valid image assets in the PDF and generate a real ZPL-compatible image representation instead of placeholder text.
-3. Add worker tests for image success, missing/invalid asset failure, and no cross-tenant asset use.
-4. Run the physical Zebra/PDF fallback proof after implementation; do not mark a badge as printed before direct-print success or explicit PDF-print confirmation.
+1. Completed: controlled, tenant-prefixed S3/MinIO PNG/JPEG asset contract and worker validation.
+2. Completed: real PDF embedding and ZPL `^GFA` rasterization.
+3. Completed: success, missing, invalid, and cross-tenant worker tests.
+4. External launch gate: run and record the physical Zebra/PDF fallback proof; do not mark a badge as printed before direct-print success or explicit PDF-print confirmation.
 
 ### GAP-08 — Resolve the real-time SSE architecture promise
 
@@ -209,7 +211,7 @@ Consult `PROGRESS.md`, `docs/launch/go-live-checklist.md`, `docs/launch/beta-pro
 2. Implement GAP-02 registration-policy enforcement and GAP-03 transfer lifecycle on that foundation.
 3. Implement GAP-06 password recovery before inviting public users to rely on account history.
 4. Complete GAP-04 raffle contract after its product decisions are approved.
-5. Complete GAP-07 badge image rendering; GAP-05 custom-template delivery is implemented.
+5. Record GAP-07 physical Zebra/PDF fallback evidence; badge image rendering and GAP-05 custom-template delivery are implemented.
 6. Resolve GAP-08/09 explicitly, then run the affected repository and E2E/authorization tests.
 7. Run the external launch evidence separately; do not claim it from automated tests.
 

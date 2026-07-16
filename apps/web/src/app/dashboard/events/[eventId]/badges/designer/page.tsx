@@ -2,6 +2,7 @@ import { saveBadgeTemplate } from "@/actions/phase5-actions";
 import { BadgeDesigner } from "@/app/dashboard/events/[eventId]/badges/designer/badge-designer";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { getPublicUrl } from "@/lib/s3";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ type BadgeLayout = {
     h: number;
     field?: string;
     value?: string;
+    assetKey?: string;
   }>;
 };
 
@@ -84,7 +86,12 @@ export default async function BadgeDesignerPage({ params }: { params: Promise<{ 
         <Button label="Save template" type="submit" variant="primary" />
       </form>
 
-      <BadgeDesigner initialLayout={parseLayout(activeTemplate?.layout)} templateId={activeTemplate?.id} templateName={activeTemplate?.name ?? "Default badge"} />
+      <BadgeDesigner
+        initialLayout={parseLayout(activeTemplate?.layout)}
+        templateId={activeTemplate?.id}
+        templateName={activeTemplate?.name ?? "Default badge"}
+        assetBaseUrl={process.env.S3_BUCKET_NAME ? getPublicUrl("").replace(/\/$/, "") : ""}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Group, Layer, Rect, Stage, Text, Transformer } from "react-konva";
+import { Group, Image as KonvaImage, Layer, Rect, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 
 type BadgeElement = {
@@ -14,6 +14,7 @@ type BadgeElement = {
   h: number;
   field?: string;
   value?: string;
+  assetKey?: string;
 };
 
 type BadgeLayout = {
@@ -47,7 +48,7 @@ function resolveElementText(element: BadgeElement) {
   }
 
   if (element.type === "image") {
-    return "IMAGE";
+    return element.assetKey ? "Loading image…" : "Upload PNG/JPEG";
   }
 
   if (element.type === "barcode") {
@@ -65,7 +66,7 @@ function nextElement(type: BadgeElement["type"]): BadgeElement {
   }
 
   if (type === "image") {
-    return { id, type, x: 32, y: 72, w: 96, h: 72, value: "Logo" };
+    return { id, type, x: 32, y: 72, w: 96, h: 72 };
   }
 
   if (type === "barcode") {
@@ -75,14 +76,64 @@ function nextElement(type: BadgeElement["type"]): BadgeElement {
   return { id, type, x: 232, y: 132, w: 76, h: 76, field: "registration.badgeNumber", value: "{{registration.badgeNumber}}" };
 }
 
+function badgeAssetUrl(assetBaseUrl: string, key: string) {
+  if (!assetBaseUrl) return "";
+  return `${assetBaseUrl}/${key
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
+
+function BadgeImage({ element, assetBaseUrl }: { element: BadgeElement; assetBaseUrl: string }) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!element.assetKey) {
+      setImage(null);
+      return;
+    }
+
+    const nextImage = new window.Image();
+    const url = badgeAssetUrl(assetBaseUrl, element.assetKey);
+    if (!url) {
+      setImage(null);
+      return;
+    }
+    nextImage.onload = () => setImage(nextImage);
+    nextImage.onerror = () => setImage(null);
+    nextImage.src = url;
+
+    return () => {
+      nextImage.onload = null;
+      nextImage.onerror = null;
+    };
+  }, [assetBaseUrl, element.assetKey]);
+
+  return image ? (
+    <KonvaImage image={image} width={element.w} height={element.h} />
+  ) : (
+    <Text
+      text={resolveElementText(element)}
+      width={element.w}
+      height={element.h}
+      align="center"
+      verticalAlign="middle"
+      fill="#111827"
+      fontSize={13}
+    />
+  );
+}
+
 export function BadgeDesigner({
   initialLayout,
   templateName,
-  templateId
+  templateId,
+  assetBaseUrl
 }: {
   initialLayout: BadgeLayout | null;
   templateName: string;
   templateId?: string;
+  assetBaseUrl: string;
 }) {
   const [layout, setLayout] = useState<BadgeLayout>(initialLayout ?? starterLayout);
   const [selectedId, setSelectedId] = useState<string | null>(layout.elements[0]?.id ?? null);
@@ -177,16 +228,20 @@ export function BadgeDesigner({
                       dash={element.type === "image" ? [5, 4] : undefined}
                       cornerRadius={element.type === "qr" ? 6 : 3}
                     />
-                    <Text
-                      text={resolveElementText(element)}
-                      width={element.w}
-                      height={element.h}
-                      align={element.type === "barcode" || element.type === "qr" || element.type === "image" ? "center" : "left"}
-                      verticalAlign="middle"
-                      fill="#111827"
-                      fontSize={element.type === "barcode" ? 14 : element.type === "qr" ? 18 : Math.min(22, Math.max(12, element.h - 8))}
-                      fontStyle={element.id === "name" ? "bold" : "normal"}
-                    />
+                    {element.type === "image" ? (
+                      <BadgeImage element={element} assetBaseUrl={assetBaseUrl} />
+                    ) : (
+                      <Text
+                        text={resolveElementText(element)}
+                        width={element.w}
+                        height={element.h}
+                        align={element.type === "barcode" || element.type === "qr" ? "center" : "left"}
+                        verticalAlign="middle"
+                        fill="#111827"
+                        fontSize={element.type === "barcode" ? 14 : element.type === "qr" ? 18 : Math.min(22, Math.max(12, element.h - 8))}
+                        fontStyle={element.id === "name" ? "bold" : "normal"}
+                      />
+                    )}
                   </Group>
                 );
               })}
@@ -218,21 +273,43 @@ export function BadgeDesigner({
           {selectedElement ? (
             <div className="vf-form">
               <h3>Selected layer</h3>
-              <label>
-                Data field
-                <select value={selectedElement.field ?? ""} onChange={(event) => updateElement(selectedElement.id, { field: event.target.value || undefined })}>
-                  <option value="">None</option>
-                  {Object.keys(sampleData).map((field) => (
-                    <option key={field} value={field}>
-                      {field}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Text / fallback
-                <input value={selectedElement.value ?? ""} onChange={(event) => updateElement(selectedElement.id, { value: event.target.value })} />
-              </label>
+              {selectedElement.type === "image" ? (
+                <>
+                  <label>
+                    PNG or JPEG asset
+                    <input
+                      name={`badgeImage:${selectedElement.id}`}
+                      form="badge-template-form"
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      required={!selectedElement.assetKey}
+                    />
+                  </label>
+                  <p className="vf-muted">
+                    {selectedElement.assetKey
+                      ? "A tenant-owned asset is attached. Choose another file to replace it when saving."
+                      : "The file is uploaded to this organization when you save the template."}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Data field
+                    <select value={selectedElement.field ?? ""} onChange={(event) => updateElement(selectedElement.id, { field: event.target.value || undefined })}>
+                      <option value="">None</option>
+                      {Object.keys(sampleData).map((field) => (
+                        <option key={field} value={field}>
+                          {field}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Text / fallback
+                    <input value={selectedElement.value ?? ""} onChange={(event) => updateElement(selectedElement.id, { value: event.target.value })} />
+                  </label>
+                </>
+              )}
               <Button
                 label="Remove layer"
                 type="button"
