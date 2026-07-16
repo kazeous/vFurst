@@ -31,6 +31,13 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
 
+### 2026-07-17 - Product gap remediation, password-reset delivery contract (GAP-06)
+- Re-audited the existing recovery implementation and found a production configuration mismatch: `.env.example` and the worker use `SMTP_PASSWORD`, while the platform web sender only read `SMTP_PASS`. Platform password-reset delivery now uses the documented variable, falls back to the legacy name for compatibility, and has unit coverage for both contracts.
+- Escaped password-reset URLs in the HTML `href` while preserving the plain-text URL, with package coverage for HTML/text output.
+- Added `tests/e2e/password-reset-delivery.spec.ts`: a real Mailpit delivery test requests recovery, verifies the reset email, compares the raw token to its stored SHA-256 digest, completes the reset, logs in with the new credential, and rejects replay.
+- Verified focused delivery E2E 1/1, existing registration/account/recovery authorization E2E 8/8, web unit tests 108/108, email unit tests 7/7, type-check, lint, and the existing security behavior. Production SMTP/SES credentials and bounce monitoring remain external launch evidence.
+- GAP-06 application implementation is complete. GAP-07 badge image layers and the GAP-08/GAP-09 decisions remain open.
+
 ### 2026-07-16 - Product gap remediation, custom email template delivery (GAP-05)
 - Added a shared custom-template contract for registration confirmation, payment receipt, volunteer decision, vendor decision, and transfer request messages. Each family has an explicit variable allowlist, stored-template validation, HTML escaping, plain-text rendering, subject control-character removal, and HTTP(S)-only transfer URL substitution.
 - Connected both direct web delivery and the BullMQ email worker to `Event.settings.emailTemplates` through an `eventId + orgId` query. Invalid legacy settings and events without overrides fall back to the built-in template; platform/organization-only messages remain outside the event override boundary.

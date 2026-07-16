@@ -16,6 +16,7 @@ The checker verifies:
 - Full k6 target run is documented as passed.
 - Physical screen-reader pass is explicitly documented as complete with tester, assistive-technology, and flow evidence.
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence is recorded before SePay is enabled.
+- A production transactional email provider is configured and tested for password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
 - `VFURST_LAUNCH_URL` returns live marketing/legal routes with expected vFurst launch content.
 
 The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
@@ -57,6 +58,12 @@ SENTRY_PROJECT=...
 SENTRY_AUTH_TOKEN=...
 VFURST_LAUNCH_URL=https://your-production-domain.example
 SALES_CONTACT_EMAIL=sales@your-production-domain.example
+SMTP_HOST=smtp.your-provider.example
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...
+SMTP_SECURE=true
+SMTP_FROM_EMAIL=no-reply@your-production-domain.example
 VFURST_RATE_LIMIT_PREFIX=vfurst:rate-limit
 VFURST_API_RATE_LIMIT_PER_MINUTE=100
 VFURST_AUTH_RATE_LIMIT_PER_MINUTE=30

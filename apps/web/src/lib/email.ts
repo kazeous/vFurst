@@ -66,7 +66,7 @@ export async function sendOrgEmail(
 
 export function getPlatformEmailConfig(): EmailProviderConfig {
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const pass = process.env.SMTP_PASSWORD?.trim() || process.env.SMTP_PASS;
 
   return {
     type: "SMTP",
