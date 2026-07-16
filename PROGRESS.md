@@ -31,6 +31,16 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
 
+### 2026-07-16 - Product-plan versus implementation gap audit
+- Built: No application-code changes. Added `docs/launch/product-gap-audit-2026-07-16.md`, a behavior-level reconciliation of the full Phase 0-7 product plan, maintained reference, launch audits, schema, routes, actions, workers, email delivery, and current tests.
+- Findings for the next coding session:
+  - The intended public account area is absent: no central account routes expose a user's registrations, orders, hotel bookings, volunteer/vendor applications, or incoming transfers. Current public create flows use submitted email identity rather than a session-bound owner, and some public success views are resource-ID/tenant-bound rather than owner-bound.
+  - Event registration settings (`requireApproval`, `allowTransfers`, `maxRegistrationsPerUser`) are persisted/UI-configured but not enforced by registration/transfer logic.
+  - Recipient accept/decline transfer workflow remains incomplete; raffle lacks eligibility rules and PURCHASED entry fulfillment; saved custom email templates do not affect delivery; password reset has only an unused template; badge image layers remain placeholders in PDF/ZPL rendering.
+  - SSE is a reference-level promise without a concrete implementation, while worker dead-letter/delivery-status behavior requires an explicit product/operations decision.
+- Next session should:
+  - Read the new product-gap audit first and obtain/record the guest-vs-authenticated public-flow decision. Start with the public-account ownership foundation, then enforce event policy and recipient-owned transfers. Do not move organizer approval/operations into attendee routes.
+
 ### 2026-07-16 - Phase 7, prevent duplicate Stripe retries after the hosted checkout return
 - Investigated the two reported Sentry share events. The first captured the earlier active-attempt race; the second captured the reproducible follow-up failure, `Stripe did not return a Checkout URL`, when a completed Stripe Session was reopened from the local checkout page before its webhook had settled the order.
 - Fixed the return/retry path:
