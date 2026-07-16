@@ -188,6 +188,7 @@ model User {
   orders                    Order[]
   orgMemberships            OrgMember[]
   raffleEntries             RaffleEntry[]
+  raffleDrawResults         RaffleDrawResult[]
   registrations             Registration[]
   reviewedApplications      VolunteerApplication[]  @relation("VolunteerApplicationReviewer")
   sessions                  Session[]
@@ -250,6 +251,7 @@ model Organization {
   orderItems             OrderItem[]
   orders                 Order[]
   raffleEntries          RaffleEntry[]
+  raffleDrawResults      RaffleDrawResult[]
   raffles                Raffle[]
   registrationTypes      RegistrationType[]
   registrationAddOns     RegistrationAddOn[]
@@ -415,6 +417,7 @@ model Event {
   orders                Order[]
   org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
   raffles               Raffle[]
+  raffleDrawResults      RaffleDrawResult[]
   registrationTypes     RegistrationType[]
   registrations         Registration[]
   registrationTransferRequests RegistrationTransferRequest[]
@@ -991,6 +994,7 @@ model OrderItem {
   updatedAt      DateTime      @updatedAt
   order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   org            Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  raffleEntries  RaffleEntry[]
   registration   Registration? @relation(fields: [registrationId], references: [id])
   storeProduct   StoreProduct? @relation(fields: [storeProductId], references: [id])
 
@@ -1066,17 +1070,20 @@ model HotelBooking {
 }
 
 model Raffle {
-  id        String        @id @default(uuid()) @db.Uuid
-  orgId     String        @db.Uuid
-  eventId   String        @db.Uuid
-  name      String
-  prizes    Json          @default("[]")
-  drawDate  DateTime
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  entries   RaffleEntry[]
-  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  org       Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id                String             @id @default(uuid()) @db.Uuid
+  orgId             String             @db.Uuid
+  eventId           String             @db.Uuid
+  name              String
+  prizes            Json               @default("[]")
+  eligibility       Json               @default("{\"kind\":\"CONFIRMED_REGISTRATION\"}")
+  maxEntriesPerUser Int                @default(1)
+  drawDate          DateTime
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  entries           RaffleEntry[]
+  drawResults       RaffleDrawResult[]
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  org               Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([eventId])
@@ -1084,20 +1091,50 @@ model Raffle {
 }
 
 model RaffleEntry {
-  id          String            @id @default(uuid()) @db.Uuid
-  orgId       String            @db.Uuid
-  raffleId    String            @db.Uuid
-  userId      String            @db.Uuid
-  entryMethod RaffleEntryMethod
-  createdAt   DateTime          @default(now())
-  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  raffle      Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
-  user        User              @relation(fields: [userId], references: [id])
+  id            String            @id @default(uuid()) @db.Uuid
+  orgId         String            @db.Uuid
+  raffleId      String            @db.Uuid
+  userId        String            @db.Uuid
+  entryMethod   RaffleEntryMethod
+  quantity      Int               @default(1)
+  orderItemId   String?           @db.Uuid
+  purchaseKey   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now()) @updatedAt
+  org           Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orderItem     OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  raffle        Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id])
 
-  @@unique([raffleId, userId])
   @@index([orgId])
   @@index([userId])
+  @@index([raffleId, userId])
+  @@index([raffleId, orderItemId])
+  @@index([orderItemId])
+  @@index([purchaseKey])
   @@map("raffle_entries")
+}
+
+model RaffleDrawResult {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  eventId        String   @db.Uuid
+  raffleId       String   @db.Uuid
+  prizeName      String
+  awardNumber    Int
+  winnerUserId   String   @db.Uuid
+  drawnAt        DateTime @default(now())
+  notifiedAt     DateTime?
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  event         Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  raffle        Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  winner        User         @relation(fields: [winnerUserId], references: [id])
+
+  @@unique([raffleId, prizeName, awardNumber])
+  @@unique([raffleId, winnerUserId])
+  @@index([orgId, eventId])
+  @@index([winnerUserId])
+  @@map("raffle_draw_results")
 }
 
 model AttendeeNote {

@@ -2,6 +2,7 @@ import { sendOrgEmail } from "@/lib/email";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { organizerNetAmount } from "@/lib/payments/ledger";
 import { transitionRegistrationToPaid } from "@/lib/registration-policy";
+import { fulfillPurchasedRaffleEntries } from "@/lib/raffle-policy";
 import { Prisma, prisma, type PaymentAttempt, type PaymentProvider } from "@vfurst/db";
 
 type ProviderPaymentContext = {
@@ -331,6 +332,13 @@ export async function markOrderPaidWithProvider(
         });
       }
     }
+
+    await fulfillPurchasedRaffleEntries(tx, {
+      orgId: order.orgId,
+      eventId: order.eventId,
+      userId: order.userId,
+      orderItemIds: order.items.filter((item) => item.itemType === "PRODUCT").map((item) => item.id)
+    });
 
     if (order.cartId) {
       await tx.cart.update({

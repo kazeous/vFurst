@@ -120,6 +120,17 @@ The Phase 5 plan requires eligibility rules and AUTO/MANUAL/PURCHASED entry meth
 4. Add public portal/account views for the current user's eligibility, entry state, and winner notification/status if the chosen policy exposes them. Do not expose other entrants' personal data.
 5. Keep raffle creation, exception handling, and drawing in `/dashboard`.
 
+#### Implementation update (2026-07-16)
+
+The contract is now chosen and implemented:
+
+- Eligibility is persisted and validated as one of `CONFIRMED_REGISTRATION`, `CHECKED_IN`, `REGISTRATION_TIER`, `REGISTRATION_ADD_ON`, or `PURCHASED` (the latter names a stored event product and `entriesPerUnit`). The default is an approved confirmed registration.
+- Public users cannot self-enter or administer a raffle. Organizers create/configure raffles and run auto/manual/draw operations in `/dashboard`; `/account/raffles` exposes only the signed-in user's own entry quantities and winning results.
+- Each attendee has a configurable `maxEntriesPerUser` quota. Non-purchased entry methods are idempotent one-entry grants; paid product purchases add weighted quantities up to that quota. A paid purchase entry stores both `orderItemId` and a deterministic `purchaseKey`; fulfillment runs it inside the serializable order-paid transaction, so webhook replay does not duplicate entries.
+- Draws are weighted by entry quantity, revalidate eligibility at draw time, and persist immutable `RaffleDrawResult` rows. A unique raffle/user winner constraint means one attendee cannot win multiple prizes in one raffle. Prize quantities create numbered award rows, and `notifiedAt` records whether the winner email was delivered; the durable result remains visible if delivery fails.
+
+The focused `tests/e2e/raffle-contract.spec.ts` suite passes 2/2 for paid PURCHASED fulfillment plus webhook idempotency, attendee account visibility, durable draws, and winner status. Existing raffle/voucher tenant-authorization coverage passes 5/5.
+
 ### GAP-05 — Make custom email templates affect actual delivery
 
 **Priority: P1. Current UI is a dead configuration surface.**

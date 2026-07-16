@@ -3,29 +3,12 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
+import { getCoreRegistrationEligibilityDescription, parseRaffleEligibility } from "@/lib/raffle-policy";
 
 export const dynamic = "force-dynamic";
 
-type RaffleHistoryItem = {
-  raffleId: string;
-  raffleName: string;
-  prizeName: string;
-  winnerName: string;
-  winnerEmail: string;
-  drawnAt: string;
-};
-
 function prizes(value: unknown) {
   return Array.isArray(value) ? (value as Array<{ name?: string; quantity?: number; description?: string }>) : [];
-}
-
-function history(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return [];
-  }
-
-  const settings = value as { raffleHistory?: unknown };
-  return Array.isArray(settings.raffleHistory) ? (settings.raffleHistory as RaffleHistoryItem[]) : [];
 }
 
 export default async function RafflePage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -47,6 +30,15 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
           drawDate: "asc"
         }
       },
+      raffleDrawResults: {
+        include: { raffle: true, winner: true },
+        orderBy: { drawnAt: "desc" }
+      },
+      registrationTypes: {
+        include: { addOns: true },
+        orderBy: { sortOrder: "asc" }
+      },
+      storeProducts: { orderBy: { name: "asc" } },
       registrations: {
         where: {
           status: {
@@ -61,7 +53,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
     notFound();
   }
 
-  const winnerHistory = history(event.settings);
+  const winnerHistory = event.raffleDrawResults;
   const totalEntries = event.raffles.reduce((sum, raffle) => sum + raffle.entries.length, 0);
 
   return (
@@ -78,7 +70,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
         <StatCard label="Raffles" value={event.raffles.length.toString()} detail="Configured drawings" progress={event.raffles.length ? 70 : 10} />
         <StatCard label="Eligible attendees" value={event.registrations.length.toString()} detail="Confirmed/check-in pool" progress={80} />
         <StatCard label="Entries" value={totalEntries.toString()} detail="Across all raffles" progress={totalEntries ? 75 : 10} />
-        <StatCard label="Winners" value={winnerHistory.length.toString()} detail="Draw history" progress={winnerHistory.length ? 100 : 10} />
+        <StatCard label="Winners" value={winnerHistory.length.toString()} detail="Durable draw results" progress={winnerHistory.length ? 100 : 10} />
       </section>
 
       <section className="vf-two-column">
@@ -97,17 +89,58 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
             Prizes
             <textarea name="prizes" rows={5} placeholder="VIP Pass|1|Free upgrade" required />
           </label>
+          <label>
+            Eligibility
+            <select name="eligibilityKind" defaultValue="CONFIRMED_REGISTRATION">
+              <option value="CONFIRMED_REGISTRATION">Approved confirmed registration</option>
+              <option value="CHECKED_IN">Approved checked-in registration</option>
+              <option value="REGISTRATION_TIER">Specific registration tier</option>
+              <option value="REGISTRATION_ADD_ON">Registration with add-on</option>
+              <option value="PURCHASED">Paid product purchase</option>
+            </select>
+          </label>
+          <label>
+            Registration tier (for tier eligibility)
+            <select name="eligibilityTypeId" defaultValue="">
+              <option value="">Select a tier</option>
+              {event.registrationTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Registration add-on (for add-on eligibility)
+            <select name="eligibilityAddOnDefinitionId" defaultValue="">
+              <option value="">Select an add-on</option>
+              {event.registrationTypes.flatMap((type) => type.addOns).map((addOn) => (
+                <option key={addOn.id} value={addOn.id}>{addOn.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Product (for purchase eligibility)
+            <select name="eligibilityProductId" defaultValue="">
+              <option value="">Select a product</option>
+              {event.storeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Maximum entries per attendee
+            <input type="number" name="maxEntriesPerUser" min={1} max={100} defaultValue={1} required />
+          </label>
+          <label>
+            Entries per purchased unit
+            <input type="number" name="entriesPerUnit" min={1} max={100} defaultValue={1} required />
+          </label>
           <Button label="Create raffle" type="submit" variant="primary" />
         </form>
 
         <section className="vf-section">
           <h2>Winner history</h2>
           <div className="vf-list">
-            {winnerHistory.map((item, index) => (
-              <div key={`${item.raffleId}-${item.drawnAt}-${index}`} className="vf-list-row">
-                <span>{item.prizeName}</span>
+            {winnerHistory.map((item) => (
+              <div key={item.id} className="vf-list-row">
+                <span>{item.prizeName} (award {item.awardNumber})</span>
                 <small>
-                  {item.winnerName} - {item.raffleName} - {new Date(item.drawnAt).toLocaleString()}
+                  {item.winner.name ?? item.winner.email} - {item.raffle.name} - {item.drawnAt.toLocaleString()}
                 </small>
               </div>
             ))}
@@ -127,6 +160,9 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
                 <h3>{raffle.name}</h3>
                 <p className="vf-muted">
                   {raffle.entries.length} entries - draw {raffle.drawDate.toLocaleString()}
+                </p>
+                <p className="vf-muted">
+                  Eligibility: {(() => { try { return getCoreRegistrationEligibilityDescription(parseRaffleEligibility(raffle.eligibility)); } catch { return "Invalid configuration"; } })()} · max {raffle.maxEntriesPerUser} per attendee
                 </p>
                 <div className="vf-list">
                   {rafflePrizes.map((prize, index) => (

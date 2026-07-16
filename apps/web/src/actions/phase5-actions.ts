@@ -21,6 +21,17 @@ import {
   registrationReservationStatuses,
   runRegistrationPolicyTransaction
 } from "@/lib/registration-policy";
+import {
+  assertDrawEligibility,
+  assertRaffleEligibility,
+  parseRafflePrizes,
+  raffleEligibilitySchema,
+  rafflePrizeSchema,
+  runRaffleTransaction,
+  validateRaffleEligibilityResources,
+  weightedWinner,
+  type RaffleEligibility
+} from "@/lib/raffle-policy";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { prisma, type Prisma } from "@vfurst/db";
 import { randomBytes } from "node:crypto";
@@ -50,11 +61,21 @@ const emailTemplateSchema = z.object({
   text: z.string().trim().min(1)
 });
 
-const rafflePrizeSchema = z.object({
-  name: z.string().trim().min(1),
-  description: z.string().trim().optional(),
-  quantity: z.coerce.number().int().min(1)
-});
+function parseRaffleEligibilityForm(formData: FormData): RaffleEligibility {
+  const kind = z
+    .enum(["CONFIRMED_REGISTRATION", "CHECKED_IN", "REGISTRATION_TIER", "REGISTRATION_ADD_ON", "PURCHASED"])
+    .parse(formData.get("eligibilityKind"));
+
+  const value = {
+    kind,
+    typeId: formData.get("eligibilityTypeId"),
+    addOnDefinitionId: formData.get("eligibilityAddOnDefinitionId"),
+    productId: formData.get("eligibilityProductId"),
+    entriesPerUnit: Number(formData.get("entriesPerUnit") ?? 1)
+  };
+
+  return raffleEligibilitySchema.parse(value);
+}
 
 async function findOrCreateUser(
   email: string,
@@ -662,22 +683,27 @@ export async function createRaffle(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid raffle.");
   }
 
-  const prizeNames = parsed.data.prizes.map((prize) => prize.name.toLowerCase());
-
-  if (new Set(prizeNames).size !== prizeNames.length) {
-    throw new Error("Prize names must be unique within a raffle.");
-  }
-
+  const eligibility = parseRaffleEligibilityForm(formData);
+  const maxEntriesPerUser = z.coerce.number().int().min(1).max(100).parse(formData.get("maxEntriesPerUser"));
   const { event } = await requireStoredEventAccess(parsed.data.eventId);
 
-  await prisma.raffle.create({
-    data: {
+  await runRaffleTransaction(async (tx) => {
+    await validateRaffleEligibilityResources(tx, {
       orgId: event.orgId,
       eventId: event.id,
-      name: parsed.data.name,
-      drawDate: parsed.data.drawDate,
-      prizes: parsed.data.prizes as Prisma.InputJsonValue
-    }
+      eligibility
+    });
+    return tx.raffle.create({
+      data: {
+        orgId: event.orgId,
+        eventId: event.id,
+        name: parsed.data.name,
+        drawDate: parsed.data.drawDate,
+        maxEntriesPerUser,
+        eligibility: eligibility as Prisma.InputJsonValue,
+        prizes: parsed.data.prizes as Prisma.InputJsonValue
+      }
+    });
   });
 
   revalidatePath(`/dashboard/events/${event.id}/raffle`);
@@ -689,25 +715,37 @@ export async function addRaffleEntry(formData: FormData) {
   const attendeeName = z.string().trim().optional().parse(formData.get("attendeeName") || undefined);
   const { raffle, event } = await requireRaffleAccess(raffleId);
 
-  const user = await findOrCreateUser(attendeeEmail, attendeeName ?? attendeeEmail);
-
-  await prisma.raffleEntry.upsert({
-    where: {
-      raffleId_userId: {
-        raffleId,
-        userId: user.id
+  await runRaffleTransaction(async (tx) => {
+    const user = await findOrCreateUser(attendeeEmail, attendeeName ?? attendeeEmail, tx);
+    const existing = await tx.raffleEntry.findFirst({
+      where: {
+        raffleId: raffle.id,
+        userId: user.id,
+        entryMethod: { in: ["AUTO", "MANUAL"] }
       }
-    },
-    update: {
-      orgId: event.orgId,
-      entryMethod: "MANUAL"
-    },
-    create: {
-      orgId: event.orgId,
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    await assertRaffleEligibility(tx, {
       raffleId: raffle.id,
+      orgId: event.orgId,
+      eventId: event.id,
       userId: user.id,
       entryMethod: "MANUAL"
-    }
+    });
+
+    return tx.raffleEntry.create({
+      data: {
+        orgId: event.orgId,
+        raffleId: raffle.id,
+        userId: user.id,
+        entryMethod: "MANUAL",
+        quantity: 1
+      }
+    });
   });
 
   revalidatePath(`/dashboard/events/${event.id}/raffle`);
@@ -717,30 +755,51 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
   const raffleId = z.string().uuid().parse(formData.get("raffleId"));
   const { raffle, event } = await requireRaffleAccess(raffleId);
 
-  const registrations = await prisma.registration.findMany({
-    where: {
-      orgId: event.orgId,
-      eventId: event.id,
-      status: {
-        in: ["CONFIRMED", "CHECKED_IN"]
+  await runRaffleTransaction(async (tx) => {
+    const registrations = await tx.registration.findMany({
+      where: {
+        orgId: event.orgId,
+        eventId: event.id,
+        approvalStatus: "APPROVED",
+        status: { in: ["CONFIRMED", "CHECKED_IN"] }
+      },
+      select: { userId: true },
+      distinct: ["userId"]
+    });
+
+    for (const registration of registrations) {
+      const existing = await tx.raffleEntry.findFirst({
+        where: {
+          raffleId: raffle.id,
+          userId: registration.userId,
+          entryMethod: { in: ["AUTO", "MANUAL"] }
+        }
+      });
+      if (existing) continue;
+
+      try {
+        await assertRaffleEligibility(tx, {
+          raffleId: raffle.id,
+          orgId: event.orgId,
+          eventId: event.id,
+          userId: registration.userId,
+          entryMethod: "AUTO"
+        });
+      } catch {
+        continue;
       }
-    },
-    select: {
-      userId: true
+
+      await tx.raffleEntry.create({
+        data: {
+          orgId: event.orgId,
+          raffleId: raffle.id,
+          userId: registration.userId,
+          entryMethod: "AUTO",
+          quantity: 1
+        }
+      });
     }
   });
-
-  if (registrations.length > 0) {
-    await prisma.raffleEntry.createMany({
-      data: registrations.map((registration) => ({
-        orgId: event.orgId,
-        raffleId: raffle.id,
-        userId: registration.userId,
-        entryMethod: "AUTO" as const
-      })),
-      skipDuplicates: true
-    });
-  }
 
   revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
@@ -750,89 +809,73 @@ export async function drawRaffleWinner(formData: FormData) {
   const prizeName = z.string().trim().min(1).parse(formData.get("prizeName"));
   const { raffle: authorizedRaffle, event } = await requireRaffleAccess(raffleId);
 
-  const raffle = await prisma.raffle.findFirstOrThrow({
-    where: {
-      id: authorizedRaffle.id,
-      orgId: event.orgId,
-      eventId: event.id
-    },
-    include: {
-      entries: {
-        where: {
-          orgId: event.orgId
-        },
-        include: {
-          user: true
-        }
-      },
-      org: true,
-      event: true
+  const result = await runRaffleTransaction(async (tx) => {
+    const raffle = await tx.raffle.findFirstOrThrow({
+      where: { id: authorizedRaffle.id, orgId: event.orgId, eventId: event.id },
+      include: {
+        entries: { where: { orgId: event.orgId, quantity: { gt: 0 } }, include: { user: true, orderItem: true } },
+        org: true,
+        event: true
+      }
+    });
+    const parsedPrizes = parseRafflePrizes(raffle.prizes);
+    const selectedPrize = parsedPrizes.find((prize) => prize.name === prizeName);
+    if (!selectedPrize) throw new Error("The selected prize does not belong to this raffle.");
+
+    const awardedCount = await tx.raffleDrawResult.count({ where: { raffleId: raffle.id, prizeName: selectedPrize.name } });
+    if (awardedCount >= selectedPrize.quantity) {
+      throw new Error("All available quantities of this prize have already been awarded.");
     }
+
+    const previousWinners = new Set(
+      (await tx.raffleDrawResult.findMany({ where: { raffleId: raffle.id }, select: { winnerUserId: true } })).map(
+        (item) => item.winnerUserId
+      )
+    );
+    const eligibleByUser = new Map<string, { user: typeof raffle.entries[number]["user"]; quantity: number }>();
+    for (const entry of raffle.entries) {
+      if (previousWinners.has(entry.userId)) continue;
+      if (!(await assertDrawEligibility(tx, {
+        raffleId: raffle.id,
+        orgId: event.orgId,
+        eventId: event.id,
+        userId: entry.userId,
+        entryMethod: entry.entryMethod,
+        orderItemId: entry.orderItemId ?? undefined
+      }))) continue;
+      const current = eligibleByUser.get(entry.userId);
+      eligibleByUser.set(entry.userId, {
+        user: entry.user,
+        quantity: (current?.quantity ?? 0) + entry.quantity
+      });
+    }
+
+    const winner = weightedWinner(Array.from(eligibleByUser.values()));
+    if (!winner) throw new Error("This raffle has no eligible entries remaining.");
+
+    const draw = await tx.raffleDrawResult.create({
+      data: {
+        orgId: event.orgId,
+        eventId: event.id,
+        raffleId: raffle.id,
+        prizeName: selectedPrize.name,
+        awardNumber: awardedCount + 1,
+        winnerUserId: winner.user.id
+      }
+    });
+    return { draw, raffle, prize: selectedPrize, winner: winner.user };
   });
 
-  if (raffle.entries.length === 0) {
-    throw new Error("This raffle does not have any entries yet.");
+  try {
+    await sendOrgEmail(result.raffle.org, result.winner.email, "staff-message", {
+      eventName: result.raffle.event.name,
+      subject: `You won ${result.prize.name}`,
+      message: `Congratulations! You were drawn as a winner for ${result.prize.name} in ${result.raffle.name}.`
+    });
+    await prisma.raffleDrawResult.update({ where: { id: result.draw.id }, data: { notifiedAt: new Date() } });
+  } catch {
+    // The durable result remains visible in the attendee account and can be notified by operations later.
   }
-
-  const parsedPrizes = z.array(rafflePrizeSchema).safeParse(raffle.prizes);
-
-  if (!parsedPrizes.success) {
-    throw new Error("This raffle has an invalid prize configuration.");
-  }
-
-  const selectedPrize = parsedPrizes.data.find((prize) => prize.name === prizeName);
-
-  if (!selectedPrize) {
-    throw new Error("The selected prize does not belong to this raffle.");
-  }
-
-  const settings = parseEventSettings(raffle.event.settings);
-  const raffleHistory = Array.isArray(settings.raffleHistory) ? settings.raffleHistory : [];
-  const awardedCount = raffleHistory.filter(
-    (item) =>
-      item != null &&
-      typeof item === "object" &&
-      "raffleId" in item &&
-      "prizeName" in item &&
-      item.raffleId === raffle.id &&
-      item.prizeName === selectedPrize.name
-  ).length;
-
-  if (awardedCount >= selectedPrize.quantity) {
-    throw new Error("All available quantities of this prize have already been awarded.");
-  }
-
-  const winner = raffle.entries[Math.floor(Math.random() * raffle.entries.length)]!;
-  const nextHistory = [
-    ...raffleHistory,
-    {
-      raffleId: raffle.id,
-      raffleName: raffle.name,
-      prizeName: selectedPrize.name,
-      winnerUserId: winner.userId,
-      winnerName: winner.user.name ?? winner.user.email,
-      winnerEmail: winner.user.email,
-      drawnAt: new Date().toISOString()
-    }
-  ];
-
-  await prisma.event.update({
-    where: {
-      id: event.id
-    },
-    data: {
-      settings: {
-        ...settings,
-        raffleHistory: nextHistory
-      } as Prisma.InputJsonValue
-    }
-  });
-
-  await sendOrgEmail(raffle.org, winner.user.email, "staff-message", {
-    eventName: raffle.event.name,
-    subject: `You won ${selectedPrize.name}`,
-    message: `Congratulations! You were drawn as a winner for ${selectedPrize.name} in ${raffle.name}.`
-  });
 
   revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }

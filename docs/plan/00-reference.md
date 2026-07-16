@@ -245,8 +245,9 @@ erDiagram
 | **Voucher** | id, eventId, code, discountType, discountValue, maxUses, usedCount, expiresAt | Promo codes / comped registrations |
 | **HotelBlock** | id, eventId, hotelName, roomTypes (JSON), cutoffDate | Hotel room block |
 | **HotelBooking** | id, userId, blockId, roomType, checkIn, checkOut, confirmationCode | Hotel room booking |
-| **Raffle** | id, eventId, name, prizes (JSON), drawDate | Event raffle/lottery |
-| **RaffleEntry** | id, raffleId, userId, entryMethod (AUTO/MANUAL/PURCHASED), createdAt | Individual raffle entry. Prevents duplicates via unique(raffleId, userId) constraint. Used for random draw selection. |
+| **Raffle** | id, eventId, name, prizes (JSON), eligibility (JSON), maxEntriesPerUser, drawDate | Event raffle/lottery with validated registration/tier/add-on/paid-product eligibility |
+| **RaffleEntry** | id, raffleId, userId, entryMethod (AUTO/MANUAL/PURCHASED), quantity, orderItemId?, purchaseKey?, createdAt | Weighted attendee entry. Non-purchased grants are idempotent; paid entries retain their order-item source for replay-safe fulfillment. |
+| **RaffleDrawResult** | id, raffleId, prizeName, awardNumber, winnerUserId, drawnAt, notifiedAt | Immutable durable award history; one attendee can win at most once per raffle. |
 | **AttendeeNote** | id, registrationId, authorId (→ User), content, createdAt | Internal staff notes. `authorId` is a foreign key to User (the staff member writing the note). |
 | **ApiKey** | id, orgId, name, keyHash, scopes, lastUsedAt | Public API authentication |
 | **WebhookEndpoint** | id, orgId, url, events, secret, active | Outbound webhook config |

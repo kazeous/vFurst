@@ -8,7 +8,7 @@ import { normalizeTransferEmail } from "@/lib/registration-transfer";
 
 export default async function AccountOverviewPage() {
   const user = await requirePublicAccount("/account");
-  const [registrationCount, orderCount, hotelCount, volunteerCount, vendorCount, transferCount, registrations, orders] = await Promise.all([
+  const [registrationCount, orderCount, hotelCount, volunteerCount, vendorCount, transferCount, raffleEntryCount, raffleWinCount, registrations, orders] = await Promise.all([
     prisma.registration.count({ where: { userId: user.id } }),
     prisma.order.count({ where: { userId: user.id } }),
     prisma.hotelBooking.count({ where: { userId: user.id } }),
@@ -21,6 +21,8 @@ export default async function AccountOverviewPage() {
         expiresAt: { gt: new Date() }
       }
     }),
+    prisma.raffleEntry.count({ where: { userId: user.id } }),
+    prisma.raffleDrawResult.count({ where: { winnerUserId: user.id } }),
     prisma.registration.findMany({
       where: { userId: user.id },
       include: { event: true, org: true, type: true },
@@ -43,6 +45,7 @@ export default async function AccountOverviewPage() {
         <StatCard label="Hotel stays" value={hotelCount.toString()} detail="Room-block bookings" progress={hotelCount ? 100 : 10} />
         <StatCard label="Applications" value={(volunteerCount + vendorCount).toString()} detail="Volunteer and vendor" progress={volunteerCount + vendorCount ? 100 : 10} />
         <StatCard label="Transfers" value={transferCount.toString()} detail="Pending invitations" progress={transferCount ? 100 : 10} />
+        <StatCard label="Raffles" value={`${raffleEntryCount}/${raffleWinCount}`} detail="Entries / wins" progress={raffleEntryCount ? 100 : 10} />
       </section>
 
       <section className="vf-two-column">
