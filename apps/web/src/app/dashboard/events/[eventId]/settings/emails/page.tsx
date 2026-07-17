@@ -4,6 +4,9 @@ import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import { allowedEventEmailTokens, renderCustomEmailTemplate, type EventEmailTemplateKey } from "@vfurst/email";
+import { replayEventEmailDelivery } from "@/actions/email-delivery-actions";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import type { EmailDeliveryStatus } from "@vfurst/db";
 
 export const dynamic = "force-dynamic";
 
@@ -77,20 +80,61 @@ function renderPreview(key: EventEmailTemplateKey, template: TemplateConfig, eve
   }
 }
 
+const deliveryStatuses: EmailDeliveryStatus[] = ["QUEUED", "PROCESSING", "RETRYING", "DELIVERED", "DEAD_LETTERED"];
+
+function statusVariant(status: EmailDeliveryStatus): BadgeProps["variant"] {
+  if (status === "DELIVERED") return "success";
+  if (status === "DEAD_LETTERED") return "error";
+  if (status === "RETRYING") return "warning";
+  return "info";
+}
+
+function formatStatus(status: string) {
+  return status.toLowerCase().replaceAll("_", " ");
+}
+
 export default async function EmailSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
   await requireEventPageAccess(eventId);
-  const event = await prisma.event.findUnique({
-    where: {
-      id: eventId
-    }
-  });
+  const [event, deliveryCounts, deadLetteredDeliveries, latestDeliveries] = await Promise.all([
+    prisma.event.findUnique({ where: { id: eventId } }),
+    prisma.emailDelivery.groupBy({
+      by: ["status"],
+      where: { eventId },
+      _count: { _all: true }
+    }),
+    prisma.emailDelivery.findMany({
+      where: { eventId, status: "DEAD_LETTERED" },
+      include: {
+        attempts: {
+          orderBy: { attemptNumber: "desc" },
+          take: 1
+        }
+      },
+      orderBy: { deadLetteredAt: "desc" },
+      take: 25
+    }),
+    prisma.emailDelivery.findMany({
+      where: { eventId },
+      include: {
+        attempts: {
+          orderBy: { attemptNumber: "desc" },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 25
+    })
+  ]);
 
   if (!event) {
     notFound();
   }
 
   const templates = emailTemplates(event.settings);
+  const recentDeliveries = [...deadLetteredDeliveries, ...latestDeliveries].filter(
+    (delivery, index, deliveries) => deliveries.findIndex((candidate) => candidate.id === delivery.id) === index
+  );
 
   return (
     <div className="vf-page">
@@ -108,6 +152,59 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
           {[...new Set(templateOptions.flatMap((option) => allowedEventEmailTokens(option.key as EventEmailTemplateKey)))].map((token) => (
             <code key={token}>{`{{${token}}}`}</code>
           ))}
+        </div>
+      </section>
+
+      <section className="vf-section" aria-labelledby="email-delivery-operations">
+        <div>
+          <h2 id="email-delivery-operations">Delivery operations</h2>
+          <p className="vf-muted">Inspect durable queue status and retry replay-safe messages. Single-use reset, invitation, and transfer links cannot be replayed.</p>
+        </div>
+        <div className="vf-stat-grid" aria-label="Email delivery status summary">
+          {deliveryStatuses.map((status) => (
+            <div className="vf-stat-card" key={status}>
+              <p className="vf-label">{formatStatus(status)}</p>
+              <strong>{deliveryCounts.find((item) => item.status === status)?._count._all ?? 0}</strong>
+              <span>messages</span>
+            </div>
+          ))}
+        </div>
+        <div className="vf-table">
+          <div className="vf-table-head vf-five-col">
+            <span>Message</span><span>Recipient</span><span>Status</span><span>Latest attempt</span><span>Action</span>
+          </div>
+          {recentDeliveries.map((delivery) => {
+            const latestAttempt = delivery.attempts[0];
+            const canReplay =
+              delivery.status === "DEAD_LETTERED" &&
+              delivery.replayable &&
+              Boolean(delivery.payloadCiphertext && delivery.payloadIv && delivery.payloadAuthTag);
+
+            return (
+              <div className="vf-table-row vf-five-col" key={delivery.id}>
+                <span><strong>{delivery.template}</strong><small>{delivery.createdAt.toLocaleString()}</small></span>
+                <span>{delivery.recipient}</span>
+                <span><Badge label={formatStatus(delivery.status)} variant={statusVariant(delivery.status)} /></span>
+                <span>
+                  {latestAttempt ? `#${latestAttempt.attemptNumber} ${formatStatus(latestAttempt.status)}` : "Not started"}
+                  {delivery.lastErrorMessage ? <small>{delivery.lastErrorMessage}</small> : null}
+                </span>
+                <span>
+                  {canReplay ? (
+                    <form action={replayEventEmailDelivery}>
+                      <input type="hidden" name="deliveryId" value={delivery.id} />
+                      <Button label="Replay" type="submit" size="sm" />
+                    </form>
+                  ) : delivery.status === "DEAD_LETTERED" && !delivery.replayable ? (
+                    <small>Single-use content</small>
+                  ) : (
+                    <small>—</small>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {recentDeliveries.length === 0 ? <p className="vf-empty">No email deliveries have been queued for this event.</p> : null}
         </div>
       </section>
 

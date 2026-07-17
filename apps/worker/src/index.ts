@@ -9,6 +9,7 @@ import { processReconcileSePay } from "./jobs/reconcile-sepay.js";
 import { processExpireCheckouts } from "./jobs/expire-checkouts.js";
 import { processSendEmail } from "./jobs/send-email.js";
 import { processSendWebhook } from "./jobs/send-webhook.js";
+import { processRecoverEmailDeliveries } from "./jobs/recover-email-deliveries.js";
 
 const queueNames = ["email", "badge", "reconcile", "webhook"] as const;
 
@@ -32,6 +33,8 @@ function createWorkers() {
           ? processReconcileSePay()
           : job.name === "expire-checkouts"
             ? processExpireCheckouts()
+            : job.name === "recover-email-deliveries"
+              ? processRecoverEmailDeliveries()
             : processReconcileFees(job),
       {
       connection
@@ -179,6 +182,16 @@ async function scheduleRecurringJobs() {
       }
     }
   );
+  await reconcileQueue.add(
+    "recover-email-deliveries",
+    {},
+    {
+      jobId: "recover-email-deliveries",
+      repeat: {
+        pattern: "* * * * *"
+      }
+    }
+  );
 }
 
 async function start() {
@@ -205,6 +218,7 @@ async function start() {
   );
 
   await scheduleRecurringJobs();
+  await processRecoverEmailDeliveries();
   await listenHealthServer();
 
   console.info(`vFurst worker started. Processing queues: ${queueNames.join(", ")}.`);

@@ -1,5 +1,4 @@
 import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
-import type { EmailTemplateName } from "@vfurst/email";
 import { workerEnv } from "./env.js";
 
 function getConnectionOptions(): ConnectionOptions {
@@ -29,11 +28,13 @@ const defaultJobOptions: JobsOptions = {
 };
 
 export type SendEmailJob = {
-  orgId: string;
-  eventId?: string;
-  to: string;
-  template: EmailTemplateName;
-  data: Record<string, unknown>;
+  deliveryId: string;
+};
+
+export type EmailDeadLetterJob = {
+  deliveryId: string;
+  failedAt: string;
+  errorCode: string;
 };
 
 export type GenerateBadgesJob = {
@@ -64,6 +65,15 @@ export const emailQueue = new Queue<SendEmailJob>("email", {
   defaultJobOptions
 });
 
+export const emailDeadLetterQueue = new Queue<EmailDeadLetterJob>("email-dead-letter", {
+  connection,
+  defaultJobOptions: {
+    attempts: 1,
+    removeOnComplete: false,
+    removeOnFail: false
+  }
+});
+
 export const badgeQueue = new Queue<GenerateBadgesJob>("badge", {
   connection,
   defaultJobOptions
@@ -79,6 +89,6 @@ export const webhookQueue = new Queue<SendWebhookJob>("webhook", {
   defaultJobOptions
 });
 
-export const allQueues = [emailQueue, badgeQueue, reconcileQueue, webhookQueue];
+export const allQueues = [emailQueue, emailDeadLetterQueue, badgeQueue, reconcileQueue, webhookQueue];
 
 export { connection };

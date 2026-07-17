@@ -9,6 +9,9 @@ const rateLimitPrefix = process.env.VFURST_RATE_LIMIT_PREFIX ?? `vfurst:e2e:${pr
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? "sk_test_e2e_stripe_secret_key_1234567890";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "whsec_e2e_stripe_signing_secret_1234567890";
+const emailDeliveryEncryptionKey = process.env.EMAIL_DELIVERY_ENCRYPTION_KEY ?? "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vfurst?schema=public";
+const workerArgs = ["node_modules/tsx/dist/cli.mjs", "apps/worker/src/index.ts"];
 const serverArgs = [
   "node_modules/next/dist/bin/next",
   serverMode,
@@ -22,6 +25,7 @@ const testArgs = ["node_modules/@playwright/test/cli.js", "test", ...process.arg
 
 let server;
 let startedServer = false;
+let worker;
 
 async function canReachApp() {
   try {
@@ -60,6 +64,8 @@ function startServer() {
       STRIPE_SECRET_KEY: stripeSecretKey,
       STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
       REDIS_URL: redisUrl,
+      EMAIL_DELIVERY_ENCRYPTION_KEY: emailDeliveryEncryptionKey,
+      NEXT_PUBLIC_APP_URL: baseUrl,
       VFURST_RATE_LIMIT_PREFIX: rateLimitPrefix
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -85,6 +91,41 @@ function startServer() {
   });
 }
 
+function startWorker() {
+  worker = spawn(process.execPath, workerArgs, {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      DIRECT_DATABASE_URL: process.env.DIRECT_DATABASE_URL ?? databaseUrl,
+      EMAIL_DELIVERY_ENCRYPTION_KEY: emailDeliveryEncryptionKey,
+      VFURST_DB_CONNECTION_LIMIT: process.env.VFURST_DB_CONNECTION_LIMIT ?? "4",
+      VFURST_DB_POOL_TIMEOUT_SECONDS: process.env.VFURST_DB_POOL_TIMEOUT_SECONDS ?? "20",
+      REDIS_URL: redisUrl,
+      AWS_REGION: process.env.AWS_REGION ?? "us-east-1",
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID ?? "minioadmin",
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY ?? "minioadmin",
+      S3_BUCKET_NAME: process.env.S3_BUCKET_NAME ?? "vfurst-dev",
+      S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:9000",
+      SMTP_HOST: process.env.SMTP_HOST ?? "127.0.0.1",
+      SMTP_PORT: process.env.SMTP_PORT ?? "1025",
+      SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL ?? "no-reply@localhost",
+      NEXT_PUBLIC_APP_URL: baseUrl
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
+  });
+
+  worker.stdout.on("data", (chunk) => {
+    if (process.env.E2E_VERBOSE) {
+      process.stdout.write(chunk);
+    }
+  });
+  worker.stderr.on("data", (chunk) => {
+    process.stderr.write(chunk);
+  });
+}
+
 function runPlaywright() {
   return new Promise((resolve) => {
     const testProcess = spawn(process.execPath, testArgs, {
@@ -97,6 +138,7 @@ function runPlaywright() {
         STRIPE_SECRET_KEY: stripeSecretKey,
         STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
         REDIS_URL: redisUrl,
+        EMAIL_DELIVERY_ENCRYPTION_KEY: emailDeliveryEncryptionKey,
         VFURST_RATE_LIMIT_PREFIX: rateLimitPrefix,
         PLAYWRIGHT_HTML_OPEN: "never"
       },
@@ -106,6 +148,23 @@ function runPlaywright() {
 
     testProcess.on("exit", (code) => resolve(code ?? 1));
   });
+}
+
+function stopWorker() {
+  if (!worker?.pid) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    try {
+      execFileSync("taskkill", ["/pid", String(worker.pid), "/T", "/F"], { stdio: "ignore" });
+      return;
+    } catch {
+      // Fall back to ChildProcess.kill below.
+    }
+  }
+
+  worker.kill("SIGTERM");
 }
 
 function stopServer() {
@@ -130,11 +189,13 @@ try {
     startServer();
   }
 
+  startWorker();
   await waitForApp();
   process.exitCode = await runPlaywright();
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
 } finally {
+  stopWorker();
   stopServer();
 }

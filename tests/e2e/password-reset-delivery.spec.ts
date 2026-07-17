@@ -50,6 +50,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  await prisma.emailDelivery.deleteMany({ where: { recipient: email } });
   await prisma.user.deleteMany({ where: { email } });
   await prisma.$disconnect();
 });

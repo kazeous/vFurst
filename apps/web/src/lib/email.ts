@@ -1,42 +1,12 @@
-import { getEventEmailTemplate, sendEmail, type EmailProviderConfig, type EmailTemplateName } from "@vfurst/email";
-import { prisma, type EmailProviderType, type Organization } from "@vfurst/db";
+import {
+  encryptEmailDeliveryPayload,
+  PermanentEmailDeliveryError,
+  type EmailTemplateName
+} from "@vfurst/email";
+import { prisma, type Organization } from "@vfurst/db";
+import { enqueueEmailDelivery } from "./email-queue";
 
 type EmailOrg = Pick<Organization, "id" | "contactEmail" | "emailProvider" | "emailSettings" | "name">;
-
-function settingsObject(settings: unknown) {
-  return settings && typeof settings === "object" && !Array.isArray(settings)
-    ? (settings as Record<string, unknown>)
-    : {};
-}
-
-export function getOrgEmailConfig(org: EmailOrg): EmailProviderConfig {
-  const settings = settingsObject(org.emailSettings);
-  const fromEmail = typeof settings.fromEmail === "string" ? settings.fromEmail : org.contactEmail;
-  const provider = org.emailProvider as EmailProviderType;
-
-  if (provider === "SES") {
-    return {
-      type: "SES",
-      region: typeof settings.region === "string" ? settings.region : process.env.AWS_REGION,
-      fromEmail
-    };
-  }
-
-  return {
-    type: "SMTP",
-    host: typeof settings.host === "string" ? settings.host : process.env.SMTP_HOST ?? "127.0.0.1",
-    port: typeof settings.port === "number" ? settings.port : Number(process.env.SMTP_PORT ?? 1025),
-    secure: typeof settings.secure === "boolean" ? settings.secure : false,
-    auth:
-      typeof settings.user === "string" && typeof settings.pass === "string"
-        ? {
-            user: settings.user,
-            pass: settings.pass
-          }
-        : undefined,
-    fromEmail
-  };
-}
 
 export async function sendOrgEmail(
   org: EmailOrg,
@@ -52,7 +22,7 @@ export async function sendOrgEmail(
           orgId: org.id
         },
         select: {
-          settings: true
+          id: true
         }
       })
     : null;
@@ -61,23 +31,83 @@ export async function sendOrgEmail(
     throw new Error("Event email context does not belong to this organization.");
   }
 
-  return sendEmail(getOrgEmailConfig(org), to, template, data, event ? getEventEmailTemplate(event.settings, template) ?? undefined : undefined);
-}
-
-export function getPlatformEmailConfig(): EmailProviderConfig {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASSWORD?.trim() || process.env.SMTP_PASS;
-
-  return {
-    type: "SMTP",
-    host: process.env.SMTP_HOST ?? "127.0.0.1",
-    port: Number(process.env.SMTP_PORT ?? 1025),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: user && pass ? { user, pass } : undefined,
-    fromEmail: process.env.SMTP_FROM_EMAIL ?? "no-reply@localhost"
-  };
+  return createQueuedEmailDelivery({
+    orgId: org.id,
+    eventId: event?.id,
+    to,
+    template,
+    data
+  });
 }
 
 export async function sendPlatformEmail(to: string, template: EmailTemplateName, data: Record<string, unknown>) {
-  return sendEmail(getPlatformEmailConfig(), to, template, data);
+  return createQueuedEmailDelivery({ to, template, data });
+}
+
+const nonReplayableTemplates = new Set<EmailTemplateName>([
+  "organization-invitation",
+  "password-reset",
+  "registration-transfer"
+]);
+
+function emailDeliveryEncryptionKey() {
+  const key =
+    process.env.EMAIL_DELIVERY_ENCRYPTION_KEY?.trim() ||
+    (process.env.NODE_ENV !== "production" ? "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" : undefined);
+
+  if (!key) {
+    throw new PermanentEmailDeliveryError(
+      "MISSING_ENCRYPTION_KEY",
+      "EMAIL_DELIVERY_ENCRYPTION_KEY is required to queue email delivery."
+    );
+  }
+
+  return key;
+}
+
+type QueuedEmailDeliveryInput = {
+  orgId?: string;
+  eventId?: string;
+  to: string;
+  template: EmailTemplateName;
+  data: Record<string, unknown>;
+};
+
+async function createQueuedEmailDelivery(input: QueuedEmailDeliveryInput) {
+  const encrypted = encryptEmailDeliveryPayload(
+    {
+      to: input.to,
+      template: input.template,
+      data: input.data
+    },
+    emailDeliveryEncryptionKey()
+  );
+  const delivery = await prisma.emailDelivery.create({
+    data: {
+      org: input.orgId ? { connect: { id: input.orgId } } : undefined,
+      event: input.eventId ? { connect: { id: input.eventId } } : undefined,
+      recipient: input.to,
+      template: input.template,
+      replayable: !nonReplayableTemplates.has(input.template),
+      payloadVersion: encrypted.payloadVersion,
+      payloadCiphertext: Uint8Array.from(encrypted.payloadCiphertext),
+      payloadIv: Uint8Array.from(encrypted.payloadIv),
+      payloadAuthTag: Uint8Array.from(encrypted.payloadAuthTag)
+    }
+  });
+
+  try {
+    const queueJobId = await enqueueEmailDelivery(delivery.id);
+    await prisma.emailDelivery.update({
+      where: { id: delivery.id },
+      data: { queueJobId }
+    });
+  } catch (error) {
+    console.error("Email delivery is durable but could not be added to Redis; recovery will retry.", {
+      deliveryId: delivery.id,
+      errorName: error instanceof Error ? error.name : "UnknownError"
+    });
+  }
+
+  return delivery;
 }

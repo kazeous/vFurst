@@ -4,6 +4,7 @@ export const requiredWorkerRuntimeVariables = [
   "DATABASE_URL",
   "VFURST_DB_CONNECTION_LIMIT",
   "VFURST_DB_POOL_TIMEOUT_SECONDS",
+  "EMAIL_DELIVERY_ENCRYPTION_KEY",
   "REDIS_URL",
   "AWS_REGION",
   "AWS_ACCESS_KEY_ID",
@@ -114,6 +115,17 @@ const envSchema = z
     AWS_SECRET_ACCESS_KEY: requiredText("AWS_SECRET_ACCESS_KEY"),
     AWS_SESSION_TOKEN: optionalText(),
     DATABASE_URL: requiredUrl("DATABASE_URL", ["postgres:", "postgresql:"]),
+    EMAIL_DELIVERY_ENCRYPTION_KEY: requiredText("EMAIL_DELIVERY_ENCRYPTION_KEY").refine(
+      (value) => {
+        try {
+          const decoded = Buffer.from(value, "base64");
+          return decoded.byteLength === 32 && decoded.toString("base64") === value;
+        } catch {
+          return false;
+        }
+      },
+      { message: "EMAIL_DELIVERY_ENCRYPTION_KEY must be a base64-encoded 32-byte key." }
+    ),
     VFURST_DB_CONNECTION_LIMIT: requiredPositiveInteger("VFURST_DB_CONNECTION_LIMIT"),
     VFURST_DB_POOL_TIMEOUT_SECONDS: requiredPositiveInteger("VFURST_DB_POOL_TIMEOUT_SECONDS"),
     REDIS_URL: requiredUrl("REDIS_URL", ["redis:", "rediss:"]),

@@ -1,39 +1,102 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPlatformEmailConfig } from "./email";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("platform email configuration", () => {
+const mocks = vi.hoisted(() => ({
+  eventFindFirst: vi.fn(),
+  deliveryCreate: vi.fn(),
+  deliveryUpdate: vi.fn(),
+  enqueueEmailDelivery: vi.fn()
+}));
+
+vi.mock("@vfurst/db", () => ({
+  prisma: {
+    event: { findFirst: mocks.eventFindFirst },
+    emailDelivery: {
+      create: mocks.deliveryCreate,
+      update: mocks.deliveryUpdate
+    }
+  }
+}));
+vi.mock("./email-queue", () => ({ enqueueEmailDelivery: mocks.enqueueEmailDelivery }));
+
+import { sendOrgEmail, sendPlatformEmail } from "./email";
+
+const encryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+const org = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Test organization",
+  contactEmail: "owner@example.test",
+  emailProvider: "SMTP" as const,
+  emailSettings: {}
+};
+
+describe("durable email outbox", () => {
+  beforeEach(() => {
+    vi.stubEnv("EMAIL_DELIVERY_ENCRYPTION_KEY", encryptionKey);
+    mocks.eventFindFirst.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000002" });
+    mocks.deliveryCreate.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000003" });
+    mocks.deliveryUpdate.mockResolvedValue({});
+    mocks.enqueueEmailDelivery.mockResolvedValue("email-delivery-00000000-0000-4000-8000-000000000003");
+  });
+
   afterEach(() => {
+    vi.clearAllMocks();
     vi.unstubAllEnvs();
   });
 
-  it("uses the documented SMTP_PASSWORD variable for authenticated SMTP", () => {
-    vi.stubEnv("SMTP_HOST", "smtp.example.test");
-    vi.stubEnv("SMTP_PORT", "587");
-    vi.stubEnv("SMTP_USER", "mailer@example.test");
-    vi.stubEnv("SMTP_PASSWORD", "documented-secret");
-    vi.stubEnv("SMTP_PASS", "");
-    vi.stubEnv("SMTP_SECURE", "true");
-    vi.stubEnv("SMTP_FROM_EMAIL", "no-reply@example.test");
+  it("rejects a foreign event context before creating an outbox record", async () => {
+    mocks.eventFindFirst.mockResolvedValue(null);
 
-    expect(getPlatformEmailConfig()).toEqual({
-      type: "SMTP",
-      host: "smtp.example.test",
-      port: 587,
-      secure: true,
-      auth: { user: "mailer@example.test", pass: "documented-secret" },
-      fromEmail: "no-reply@example.test"
-    });
+    await expect(
+      sendOrgEmail(org, "attendee@example.test", "payment-receipt", {}, "00000000-0000-4000-8000-000000000099")
+    ).rejects.toThrow("does not belong to this organization");
+
+    expect(mocks.deliveryCreate).not.toHaveBeenCalled();
   });
 
-  it("keeps compatibility with the legacy SMTP_PASS name", () => {
-    vi.stubEnv("SMTP_USER", "mailer@example.test");
-    vi.stubEnv("SMTP_PASSWORD", "");
-    vi.stubEnv("SMTP_PASS", "legacy-secret");
+  it("fails closed when the production encryption key is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("EMAIL_DELIVERY_ENCRYPTION_KEY", "");
 
-    expect(getPlatformEmailConfig()).toEqual(
-      expect.objectContaining({
-        auth: { user: "mailer@example.test", pass: "legacy-secret" }
-      })
+    await expect(sendPlatformEmail("user@example.test", "password-reset", {})).rejects.toThrow(
+      "EMAIL_DELIVERY_ENCRYPTION_KEY is required"
     );
+    expect(mocks.deliveryCreate).not.toHaveBeenCalled();
+  });
+
+  it("persists an encrypted organization outbox record and sends only its ID to Redis", async () => {
+    await sendOrgEmail(
+      org,
+      "attendee@example.test",
+      "payment-receipt",
+      { eventName: "Test event", secretMarker: "plaintext-must-not-leak" },
+      "00000000-0000-4000-8000-000000000002"
+    );
+
+    const createInput = mocks.deliveryCreate.mock.calls[0]?.[0];
+    expect(createInput).toEqual({
+      data: expect.objectContaining({
+        recipient: "attendee@example.test",
+        template: "payment-receipt",
+        replayable: true,
+        payloadVersion: 1,
+        payloadCiphertext: expect.any(Uint8Array),
+        org: { connect: { id: org.id } },
+        event: { connect: { id: "00000000-0000-4000-8000-000000000002" } }
+      })
+    });
+    expect(Buffer.from(createInput.data.payloadCiphertext).toString("utf8")).not.toContain("plaintext-must-not-leak");
+    expect(mocks.enqueueEmailDelivery).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000003");
+  });
+
+  it("retains a durable queued row when Redis is temporarily unavailable", async () => {
+    mocks.enqueueEmailDelivery.mockRejectedValue(new Error("Redis unavailable"));
+
+    await expect(sendPlatformEmail("user@example.test", "password-reset", { resetUrl: "https://example.test/reset?token=secret" }))
+      .resolves.toEqual({ id: "00000000-0000-4000-8000-000000000003" });
+
+    expect(mocks.deliveryCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ replayable: false, template: "password-reset" })
+    });
+    expect(mocks.deliveryUpdate).not.toHaveBeenCalled();
   });
 });

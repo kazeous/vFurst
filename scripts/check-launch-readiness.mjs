@@ -44,6 +44,10 @@ const requiredEnv = [
     type: "redis-url"
   },
   {
+    name: "EMAIL_DELIVERY_ENCRYPTION_KEY",
+    type: "base64-32-byte-key"
+  },
+  {
     name: "STRIPE_SECRET_KEY",
     type: "stripe-secret-key"
   },
@@ -314,6 +318,19 @@ function validatePositiveInteger(name, value) {
   return null;
 }
 
+function validateBase64Key(name, value) {
+  try {
+    const decoded = Buffer.from(value, "base64");
+    if (decoded.byteLength !== 32 || decoded.toString("base64") !== value) {
+      return `${name} must be a base64-encoded 32-byte key.`;
+    }
+  } catch {
+    return `${name} must be a base64-encoded 32-byte key.`;
+  }
+
+  return null;
+}
+
 function validateRequiredEnv({ name, type }) {
   const value = process.env[name] ?? "";
 
@@ -343,6 +360,10 @@ function validateRequiredEnv({ name, type }) {
 
   if (type === "positive-integer") {
     return validatePositiveInteger(name, value);
+  }
+
+  if (type === "base64-32-byte-key") {
+    return validateBase64Key(name, value);
   }
 
   return validateTextEnv(name, value);

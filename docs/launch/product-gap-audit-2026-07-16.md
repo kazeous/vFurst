@@ -187,7 +187,9 @@ The reference and misleading dashboard/marketing copy now describe that behavior
 
 **Priority: P2 operations follow-up.**
 
-Phase 1 specifies a dead-letter queue and delivery status for email template analytics. The worker retries jobs and retains failed jobs (`removeOnFail: false`) but does not create a distinct dead-letter workflow, persist delivery records, or expose operator visibility. Define whether retained BullMQ failures are sufficient; if not, implement a named dead-letter/retry/replay process and an auditable delivery status model/UI.
+**Resolution update (2026-07-17): implemented.** Retained BullMQ failures were not accepted as the delivery source of truth. Every web email producer now first creates an AES-256-GCM-encrypted PostgreSQL `EmailDelivery`; Redis receives only its ID. The worker persists numbered attempts, provider/message identifiers, sanitized bounded errors, and the `QUEUED` → `PROCESSING` → `RETRYING`/`DELIVERED`/`DEAD_LETTERED` lifecycle. Transient failures back off, permanent/exhausted failures receive a pointer in the named `email-dead-letter` queue, and startup/minutely recovery restores source jobs that were not enqueued during a Redis outage.
+
+Organizer visibility is event-scoped at `/dashboard/events/[eventId]/settings/emails`; the platform control plane has a masked global view at `/platform/operations/email`. Manual replay preserves the original dead-letter and creates a linked delivery after resource-derived authorization. Password reset, invitation, and registration-transfer messages are explicitly non-replayable because their links are single-use; their encrypted payload is purged on terminal failure. Successful deliveries also purge encrypted content. Unit coverage proves encryption/tamper handling, error classification, attempt/dead-letter persistence, recovery, and authorization; Playwright covers both operator surfaces/replay and real Mailpit delivery through the worker.
 
 ## Items that are not missing code features
 

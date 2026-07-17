@@ -114,8 +114,8 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | **Auth** | NextAuth.js v5 (Auth.js) | Multi-provider auth, session management, RBAC |
 | **Payments** | Stripe Connect + SePay VietQR | Connected card settlement plus central VND receipt, reconciliation, organizer ledger, and manual payout/refund records |
 | **File Storage** | AWS S3 (`@aws-sdk/client-s3`) | Badge templates, product images, event assets, vendor uploads. Uses presigned URLs for direct client-to-S3 uploads. |
-| **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice |
-| **Background Jobs / Shared Controls** | BullMQ + Redis | Email queues, badge generation, billing calculations, and atomic shared rate-limit counters |
+| **Email** | AWS SES + SMTP (configurable) | Transactional emails, per-org provider choice, and an encrypted PostgreSQL delivery outbox |
+| **Background Jobs / Shared Controls** | BullMQ + Redis | Pointer-only email queues and dead letters, badge generation, billing calculations, and atomic shared rate-limit counters |
 | **Validation** | Zod + colocated TypeScript contracts | Validation stays with the owning action, API, payment, or package module |
 | **State** | React Server Components + URL/form state | Server-first rendering with minimal client state |
 | **Charts** | Recharts | Dashboard analytics visualization |
@@ -213,6 +213,11 @@ erDiagram
     User ||--o{ RaffleEntry : "enters"
     Organization ||--o{ OrganizerLedgerEntry : "owns"
     Organization ||--o{ OrganizerPayout : "receives"
+    Organization ||--o{ EmailDelivery : "owns"
+    Event ||--o{ EmailDelivery : "scopes"
+    EmailDelivery ||--o{ EmailDeliveryAttempt : "attempts"
+    EmailDelivery ||--o{ EmailDelivery : "replays"
+    User ||--o{ EmailDelivery : "replays"
     OrganizerPayout ||--o{ OrganizerLedgerEntry : "settles"
     PaymentAttempt ||--o{ PaymentException : "may create"
 ```
@@ -252,9 +257,9 @@ erDiagram
 | **ApiKey** | id, orgId, name, keyHash, scopes, lastUsedAt | Public API authentication |
 | **WebhookEndpoint** | id, orgId, url, events, secret, active | Outbound webhook config |
 
-### Infrastructure, access, and payment operations (13)
+### Infrastructure, access, payment, and delivery operations (15)
 
-These models supplement the original 29 product/tenant entities. The managed-provisioning schema contains **42 models** in total, including the implemented `OrgInvitation`; `PROGRESS.md` and the actual Prisma schema remain the ground truth for implementation status.
+These models supplement the original 29 product/tenant entities. The managed-provisioning schema contains **44 models** in total, including the implemented `OrgInvitation`, `EmailDelivery`, and `EmailDeliveryAttempt`; `PROGRESS.md` and the actual Prisma schema remain the ground truth for implementation status.
 
 | Entity | Purpose |
 |---|---|
@@ -268,6 +273,16 @@ These models supplement the original 29 product/tenant entities. The managed-pro
 | **OrganizerLedgerEntry** | Idempotent organizer credit, refund, and adjustment entries for centrally received VND funds |
 | **OrganizerPayout** | Recorded external organizer settlement and bank reference |
 | **PaymentRefund** | Provider-aware manual refund record tied to idempotent fulfillment reversal |
+| **EmailDelivery** | Durable encrypted email outbox and operator audit record: tenant/event scope, recipient/template metadata, queue/delivery/dead-letter status, provider result, bounded sanitized error, retry limit, and replay lineage. Redis contains only the delivery ID; successful or non-replayable terminal deliveries purge encrypted content. |
+| **EmailDeliveryAttempt** | One numbered provider attempt per delivery, with start/finish time, result, provider message ID, or sanitized error. |
+
+### Email delivery and replay contract
+
+- Web mutations write the encrypted `EmailDelivery` record before attempting to enqueue `deliveryId`; a Redis outage does not discard the transactional message. `EMAIL_DELIVERY_ENCRYPTION_KEY` is a base64-encoded 32-byte AES-256-GCM key and is required in production and in the worker runtime.
+- The email worker resolves organization/event authority from the stored record, decrypts only in worker memory, classifies permanent versus retryable provider errors, and records every attempt. Successful deliveries clear the encrypted payload.
+- A recurring recovery job restores missing/stale source jobs from PostgreSQL. Terminal failures remain in `DEAD_LETTERED` and also receive a pointer-only job in the named `email-dead-letter` queue.
+- Password reset, organization invitation, and registration transfer messages contain single-use signed links. They may retry automatically during the original delivery but are not manually replayable; terminal failure purges their encrypted payload.
+- Event organizers inspect event-scoped history at `/dashboard/events/[eventId]/settings/emails`. Platform admins inspect masked cross-platform delivery status at `/platform/operations/email`. Replay creates a new linked delivery and preserves the original dead-letter record.
 
 ---
 

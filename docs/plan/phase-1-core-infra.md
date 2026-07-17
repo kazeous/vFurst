@@ -166,6 +166,7 @@ BullMQ worker entry point:
 ##### [NEW] `apps/worker/src/queues.ts`
 Typed queue instances and shared queue configuration:
 - `emailQueue` — transactional email delivery
+- `email-dead-letter` — pointer-only terminal failures for operator visibility
 - `badgeQueue` — batch badge generation
 - `reconcileQueue` — nightly fee reconciliation
 - Default job options (retry, backoff, timeout)
@@ -175,11 +176,14 @@ Worker package config with `tsx` for dev mode and BullMQ + Redis dependencies.
 
 ##### [NEW] `apps/worker/src/jobs/send-email.ts`
 BullMQ job processor for `emailQueue`:
-- Dequeues email jobs and calls `sendEmail()` from `packages/email`
+- Dequeues pointer-only `{ deliveryId }` jobs, loads the encrypted PostgreSQL outbox record, and calls `sendEmail()` from `packages/email`
 - Handles per-org provider resolution (SES vs SMTP based on org settings)
 - Retry with exponential backoff on transient failures (network, rate limits)
-- Dead-letter queue for permanently failed emails
-- Logs delivery status for email template analytics
+- Records numbered `EmailDeliveryAttempt` rows plus queued/processing/retrying/delivered/dead-lettered status
+- Adds permanently failed or exhausted deliveries to the named `email-dead-letter` queue without copying recipient, body, or signed links into Redis
+- Runs startup/minutely recovery so a Redis outage after the database write does not lose delivery
+- Purges encrypted content after success and after terminal failure of non-replayable password-reset, organization-invitation, or registration-transfer messages
+- Exposes event-scoped delivery/replay controls to organizers and masked cross-platform operations to platform admins
 
 > [!NOTE]
 > The worker is bootstrapped in Phase 1 because email delivery (the first background job) is needed immediately. Phase 5 adds `generate-badges.ts` and Phase 6 adds `reconcile-fees.ts` to the existing worker infrastructure.

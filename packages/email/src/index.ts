@@ -16,6 +16,16 @@ import { renderCustomEmailTemplate, type EventEmailTemplateOverride } from "./cu
 
 export type { EmailDelivery, EmailMessage, EmailProvider, EmailProviderConfig, EmailTemplateName } from "./types.js";
 export {
+  classifyEmailDeliveryError,
+  decryptEmailDeliveryPayload,
+  encryptEmailDeliveryPayload,
+  PermanentEmailDeliveryError,
+  sanitizeEmailDeliveryError,
+  type EmailDeliveryErrorClassification,
+  type EmailDeliveryPayload,
+  type EncryptedEmailDeliveryPayload
+} from "./delivery.js";
+export {
   allowedEventEmailTokens,
   eventEmailTemplateKeyForName,
   eventEmailTemplateKeys,

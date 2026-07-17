@@ -243,6 +243,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.paymentProviderConfig.updateMany({ where: { provider: "SEPAY", updatedById: ownerId }, data: { updatedById: null } });
+  await prisma.emailDelivery.deleteMany({ where: { orgId } });
   await prisma.organization.deleteMany({ where: { id: orgId } });
   await prisma.user.deleteMany({
     where: { email: { in: [ownerEmail, attendeeEmail, volunteerEmail, vendorEmail, recipientEmail] } }

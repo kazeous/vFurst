@@ -100,6 +100,7 @@ See `docs/sepay-rollout.md` for the sandbox, enablement, payout, refund, and pro
 - React escaping plus input/output validation where rich/user content is handled.
 - Auth.js CSRF/session protections and fixed-window rate limiting on auth, payment, webhook, and public API paths.
 - Zod validation on mutable boundary inputs.
+- Production readiness requires a base64-encoded 32-byte `EMAIL_DELIVERY_ENCRYPTION_KEY`; rotation requires an explicit payload-version/dual-key migration rather than silently replacing the key while deliveries are pending.
 - `npm audit --audit-level=moderate` must be clean or have a documented non-exploitable exception.
 
 ##### PCI and payment compliance
