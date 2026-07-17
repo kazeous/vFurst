@@ -146,6 +146,7 @@ function validateStoredRecord(record: AuthorizationCodeRecord) {
   const codeClaims = authorizationCodeClaimsSchema.safeParse({
     issuer: record.issuer,
     audience: record.audience,
+    clientId: record.clientId,
     codeId: record.codeId,
     userId: record.userId,
     authVersion: record.authVersion,
@@ -178,6 +179,8 @@ function validateStoredRecord(record: AuthorizationCodeRecord) {
 
 function parseExchangeRequest(input: ExchangeAuthorizationCodeInput) {
   const parsed = authorizationCodeExchangeRequestSchema.safeParse({
+    audience: input.audience,
+    clientId: input.clientId,
     code: input.code,
     codeVerifier: input.codeVerifier,
     redirectUri: input.redirectUri
@@ -234,6 +237,7 @@ export class AuthorizationCodeService {
     const claims = authorizationCodeClaimsSchema.safeParse({
       issuer: IDENTITY_ASSERTION_ISSUER,
       audience: input.audience,
+      clientId: input.clientId,
       codeId,
       userId: input.userId,
       authVersion: input.authVersion,
@@ -276,11 +280,10 @@ export class AuthorizationCodeService {
 
   async exchange(input: ExchangeAuthorizationCodeInput): Promise<AuthorizationCodeExchangeResult> {
     requireClientId(input.clientId);
-    const request = parseExchangeRequest(input);
-
     if (input.audience !== IDENTITY_ASSERTION_AUDIENCE) {
       throw new AuthorizationCodeError("invalid_audience", "Authorization audience is invalid.");
     }
+    const request = parseExchangeRequest(input);
     if (!Number.isSafeInteger(input.currentAuthVersion) || input.currentAuthVersion < 0) {
       throw new AuthorizationCodeError("invalid_request", "Current authentication version is invalid.");
     }

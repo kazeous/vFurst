@@ -4,18 +4,29 @@ export const AUTHORIZATION_CODE_AUDIENCES = ["platform-manager", "tenant-web"] a
 
 export const authorizationCodeAudienceSchema = z.enum(AUTHORIZATION_CODE_AUDIENCES);
 
+export const authorizationClientIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+
 const absoluteCallbackUrlSchema = z
   .url()
   .max(2048)
   .refine((value) => {
     const url = new URL(value);
-    return url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname));
+    const localHttpHost =
+      url.hostname === "localhost" ||
+      url.hostname.endsWith(".localhost") ||
+      ["127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    return url.protocol === "https:" || (url.protocol === "http:" && localHttpHost);
   }, "Callback URLs must use HTTPS except on localhost.");
 
 const base64UrlSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
 
 export const authorizationStartSchema = z.object({
   audience: z.literal("tenant-web"),
+  clientId: authorizationClientIdSchema,
   redirectUri: absoluteCallbackUrlSchema,
   state: base64UrlSchema.min(32).max(256),
   codeChallenge: base64UrlSchema.min(43).max(128)
@@ -24,6 +35,7 @@ export const authorizationStartSchema = z.object({
 export const authorizationCodeClaimsSchema = z.object({
   issuer: z.literal("platform-manager"),
   audience: z.literal("tenant-web"),
+  clientId: authorizationClientIdSchema,
   codeId: z.uuid(),
   userId: z.uuid(),
   authVersion: z.number().int().nonnegative(),
@@ -34,6 +46,8 @@ export const authorizationCodeClaimsSchema = z.object({
 });
 
 export const authorizationCodeExchangeRequestSchema = z.object({
+  audience: z.literal("tenant-web"),
+  clientId: authorizationClientIdSchema,
   code: base64UrlSchema.min(32).max(512),
   codeVerifier: base64UrlSchema.min(43).max(128),
   redirectUri: absoluteCallbackUrlSchema
@@ -49,9 +63,13 @@ export const relyingSessionClaimsSchema = z.object({
   expiresAt: z.number().int().positive()
 });
 
+export const identityAssertionClaimsSchema = relyingSessionClaimsSchema.extend({
+  jti: z.uuid()
+});
+
 export const authorizationCodeExchangeResponseSchema = z.object({
-  sessionToken: base64UrlSchema.min(32).max(4096),
-  claims: relyingSessionClaimsSchema
+  tokenType: z.literal("vfurst_identity_assertion"),
+  identityAssertion: base64UrlSchema.min(32).max(4096)
 });
 
 export const authorizationErrorCodes = [
@@ -77,3 +95,4 @@ export type AuthorizationCodeClaims = z.infer<typeof authorizationCodeClaimsSche
 export type AuthorizationCodeExchangeRequest = z.infer<typeof authorizationCodeExchangeRequestSchema>;
 export type AuthorizationCodeExchangeResponse = z.infer<typeof authorizationCodeExchangeResponseSchema>;
 export type RelyingSessionClaims = z.infer<typeof relyingSessionClaimsSchema>;
+export type IdentityAssertionClaims = z.infer<typeof identityAssertionClaimsSchema>;

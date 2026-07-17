@@ -36,6 +36,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 type TransactionPayload = Readonly<{
   transactionId: string;
+  clientId: string;
   state: string;
   codeVerifier: string;
   redirectUri: string;
@@ -52,6 +53,7 @@ export type AuthorizationTransactionCookie = Readonly<{
 
 export type StartAuthorizationTransactionInput = Readonly<{
   encryptionKey: Uint8Array;
+  clientId: string;
   redirectUri: string;
   returnTo?: string;
   now?: Date;
@@ -181,6 +183,8 @@ function parsePayload(candidate: unknown): TransactionPayload {
     !UUID_PATTERN.test(candidate.transactionId) ||
     !("state" in candidate) ||
     typeof candidate.state !== "string" ||
+    !("clientId" in candidate) ||
+    typeof candidate.clientId !== "string" ||
     !("codeVerifier" in candidate) ||
     typeof candidate.codeVerifier !== "string" ||
     !("redirectUri" in candidate) ||
@@ -202,6 +206,7 @@ function parsePayload(candidate: unknown): TransactionPayload {
 
   const start = authorizationStartSchema.safeParse({
     audience: "tenant-web",
+    clientId: candidate.clientId,
     redirectUri: candidate.redirectUri,
     state: candidate.state,
     codeChallenge: createPkceS256Challenge(candidate.codeVerifier)
@@ -220,6 +225,7 @@ function parsePayload(candidate: unknown): TransactionPayload {
 
   return {
     transactionId: candidate.transactionId,
+    clientId: start.data.clientId,
     state: candidate.state,
     codeVerifier: candidate.codeVerifier,
     redirectUri: candidate.redirectUri,
@@ -240,12 +246,14 @@ export function startAuthorizationTransaction(
   const codeVerifier = createPkceVerifier();
   const authorization = authorizationStartSchema.parse({
     audience: "tenant-web",
+    clientId: input.clientId,
     redirectUri: input.redirectUri,
     state,
     codeChallenge: createPkceS256Challenge(codeVerifier)
   });
   const payload: TransactionPayload = {
     transactionId: randomUUID(),
+    clientId: authorization.clientId,
     state,
     codeVerifier,
     redirectUri: authorization.redirectUri,

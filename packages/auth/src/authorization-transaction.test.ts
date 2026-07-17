@@ -16,6 +16,7 @@ describe("host-only authorization transaction", () => {
     const encryptionKey = randomBytes(32);
     const started = startAuthorizationTransaction({
       encryptionKey,
+      clientId: "tenant-web-test",
       redirectUri: REDIRECT_URI,
       returnTo: "/dashboard/events?filter=active",
       now: NOW
@@ -50,6 +51,7 @@ describe("host-only authorization transaction", () => {
     const encryptionKey = randomBytes(32);
     const started = startAuthorizationTransaction({
       encryptionKey,
+      clientId: "tenant-web-test",
       redirectUri: REDIRECT_URI,
       returnTo: "https://attacker.example/after-login",
       now: NOW
@@ -69,6 +71,7 @@ describe("host-only authorization transaction", () => {
     const encryptionKey = randomBytes(32);
     const started = startAuthorizationTransaction({
       encryptionKey,
+      clientId: "tenant-web-test",
       redirectUri: REDIRECT_URI,
       now: NOW
     });
@@ -116,6 +119,7 @@ describe("host-only authorization transaction", () => {
     expect(() =>
       startAuthorizationTransaction({
         encryptionKey: randomBytes(31),
+        clientId: "tenant-web-test",
         redirectUri: REDIRECT_URI,
         now: NOW
       })

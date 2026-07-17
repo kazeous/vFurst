@@ -20,6 +20,7 @@ describe("shared contracts", () => {
     expect(
       authorizationStartSchema.parse({
         audience: "tenant-web",
+        clientId: "tenant-web-production",
         redirectUri: "https://console.vfurst.example/auth/callback",
         state: "s".repeat(43),
         codeChallenge: "c".repeat(43)
@@ -31,6 +32,7 @@ describe("shared contracts", () => {
     expect(() =>
       authorizationStartSchema.parse({
         audience: "tenant-web",
+        clientId: "tenant-web-production",
         redirectUri: "http://attacker.example/callback",
         state: "s".repeat(43),
         codeChallenge: "c".repeat(43)
@@ -42,6 +44,7 @@ describe("shared contracts", () => {
     const claims = authorizationCodeClaimsSchema.parse({
       issuer: "platform-manager",
       audience: "tenant-web",
+      clientId: "tenant-web-production",
       codeId: ids.event,
       userId: ids.user,
       authVersion: 7,
@@ -52,6 +55,29 @@ describe("shared contracts", () => {
     });
 
     expect(claims.authVersion).toBe(7);
+    expect(claims.clientId).toBe("tenant-web-production");
+  });
+
+  it("allows HTTP callbacks only for loopback and localhost subdomains", () => {
+    expect(
+      authorizationStartSchema.parse({
+        audience: "tenant-web",
+        clientId: "tenant-web-local",
+        redirectUri: "http://console.localhost:3100/auth/callback",
+        state: "s".repeat(43),
+        codeChallenge: "c".repeat(43)
+      }).redirectUri
+    ).toBe("http://console.localhost:3100/auth/callback");
+
+    expect(() =>
+      authorizationStartSchema.parse({
+        audience: "tenant-web",
+        clientId: "tenant-web-local",
+        redirectUri: "http://localhost.attacker.example/auth/callback",
+        state: "s".repeat(43),
+        codeChallenge: "c".repeat(43)
+      })
+    ).toThrow();
   });
 
   it("validates durable control-plane lifecycle events", () => {
