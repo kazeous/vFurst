@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import console from "node:console";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import http from "node:http";
 import { join, resolve } from "node:path";
@@ -14,6 +15,23 @@ const config = readSplitHostConfig();
 const serverMode = process.env.VFURST_SPLIT_SERVER_MODE?.trim() || "dev";
 const startupTimeoutMs = 120_000;
 const children = [];
+
+const localIdentityKeyPair = generateKeyPairSync("ed25519");
+const localIdentityKeyId = "manager-local-dev";
+const localIdentityPrivateKeyBase64 = Buffer.from(
+  localIdentityKeyPair.privateKey.export({ type: "pkcs8", format: "pem" }),
+  "utf8"
+).toString("base64");
+const localIdentityPublicKeys = JSON.stringify({
+  [localIdentityKeyId]: localIdentityKeyPair.publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString()
+});
+const localAuthClientId = "tenant-web";
+const localIdentityServiceSecret = randomBytes(32).toString("base64url");
+const localAuthTransactionKey = randomBytes(32).toString("base64url");
+const localTenantSessionSecret = randomBytes(32).toString("base64url");
+const localManagerAuthSecret = randomBytes(32).toString("base64url");
 
 let proxyServer;
 let shutdownPromise;
@@ -61,18 +79,41 @@ function startNextApp(app, port) {
   const managerHost = config.managerHosts.find((host) => host === "manager.localhost") ?? config.managerHosts[0] ?? "localhost";
   const tenantRoot = config.managedRootDomains.find((host) => host === "localhost") ?? config.managedRootDomains[0] ?? "localhost";
   const proxyOrigin = (host) => `http://${host}:${config.proxyPort}`;
+  const tenantCallbackUrl = `${proxyOrigin(`console.${tenantRoot}`)}/auth/callback`;
   const localRuntimeEnvironment = app === "platform-manager"
     ? {
         NEXT_PUBLIC_PLATFORM_MANAGER_URL: process.env.NEXT_PUBLIC_PLATFORM_MANAGER_URL ?? proxyOrigin(managerHost),
         NEXT_PUBLIC_ROOT_DOMAIN: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? tenantRoot,
-        AUTH_URL: process.env.AUTH_URL ?? proxyOrigin(managerHost)
+        AUTH_URL: process.env.AUTH_URL ?? proxyOrigin(managerHost),
+        AUTH_SECRET: process.env.AUTH_SECRET ?? localManagerAuthSecret,
+        VFURST_AUTH_CLIENT_ID: process.env.VFURST_AUTH_CLIENT_ID ?? localAuthClientId,
+        VFURST_AUTH_CALLBACK_URLS: process.env.VFURST_AUTH_CALLBACK_URLS ?? tenantCallbackUrl,
+        VFURST_IDENTITY_SERVICE_SECRET:
+          process.env.VFURST_IDENTITY_SERVICE_SECRET ?? localIdentityServiceSecret,
+        VFURST_MANAGER_IDENTITY_PRIVATE_KEY_BASE64:
+          process.env.VFURST_MANAGER_IDENTITY_PRIVATE_KEY_BASE64 ?? localIdentityPrivateKeyBase64,
+        VFURST_MANAGER_IDENTITY_KEY_ID:
+          process.env.VFURST_MANAGER_IDENTITY_KEY_ID ?? localIdentityKeyId,
+        VFURST_TRUSTED_CLIENT_IP_HEADER:
+          process.env.VFURST_TRUSTED_CLIENT_IP_HEADER ?? "x-real-ip",
+        DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vfurst?schema=public",
+        REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379"
       }
     : {
         VFURST_TENANT_ROOT_DOMAIN: process.env.VFURST_TENANT_ROOT_DOMAIN ?? tenantRoot,
         VFURST_MANAGER_URL: process.env.VFURST_MANAGER_URL ?? proxyOrigin(managerHost),
         VFURST_CONSOLE_URL: process.env.VFURST_CONSOLE_URL ?? proxyOrigin(`console.${tenantRoot}`),
         VFURST_API_URL: process.env.VFURST_API_URL ?? proxyOrigin(`api.${tenantRoot}`),
-        DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://localhost:5432/vfurst",
+        VFURST_AUTH_CLIENT_ID: process.env.VFURST_AUTH_CLIENT_ID ?? localAuthClientId,
+        VFURST_AUTH_TRANSACTION_KEY_BASE64URL:
+          process.env.VFURST_AUTH_TRANSACTION_KEY_BASE64URL ?? localAuthTransactionKey,
+        VFURST_TENANT_SESSION_SECRET_BASE64URL:
+          process.env.VFURST_TENANT_SESSION_SECRET_BASE64URL ?? localTenantSessionSecret,
+        VFURST_MANAGER_IDENTITY_PUBLIC_KEYS_JSON:
+          process.env.VFURST_MANAGER_IDENTITY_PUBLIC_KEYS_JSON ?? localIdentityPublicKeys,
+        VFURST_IDENTITY_SERVICE_SECRET:
+          process.env.VFURST_IDENTITY_SERVICE_SECRET ?? localIdentityServiceSecret,
+        DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vfurst?schema=public",
         REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379"
       };
   const child = spawn(

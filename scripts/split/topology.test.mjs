@@ -18,14 +18,14 @@ function close(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-function request(port, hostHeader) {
+function request(port, hostHeader, headers = {}) {
   return new Promise((resolve, reject) => {
     const outgoing = http.get(
       {
         hostname: "127.0.0.1",
         port,
         path: "/probe?source=test",
-        headers: { host: hostHeader }
+        headers: { host: hostHeader, ...headers }
       },
       (response) => {
         let body = "";
@@ -43,7 +43,14 @@ function request(port, hostHeader) {
 describe("local split topology", () => {
   const manager = http.createServer((request, response) => {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ runtime: "platform-manager", host: request.headers.host, url: request.url }));
+    response.end(
+      JSON.stringify({
+        runtime: "platform-manager",
+        host: request.headers.host,
+        url: request.url,
+        headers: request.headers
+      })
+    );
   });
   const tenant = http.createServer((request, response) => {
     response.setHeader("content-type", "application/json");
@@ -112,5 +119,18 @@ describe("local split topology", () => {
 
     assert.equal(response.status, 421);
     assert.equal(JSON.parse(response.body).error, "unrecognized_host");
+  });
+
+  it("replaces caller-supplied client IP headers at the trusted local edge", async () => {
+    const response = await request(proxyPort, "vfurst.example:3100", {
+      "x-real-ip": "203.0.113.99",
+      "x-forwarded-for": "203.0.113.98",
+      "cf-connecting-ip": "203.0.113.97"
+    });
+    const body = JSON.parse(response.body);
+
+    assert.ok(["127.0.0.1", "::ffff:127.0.0.1"].includes(body.headers["x-real-ip"]));
+    assert.equal(body.headers["x-forwarded-for"], undefined);
+    assert.equal(body.headers["cf-connecting-ip"], undefined);
   });
 });

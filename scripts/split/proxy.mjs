@@ -33,12 +33,24 @@ function rejectUnknownUpgrade(socket, hostHeader) {
 
 function forwardedHeaders(request, runtime) {
   const hostHeader = request.headers.host ?? "";
+  const callerHeaders = { ...request.headers };
+  for (const header of [
+    "cf-connecting-ip",
+    "fly-client-ip",
+    "true-client-ip",
+    "x-forwarded-for",
+    "x-real-ip"
+  ]) {
+    delete callerHeaders[header];
+  }
+  const clientAddress = request.socket.remoteAddress ?? "127.0.0.1";
 
   return {
-    ...request.headers,
+    ...callerHeaders,
     host: hostHeader,
     "x-forwarded-host": hostHeader,
     "x-forwarded-proto": "http",
+    "x-real-ip": clientAddress,
     "x-vfurst-local-runtime": runtime
   };
 }
