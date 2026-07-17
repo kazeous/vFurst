@@ -1,4 +1,8 @@
 import { createPrivateKey } from "node:crypto";
+import {
+  TRUSTED_CLIENT_IP_HEADERS,
+  type TrustedClientIpHeader
+} from "@vfurst/auth/rate-limit";
 
 export const PLATFORM_MANAGER_ENV_NAMES = Object.freeze({
   managerUrl: "NEXT_PUBLIC_PLATFORM_MANAGER_URL",
@@ -13,7 +17,14 @@ export const PLATFORM_MANAGER_ENV_NAMES = Object.freeze({
   identityPrivateKeyBase64: "VFURST_MANAGER_IDENTITY_PRIVATE_KEY_BASE64",
   identityKeyId: "VFURST_MANAGER_IDENTITY_KEY_ID",
   databaseUrl: "DATABASE_URL",
-  redisUrl: "REDIS_URL"
+  redisUrl: "REDIS_URL",
+  trustedClientIpHeader: "VFURST_TRUSTED_CLIENT_IP_HEADER",
+  rateLimitPrefix: "VFURST_MANAGER_RATE_LIMIT_PREFIX",
+  credentialAccountRateLimitPerMinute: "VFURST_MANAGER_CREDENTIAL_ACCOUNT_RATE_LIMIT_PER_MINUTE",
+  credentialIpRateLimitPerMinute: "VFURST_MANAGER_CREDENTIAL_IP_RATE_LIMIT_PER_MINUTE",
+  authorizeRateLimitPerMinute: "VFURST_MANAGER_AUTHORIZE_RATE_LIMIT_PER_MINUTE",
+  exchangeRateLimitPerMinute: "VFURST_MANAGER_EXCHANGE_RATE_LIMIT_PER_MINUTE",
+  revokeRateLimitPerMinute: "VFURST_MANAGER_REVOKE_RATE_LIMIT_PER_MINUTE"
 } as const);
 
 const LOCAL_MANAGER_URL = "http://localhost:3000";
@@ -35,6 +46,13 @@ export type PlatformManagerEnvironment = Readonly<{
   identityKeyId: string;
   databaseUrl: string | undefined;
   redisUrl: string | undefined;
+  trustedClientIpHeader: TrustedClientIpHeader | undefined;
+  rateLimitPrefix: string;
+  credentialAccountRateLimitPerMinute: number;
+  credentialIpRateLimitPerMinute: number;
+  authorizeRateLimitPerMinute: number;
+  exchangeRateLimitPerMinute: number;
+  revokeRateLimitPerMinute: number;
 }>;
 
 export type IdentityProtocolEnvironment = PlatformManagerEnvironment &
@@ -105,6 +123,36 @@ function parseConnectionUrl(value: string | undefined, name: string, allowedProt
   }
 
   return candidate;
+}
+
+function parsePositiveInteger(value: string | undefined, name: string, fallback: number) {
+  const candidate = optionalValue(value);
+  if (!candidate) return fallback;
+
+  const parsed = Number(candidate);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100_000) {
+    throw new Error(`${name} must be an integer between 1 and 100000.`);
+  }
+  return parsed;
+}
+
+function parseRateLimitPrefix(value: string | undefined) {
+  const candidate = optionalValue(value) ?? "vfurst:manager:rate-limit";
+  if (candidate.length > 80 || !/^[A-Za-z0-9:_-]+$/.test(candidate)) {
+    throw new Error(`${PLATFORM_MANAGER_ENV_NAMES.rateLimitPrefix} contains unsupported characters.`);
+  }
+  return candidate;
+}
+
+function parseTrustedClientIpHeader(value: string | undefined): TrustedClientIpHeader | undefined {
+  const candidate = optionalValue(value)?.toLowerCase();
+  if (!candidate) return undefined;
+  if (!(TRUSTED_CLIENT_IP_HEADERS as readonly string[]).includes(candidate)) {
+    throw new Error(
+      `${PLATFORM_MANAGER_ENV_NAMES.trustedClientIpHeader} must name a supported ingress-provided IP header.`
+    );
+  }
+  return candidate as TrustedClientIpHeader;
 }
 
 function parseCallbackUrl(value: string, name: string) {
@@ -182,6 +230,9 @@ export function parsePlatformManagerEnv(input: EnvironmentInput = process.env): 
   const googleClientSecret = optionalValue(input[PLATFORM_MANAGER_ENV_NAMES.googleClientSecret]);
   const authSecret = optionalValue(input[PLATFORM_MANAGER_ENV_NAMES.authSecret]);
   const identityServiceSecret = optionalValue(input[PLATFORM_MANAGER_ENV_NAMES.identityServiceSecret]);
+  const trustedClientIpHeader = parseTrustedClientIpHeader(
+    input[PLATFORM_MANAGER_ENV_NAMES.trustedClientIpHeader]
+  );
 
   if (authUrl !== managerUrl) {
     throw new Error(`${PLATFORM_MANAGER_ENV_NAMES.authUrl} must match the platform-manager origin.`);
@@ -201,7 +252,6 @@ export function parsePlatformManagerEnv(input: EnvironmentInput = process.env): 
   if (input.NODE_ENV === "production" && authSecret && Buffer.byteLength(authSecret, "utf8") < 32) {
     throw new Error(`${PLATFORM_MANAGER_ENV_NAMES.authSecret} must be at least 32 bytes in production.`);
   }
-
   return Object.freeze({
     managerUrl,
     rootDomain,
@@ -221,7 +271,34 @@ export function parsePlatformManagerEnv(input: EnvironmentInput = process.env): 
     redisUrl: parseConnectionUrl(input[PLATFORM_MANAGER_ENV_NAMES.redisUrl], PLATFORM_MANAGER_ENV_NAMES.redisUrl, [
       "redis:",
       "rediss:"
-    ])
+    ]),
+    trustedClientIpHeader,
+    rateLimitPrefix: parseRateLimitPrefix(input[PLATFORM_MANAGER_ENV_NAMES.rateLimitPrefix]),
+    credentialAccountRateLimitPerMinute: parsePositiveInteger(
+      input[PLATFORM_MANAGER_ENV_NAMES.credentialAccountRateLimitPerMinute],
+      PLATFORM_MANAGER_ENV_NAMES.credentialAccountRateLimitPerMinute,
+      10
+    ),
+    credentialIpRateLimitPerMinute: parsePositiveInteger(
+      input[PLATFORM_MANAGER_ENV_NAMES.credentialIpRateLimitPerMinute],
+      PLATFORM_MANAGER_ENV_NAMES.credentialIpRateLimitPerMinute,
+      50
+    ),
+    authorizeRateLimitPerMinute: parsePositiveInteger(
+      input[PLATFORM_MANAGER_ENV_NAMES.authorizeRateLimitPerMinute],
+      PLATFORM_MANAGER_ENV_NAMES.authorizeRateLimitPerMinute,
+      60
+    ),
+    exchangeRateLimitPerMinute: parsePositiveInteger(
+      input[PLATFORM_MANAGER_ENV_NAMES.exchangeRateLimitPerMinute],
+      PLATFORM_MANAGER_ENV_NAMES.exchangeRateLimitPerMinute,
+      600
+    ),
+    revokeRateLimitPerMinute: parsePositiveInteger(
+      input[PLATFORM_MANAGER_ENV_NAMES.revokeRateLimitPerMinute],
+      PLATFORM_MANAGER_ENV_NAMES.revokeRateLimitPerMinute,
+      600
+    )
   });
 }
 
@@ -258,4 +335,15 @@ export function requireIdentityProtocolEnv(input: EnvironmentInput = process.env
 
 export function getPlatformManagerEnv() {
   return parsePlatformManagerEnv(process.env);
+}
+
+/** Build-safe base parsing stays available to Next route collection. */
+export function requireManagerRateLimitRuntimeEnv(
+  input: EnvironmentInput = process.env
+): PlatformManagerEnvironment {
+  const env = parsePlatformManagerEnv(input);
+  if (input.NODE_ENV === "production" && !env.trustedClientIpHeader) {
+    throw new Error(`${PLATFORM_MANAGER_ENV_NAMES.trustedClientIpHeader} is required in production.`);
+  }
+  return env;
 }

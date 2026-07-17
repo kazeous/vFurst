@@ -17,6 +17,7 @@ import {
   type IdentityJwtClaims
 } from "./identity-session.js";
 import { MANAGER_SESSION_COOKIE, managerGoogleProviderOptions } from "./auth-policy.js";
+import { managerCredentialAttemptAllowed } from "./rate-limit.js";
 
 const credentialsSchema = z.object({
   email: z.email(),
@@ -39,9 +40,13 @@ export function createManagerAuthConfig(): NextAuthConfig {
   const providers: NextAuthConfig["providers"] = [
     Credentials({
       credentials: { email: {}, password: {} },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
+
+        if (!(await managerCredentialAttemptAllowed(request, parsed.data.email))) {
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email: normalizeIdentityEmail(parsed.data.email) }

@@ -10,6 +10,12 @@ import {
 import { prisma } from "@vfurst/db";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  RateLimitUnavailableError,
+  applyManagerRateLimit,
+  managerRateLimitUnavailableResponse,
+  managerRateLimitedResponse
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +35,17 @@ function loginRedirect(request: NextRequest, managerUrl: string) {
 export async function GET(request: NextRequest) {
   try {
     const env = requireIdentityProtocolEnv();
+    let rate;
+    try {
+      rate = await applyManagerRateLimit(request, "authorize");
+    } catch (error) {
+      if (error instanceof RateLimitUnavailableError) {
+        return managerRateLimitUnavailableResponse();
+      }
+      throw error;
+    }
+    if (rate.limited) return managerRateLimitedResponse(rate);
+
     const authorization = parseAuthorizedStart(request.nextUrl.searchParams, env);
     const managerSession = await auth();
     if (!managerSession?.user?.id || !managerSession.identitySessionId) {

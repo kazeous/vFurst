@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   PLATFORM_MANAGER_ENV_NAMES,
   parsePlatformManagerEnv,
+  requireManagerRateLimitRuntimeEnv,
   requireIdentityProtocolEnv
 } from "./env.js";
 
@@ -21,7 +22,14 @@ describe("platform-manager environment", () => {
       identityPrivateKeyBase64: "VFURST_MANAGER_IDENTITY_PRIVATE_KEY_BASE64",
       identityKeyId: "VFURST_MANAGER_IDENTITY_KEY_ID",
       databaseUrl: "DATABASE_URL",
-      redisUrl: "REDIS_URL"
+      redisUrl: "REDIS_URL",
+      trustedClientIpHeader: "VFURST_TRUSTED_CLIENT_IP_HEADER",
+      rateLimitPrefix: "VFURST_MANAGER_RATE_LIMIT_PREFIX",
+      credentialAccountRateLimitPerMinute: "VFURST_MANAGER_CREDENTIAL_ACCOUNT_RATE_LIMIT_PER_MINUTE",
+      credentialIpRateLimitPerMinute: "VFURST_MANAGER_CREDENTIAL_IP_RATE_LIMIT_PER_MINUTE",
+      authorizeRateLimitPerMinute: "VFURST_MANAGER_AUTHORIZE_RATE_LIMIT_PER_MINUTE",
+      exchangeRateLimitPerMinute: "VFURST_MANAGER_EXCHANGE_RATE_LIMIT_PER_MINUTE",
+      revokeRateLimitPerMinute: "VFURST_MANAGER_REVOKE_RATE_LIMIT_PER_MINUTE"
     });
   });
 
@@ -39,7 +47,14 @@ describe("platform-manager environment", () => {
       identityPrivateKey: undefined,
       identityKeyId: "manager-local",
       databaseUrl: undefined,
-      redisUrl: undefined
+      redisUrl: undefined,
+      trustedClientIpHeader: undefined,
+      rateLimitPrefix: "vfurst:manager:rate-limit",
+      credentialAccountRateLimitPerMinute: 10,
+      credentialIpRateLimitPerMinute: 50,
+      authorizeRateLimitPerMinute: 60,
+      exchangeRateLimitPerMinute: 600,
+      revokeRateLimitPerMinute: 600
     });
   });
 
@@ -61,7 +76,14 @@ describe("platform-manager environment", () => {
         ).toString("base64"),
         VFURST_MANAGER_IDENTITY_KEY_ID: "manager-2026-01",
         DATABASE_URL: "postgresql://manager:secret@db.example:5432/vfurst",
-        REDIS_URL: "rediss://cache.example:6379"
+        REDIS_URL: "rediss://cache.example:6379",
+        VFURST_TRUSTED_CLIENT_IP_HEADER: "X-Real-IP",
+        VFURST_MANAGER_RATE_LIMIT_PREFIX: "vfurst:manager:test",
+        VFURST_MANAGER_CREDENTIAL_ACCOUNT_RATE_LIMIT_PER_MINUTE: "8",
+        VFURST_MANAGER_CREDENTIAL_IP_RATE_LIMIT_PER_MINUTE: "30",
+        VFURST_MANAGER_AUTHORIZE_RATE_LIMIT_PER_MINUTE: "40",
+        VFURST_MANAGER_EXCHANGE_RATE_LIMIT_PER_MINUTE: "500",
+        VFURST_MANAGER_REVOKE_RATE_LIMIT_PER_MINUTE: "450"
       })
     ).toEqual({
       managerUrl: "https://vfurst.example",
@@ -79,7 +101,14 @@ describe("platform-manager environment", () => {
       identityPrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
       identityKeyId: "manager-2026-01",
       databaseUrl: "postgresql://manager:secret@db.example:5432/vfurst",
-      redisUrl: "rediss://cache.example:6379"
+      redisUrl: "rediss://cache.example:6379",
+      trustedClientIpHeader: "x-real-ip",
+      rateLimitPrefix: "vfurst:manager:test",
+      credentialAccountRateLimitPerMinute: 8,
+      credentialIpRateLimitPerMinute: 30,
+      authorizeRateLimitPerMinute: 40,
+      exchangeRateLimitPerMinute: 500,
+      revokeRateLimitPerMinute: 450
     });
   });
 
@@ -98,9 +127,31 @@ describe("platform-manager environment", () => {
     ],
     [{ GOOGLE_CLIENT_ID: "id" }, /must either both be set/],
     [{ VFURST_IDENTITY_SERVICE_SECRET: "too-short" }, /at least 32 bytes/],
+    [{ VFURST_TRUSTED_CLIENT_IP_HEADER: "x-client-ip" }, /supported ingress-provided/],
+    [{ VFURST_MANAGER_RATE_LIMIT_PREFIX: "invalid prefix" }, /unsupported characters/],
+    [{ VFURST_MANAGER_CREDENTIAL_ACCOUNT_RATE_LIMIT_PER_MINUTE: "0" }, /integer between/],
+    [{ VFURST_MANAGER_EXCHANGE_RATE_LIMIT_PER_MINUTE: "1.5" }, /integer between/],
     [{ NODE_ENV: "production", AUTH_SECRET: "too-short" }, /at least 32 bytes in production/]
   ])("rejects malformed supplied configuration %#", (input, expected) => {
     expect(() => parsePlatformManagerEnv(input)).toThrow(expected);
+  });
+
+  it("requires an explicitly trusted ingress IP header in production", () => {
+    expect(parsePlatformManagerEnv({ NODE_ENV: "production" }).trustedClientIpHeader).toBeUndefined();
+    expect(() =>
+      requireManagerRateLimitRuntimeEnv({
+        NODE_ENV: "production",
+        AUTH_SECRET: "manager-auth-secret-at-least-32-bytes"
+      })
+    ).toThrow(/VFURST_TRUSTED_CLIENT_IP_HEADER is required in production/);
+
+    expect(
+      requireManagerRateLimitRuntimeEnv({
+        NODE_ENV: "production",
+        AUTH_SECRET: "manager-auth-secret-at-least-32-bytes",
+        VFURST_TRUSTED_CLIENT_IP_HEADER: "cf-connecting-ip"
+      }).trustedClientIpHeader
+    ).toBe("cf-connecting-ip");
   });
 
   it("requires complete, sufficiently strong identity protocol secrets at request time", () => {

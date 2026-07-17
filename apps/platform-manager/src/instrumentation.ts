@@ -1,10 +1,9 @@
-import { getPlatformManagerEnv } from "@/lib/env";
 import { reportPlatformManagerRequestError } from "@/lib/observability";
 
 export async function register() {
-  // Missing production infrastructure values are valid while this remains a
-  // non-cutover shell; malformed values that are present still fail clearly.
-  getPlatformManagerEnv();
+  // Request-owned server modules validate their own configuration. Keeping
+  // instrumentation dependency-free prevents Next's edge/client fallback
+  // compiler from pulling node:crypto into an incompatible bundle.
 }
 
 export const onRequestError = reportPlatformManagerRequestError;

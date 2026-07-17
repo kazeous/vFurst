@@ -10,6 +10,12 @@ import {
 } from "@/lib/identity-protocol";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  RateLimitUnavailableError,
+  applyManagerRateLimit,
+  managerRateLimitUnavailableResponse,
+  managerRateLimitedResponse
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +33,17 @@ export async function POST(request: NextRequest) {
       const error = unauthorizedServiceError();
       return noStoreJson(error.body, error.status);
     }
+
+    let rate;
+    try {
+      rate = await applyManagerRateLimit(request, "revoke", [env.authClientId]);
+    } catch (error) {
+      if (error instanceof RateLimitUnavailableError) {
+        return managerRateLimitUnavailableResponse();
+      }
+      throw error;
+    }
+    if (rate.limited) return managerRateLimitedResponse(rate);
 
     const body = parseIdentitySessionRevocation(await readBoundedJson(request));
     const revoked = await revokeIdentitySession(body.identitySessionId);

@@ -35,6 +35,10 @@
       "types": "./dist/public-account.d.ts",
       "import": "./dist/public-account.js"
     },
+    "./rate-limit": {
+      "types": "./dist/rate-limit.d.ts",
+      "import": "./dist/rate-limit.js"
+    },
     "./invitations": {
       "types": "./dist/invitations.d.ts",
       "import": "./dist/invitations.js"

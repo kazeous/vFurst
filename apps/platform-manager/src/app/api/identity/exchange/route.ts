@@ -10,6 +10,12 @@ import {
   readBoundedJson,
   unauthorizedServiceError
 } from "@/lib/identity-protocol";
+import {
+  RateLimitUnavailableError,
+  applyManagerRateLimit,
+  managerRateLimitUnavailableResponse,
+  managerRateLimitedResponse
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +33,17 @@ export async function POST(request: NextRequest) {
       const error = unauthorizedServiceError();
       return noStoreJson(error.body, error.status);
     }
+
+    let rate;
+    try {
+      rate = await applyManagerRateLimit(request, "exchange", [env.authClientId]);
+    } catch (error) {
+      if (error instanceof RateLimitUnavailableError) {
+        return managerRateLimitUnavailableResponse();
+      }
+      throw error;
+    }
+    if (rate.limited) return managerRateLimitedResponse(rate);
 
     const body = authorizationCodeExchangeRequestSchema.safeParse(await readBoundedJson(request));
     if (!body.success) {
