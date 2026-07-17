@@ -49,12 +49,14 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
           <p>
             {workspace.isEmpty
               ? "Your central account is active, but it has no organizer membership."
-              : `${workspace.organizations.length} organization${workspace.organizations.length === 1 ? "" : "s"} · ${workspace.eventCount} event${workspace.eventCount === 1 ? "" : "s"}`}
+              : `${workspace.organizations.length} organization${workspace.organizations.length === 1 ? "" : "s"} / ${workspace.eventCount} event${workspace.eventCount === 1 ? "" : "s"}`}
           </p>
         </div>
         <nav aria-label="Account">
           <a href="/dashboard" aria-current="page">Dashboard</a>
-          <a href="/auth/logout">Sign out</a>
+          <form action="/auth/logout" method="post">
+            <button type="submit">Sign out</button>
+          </form>
         </nav>
       </header>
 
@@ -75,7 +77,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
                 <div className="organizer-membership-heading">
                   <div>
                     <h3>{organization.name}</h3>
-                    <p>{organization.role.toLowerCase()} · {organization.status.toLowerCase()}</p>
+                    <p>{organization.role.toLowerCase()} / {organization.status.toLowerCase()}</p>
                   </div>
                   <span>{organization.events.length}</span>
                 </div>
@@ -87,7 +89,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
                       <li key={event.id}>
                         <div>
                           <strong>{event.name}</strong>
-                          <span>{formatDate(event.startDate)} – {formatDate(event.endDate)}</span>
+                          <span>{formatDate(event.startDate)} - {formatDate(event.endDate)}</span>
                         </div>
                         <small>{event.status.toLowerCase()}</small>
                       </li>
