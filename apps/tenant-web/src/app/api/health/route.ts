@@ -15,8 +15,9 @@ export function GET() {
       {
         status: "ok",
         runtime: "tenant-web",
-        mode: "shell-only",
-        tenantRouting: "not-enabled",
+        mode: "incremental-cutover",
+        tenantRouting: "server-boundary-ready",
+        organizerDashboard: "read-only-ready",
         database: "configured-not-probed",
         redis: "configured-not-probed"
       },

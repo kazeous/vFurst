@@ -1,6 +1,6 @@
 # Plan: split the web runtime into platform-manager and tenant-web
 
-**Status:** approved architecture plan; no application-code migration has started.
+**Status:** implementation in progress. Shared seams, independent application runtimes, central identity handoff, durable control-plane events, and the first read-only tenant dashboard boundary are implemented and verified. Production traffic cutover and the remaining route families have not started.
 
 ## Decision
 
@@ -96,7 +96,7 @@ Create a dependency-light package (Zod and TypeScript only) containing:
 - versioned public API DTOs and webhook envelope schemas;
 - internal service-auth request/response schemas;
 - platform control commands such as provision, lifecycle transition, domain activation, and payment configuration;
-- durable control-plane event names/payloads, for example `tenant.lifecycle-changed`, `tenant.domain-activated`, and `tenant.payment-policy-changed`;
+- durable control-plane event names/payloads, for example `tenant.lifecycle-changed`, `tenant.domain-activated`, and `platform.payment-policy-changed`;
 - redirect/code-exchange claims and error codes shared by both apps.
 
 No app may import another app's action, route handler, or `@/` alias. Cross-app calls use contracts, authenticated service identity, timeouts, idempotency keys for commands, and audit IDs.
