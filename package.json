@@ -8,12 +8,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=@vfurst/web --filter=@vfurst/worker",
+    "dev:split": "node scripts/split/run-shells.mjs",
     "build": "turbo run build",
+    "build:split": "turbo run build --filter=@vfurst/platform-manager --filter=@vfurst/tenant-web",
     "type-check": "turbo run type-check",
     "lint": "turbo run lint",
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
+    "test:split-topology": "node --test scripts/split/topology.test.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:load": "node scripts/run-load-test.mjs",
     "test:load:launch": "node scripts/run-launch-load-proof.mjs",

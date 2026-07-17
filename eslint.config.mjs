@@ -35,7 +35,11 @@ export default [
     }
   },
   {
-    files: ["apps/web/**/*.{ts,tsx}"],
+    files: [
+      "apps/web/**/*.{ts,tsx}",
+      "apps/platform-manager/**/*.{ts,tsx}",
+      "apps/tenant-web/**/*.{ts,tsx}"
+    ],
     plugins: {
       "@next/next": nextPlugin
     },
