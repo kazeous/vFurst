@@ -99,6 +99,13 @@ enum EmailDeliveryAttemptStatus {
   FAILED
 }
 
+enum ControlPlaneOutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
 enum EventStatus {
   DRAFT
   PUBLISHED
@@ -222,6 +229,7 @@ model User {
   registrationTransferRequestsCreated  RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
   registrationTransferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
   emailDeliveriesReplayed              EmailDelivery[]               @relation("EmailDeliveryReplayedBy")
+  authorizationCodes                   AuthorizationCode[]
 
   @@map("users")
 }
@@ -248,6 +256,7 @@ model Organization {
   payoutBankCode               String?
   payoutAccountNumber          String?
   payoutAccountHolder          String?
+  controlPlaneVersion          Int                           @default(0)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
   addOnDefinitions             AddOnDefinition[]
@@ -283,6 +292,7 @@ model Organization {
   webhookEndpoints             WebhookEndpoint[]
   organizerLedgerEntries       OrganizerLedgerEntry[]
   organizerPayouts             OrganizerPayout[]
+  controlPlaneOutboxEvents     ControlPlaneOutboxEvent[]
   statusUpdatedBy              User?                         @relation("OrganizationStatusUpdatedBy", fields: [statusUpdatedById], references: [id], onDelete: SetNull)
   customDomainVerifiedBy       User?                         @relation("OrganizationCustomDomainVerifiedBy", fields: [customDomainVerifiedById], references: [id], onDelete: SetNull)
   customDomainActivatedBy      User?                         @relation("OrganizationCustomDomainActivatedBy", fields: [customDomainActivatedById], references: [id], onDelete: SetNull)
@@ -319,16 +329,90 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(uuid()) @db.Uuid
-  sessionToken String   @unique
-  userId       String   @db.Uuid
-  expires      DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(uuid()) @db.Uuid
+  sessionToken       String              @unique
+  userId             String              @db.Uuid
+  authVersion        Int                 @default(0)
+  expires            DateTime
+  revokedAt          DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authorizationCodes AuthorizationCode[]
 
   @@index([userId])
+  @@index([userId, revokedAt, expires])
   @@map("sessions")
+}
+
+model AuthorizationCode {
+  id                String    @id @default(uuid()) @db.Uuid
+  codeHash          String    @unique @db.Char(64)
+  userId            String    @db.Uuid
+  identitySessionId String    @db.Uuid
+  clientId          String
+  audience          String
+  redirectUri       String    @db.Text
+  codeChallenge     String    @db.VarChar(128)
+  authVersion       Int
+  issuedAt          DateTime
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identitySession   Session   @relation(fields: [identitySessionId], references: [id], onDelete: Cascade)
+
+  @@index([identitySessionId])
+  @@index([userId])
+  @@index([clientId, audience, expiresAt])
+  @@index([expiresAt])
+  @@map("authorization_codes")
+}
+
+model ControlPlaneOutboxEvent {
+  id               String                     @id @default(uuid()) @db.Uuid
+  idempotencyKey   String                     @unique @db.Uuid
+  organizationId   String?                    @db.Uuid
+  aggregateType    String
+  aggregateId      String
+  eventType        String
+  aggregateVersion Int
+  correlationId    String                     @db.Uuid
+  actorUserId      String?                    @db.Uuid
+  occurredAt       DateTime                   @default(now())
+  payload          Json
+  status           ControlPlaneOutboxStatus   @default(PENDING)
+  attemptCount     Int                        @default(0)
+  maxAttempts      Int                        @default(12)
+  availableAt      DateTime                   @default(now())
+  claimedAt        DateTime?
+  lastAttemptAt    DateTime?
+  publishedAt      DateTime?
+  lastError        String?                    @db.Text
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  organization     Organization?              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  receipts         ControlPlaneEventReceipt[]
+
+  @@unique([aggregateType, aggregateId, aggregateVersion])
+  @@index([status, availableAt, createdAt])
+  @@index([organizationId, occurredAt])
+  @@index([correlationId])
+  @@index([actorUserId])
+  @@map("control_plane_outbox_events")
+}
+
+model ControlPlaneEventReceipt {
+  id          String                  @id @default(uuid()) @db.Uuid
+  eventId     String                  @db.Uuid
+  consumer    String
+  processedAt DateTime                @default(now())
+  createdAt   DateTime                @default(now())
+  event       ControlPlaneOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, consumer])
+  @@index([consumer, processedAt])
+  @@map("control_plane_event_receipts")
 }
 
 model VerificationToken {
