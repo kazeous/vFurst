@@ -6,7 +6,7 @@ import {
   hashPassword,
   normalizeIdentityEmail
 } from "@vfurst/auth/core";
-import { prisma } from "@vfurst/db";
+import { Prisma, prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { safeReturnTo } from "@/lib/return-to";
@@ -41,7 +41,20 @@ const resetPasswordSchema = z
 const passwordResetPrefix = "password-reset:";
 const passwordResetTtlMs = 60 * 60 * 1000;
 
-export async function registerUser(formData: FormData) {
+export type RegisterUserState = {
+  error?: string;
+  reason?: "invalid_input" | "account_exists";
+};
+
+const accountExistsState: RegisterUserState = {
+  error: "An account already exists for this email address.",
+  reason: "account_exists"
+};
+
+export async function registerUser(
+  _previousState: RegisterUserState,
+  formData: FormData
+): Promise<RegisterUserState> {
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -50,7 +63,10 @@ export async function registerUser(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration details.");
+    return {
+      error: parsed.error.issues[0]?.message ?? "Invalid registration details.",
+      reason: "invalid_input"
+    };
   }
 
   const email = normalizeIdentityEmail(parsed.data.email);
@@ -64,18 +80,26 @@ export async function registerUser(formData: FormData) {
   });
 
   if (existingUser) {
-    throw new Error("An account already exists for this email address.");
+    return accountExistsState;
   }
 
   const passwordHash = await hashPassword(parsed.data.password);
 
-  await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email,
-      passwordHash
+  try {
+    await prisma.user.create({
+      data: {
+        name: parsed.data.name,
+        email,
+        passwordHash
+      }
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return accountExistsState;
     }
-  });
+
+    throw error;
+  }
 
   const search = new URLSearchParams({
     registered: "1",

@@ -31,6 +31,13 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
 
+### 2026-07-17 - Fixed duplicate public-account registration crash
+- Reproduced the production failure path from the supplied screenshot: `registerUser` threw an expected "account already exists" error from a Server Action, so Next.js converted the registration POST into an opaque production RSC error and the route fell into the application error boundary.
+- Changed registration validation and duplicate-email outcomes into structured form state. The boundary now handles both the normal existing-user lookup and a concurrent Prisma `P2002` unique-email race without returning 500; unexpected database failures still propagate for monitoring.
+- Updated the signup form to use `useActionState`, retain entered values, disable repeat submission while pending, and render an accessible error alert with direct login and password-reset links that preserve the safe return path.
+- Added four unit regressions for an existing account, the concurrent unique race, validation, and unexpected database failures, plus a browser regression proving the duplicate submission remains on `/register` with the recovery actions visible.
+- Verified all web unit tests (133/133), web type-check, web lint, production build, focused development E2E (1/1), and the same focused E2E against the production build (1/1). The pre-existing BullMQ dynamic-dependency build warning remains. No deployment was performed in this session.
+
 ### 2026-07-17 - Began two-application runtime implementation
 - Created independently buildable `apps/platform-manager` and `apps/tenant-web` runtimes in the existing Turborepo, plus a host-preserving local edge topology. Central, console, tenant-subdomain, and custom-domain candidates are routed to explicit owners; forged trusted-IP headers and unknown hosts are rejected.
 - Added dependency-light `@vfurst/auth`, `@vfurst/contracts`, and `@vfurst/tenant-context` packages. The manager is now a real identity issuer with rate-limited credentials auth, short-lived single-use authorization codes, PKCE, exact client/audience/redirect binding, Ed25519 assertions, and central session revocation. Tenant-web creates a separate host-only session and rechecks the central database session before protected work.
