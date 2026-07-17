@@ -17,6 +17,7 @@
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
     "test:split-topology": "node --test scripts/split/topology.test.mjs",
+    "test:e2e:split": "node scripts/run-split-e2e.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:load": "node scripts/run-load-test.mjs",
     "test:load:launch": "node scripts/run-launch-load-proof.mjs",
