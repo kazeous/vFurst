@@ -1,8 +1,7 @@
-const FALLBACK_ROOT_DOMAIN = "vfurst.reyuugames.com";
+import { classifyTenantHost, normalizeHostname } from "@vfurst/tenant-context";
+import { getConfiguredRootDomain, getTenantHostPolicy } from "./tenant-host-policy";
 
-export function normalizeHostname(hostname: string) {
-  return hostname.split(":")[0]?.trim().toLowerCase() ?? "";
-}
+export { normalizeHostname } from "@vfurst/tenant-context";
 
 function hostnameFromUrlOrHost(value: string | undefined) {
   const trimmed = value?.trim();
@@ -15,12 +14,12 @@ function hostnameFromUrlOrHost(value: string | undefined) {
     const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
     return normalizeHostname(url.hostname);
   } catch {
-    return normalizeHostname(trimmed.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
+    return "";
   }
 }
 
 export function getRootDomain() {
-  return hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_ROOT_DOMAIN) || FALLBACK_ROOT_DOMAIN;
+  return getConfiguredRootDomain();
 }
 
 export function getPlatformHostnames() {
@@ -39,7 +38,9 @@ export function getPlatformHostnames() {
 }
 
 export function isPlatformHostname(hostname: string) {
-  return getPlatformHostnames().has(normalizeHostname(hostname));
+  const normalized = normalizeHostname(hostname);
+  if (getPlatformHostnames().has(normalized)) return true;
+  return classifyTenantHost(normalized, getTenantHostPolicy()).kind === "platform";
 }
 
 export function isPlatformDomain(hostname: string) {

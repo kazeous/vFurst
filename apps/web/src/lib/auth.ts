@@ -1,6 +1,6 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { normalizeIdentityEmail, verifyPassword } from "@vfurst/auth/core";
 import { prisma, type CurrencyCode, type OrganizationStatus } from "@vfurst/db";
-import bcrypt from "bcryptjs";
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -57,7 +57,7 @@ const nextAuth = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: {
-            email: parsed.data.email.toLowerCase()
+            email: normalizeIdentityEmail(parsed.data.email)
           }
         });
 
@@ -65,7 +65,7 @@ const nextAuth = NextAuth({
           return null;
         }
 
-        const isValid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+        const isValid = await verifyPassword(parsed.data.password, user.passwordHash);
 
         if (!isValid) {
           return null;

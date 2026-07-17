@@ -1,57 +1,22 @@
-import { createHash, randomBytes } from "node:crypto";
+import {
+  ORGANIZATION_INVITATION_TTL_MS,
+  OrganizationInvitationError,
+  assertOrganizationInvitationCanBeAccepted,
+  createOrganizationInvitationCredential,
+  hashOrganizationInvitationToken,
+  normalizeInvitationEmail
+} from "@vfurst/auth/invitations";
 import { Prisma, prisma, type OrgRole } from "@vfurst/db";
 
-export const ORGANIZATION_INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const INVITATION_TOKEN_BYTES = 32;
-
-export type OrganizationInvitationErrorCode =
-  | "ALREADY_ACCEPTED"
-  | "ALREADY_MEMBER"
-  | "EMAIL_MISMATCH"
-  | "EXPIRED"
-  | "INVALID"
-  | "REVOKED"
-  | "UNAVAILABLE";
-
-export class OrganizationInvitationError extends Error {
-  constructor(
-    public readonly code: OrganizationInvitationErrorCode,
-    message: string
-  ) {
-    super(message);
-    this.name = "OrganizationInvitationError";
-  }
-}
-
-export function normalizeInvitationEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-export function hashOrganizationInvitationToken(token: string) {
-  return createHash("sha256").update(token, "utf8").digest("hex");
-}
-
-export function createOrganizationInvitationCredential() {
-  const token = randomBytes(INVITATION_TOKEN_BYTES).toString("base64url");
-
-  return {
-    token,
-    tokenHash: hashOrganizationInvitationToken(token)
-  };
-}
-
-type InvitationStateInput = {
-  acceptedAt: Date | null;
-  expiresAt: Date;
-  revokedAt: Date | null;
-};
-
-export function getOrganizationInvitationState(invitation: InvitationStateInput, now = new Date()) {
-  if (invitation.acceptedAt) return "ACCEPTED" as const;
-  if (invitation.revokedAt) return "REVOKED" as const;
-  if (invitation.expiresAt <= now) return "EXPIRED" as const;
-  return "PENDING" as const;
-}
+export {
+  ORGANIZATION_INVITATION_TTL_MS,
+  OrganizationInvitationError,
+  createOrganizationInvitationCredential,
+  getOrganizationInvitationState,
+  hashOrganizationInvitationToken,
+  normalizeInvitationEmail,
+  type OrganizationInvitationErrorCode
+} from "@vfurst/auth/invitations";
 
 type InvitationTransaction = Pick<Prisma.TransactionClient, "orgInvitation" | "orgMember">;
 
@@ -192,22 +157,17 @@ export async function acceptOrganizationInvitation(input: {
         throw new OrganizationInvitationError("INVALID", "This invitation is invalid.");
       }
 
-      const state = getOrganizationInvitationState(invitation, now);
-      if (state === "ACCEPTED") {
-        throw new OrganizationInvitationError("ALREADY_ACCEPTED", "This invitation has already been accepted.");
-      }
-      if (state === "REVOKED") {
-        throw new OrganizationInvitationError("REVOKED", "This invitation has been revoked.");
-      }
-      if (state === "EXPIRED") {
-        throw new OrganizationInvitationError("EXPIRED", "This invitation has expired.");
-      }
-      if (normalizeInvitationEmail(invitation.email) !== userEmail) {
-        throw new OrganizationInvitationError("EMAIL_MISMATCH", "Sign in with the email address that received this invitation.");
-      }
-      if (invitation.org.status === "SUSPENDED" || invitation.org.status === "RETIRED") {
-        throw new OrganizationInvitationError("UNAVAILABLE", "This organization is not accepting invitations.");
-      }
+      assertOrganizationInvitationCanBeAccepted(
+        {
+          acceptedAt: invitation.acceptedAt,
+          revokedAt: invitation.revokedAt,
+          expiresAt: invitation.expiresAt,
+          email: invitation.email,
+          organizationStatus: invitation.org.status
+        },
+        userEmail,
+        now
+      );
 
       const claimed = await tx.orgInvitation.updateMany({
         where: {

@@ -1,13 +1,17 @@
 "use server";
 
+import {
+  createHashedOpaqueToken,
+  hashOpaqueToken,
+  hashPassword,
+  normalizeIdentityEmail
+} from "@vfurst/auth/core";
 import { prisma } from "@vfurst/db";
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { safeReturnTo } from "@/lib/return-to";
 import { sendPlatformEmail } from "@/lib/email";
 import { assertAuthActionRateLimit } from "@/lib/rate-limit";
-import { createHash, randomBytes } from "node:crypto";
 import { getCentralAppUrl } from "@/lib/central-url";
 
 const registerSchema = z.object({
@@ -37,10 +41,6 @@ const resetPasswordSchema = z
 const passwordResetPrefix = "password-reset:";
 const passwordResetTtlMs = 60 * 60 * 1000;
 
-function hashResetToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 export async function registerUser(formData: FormData) {
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
@@ -53,7 +53,7 @@ export async function registerUser(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration details.");
   }
 
-  const email = parsed.data.email.toLowerCase();
+  const email = normalizeIdentityEmail(parsed.data.email);
   const existingUser = await prisma.user.findUnique({
     where: {
       email
@@ -67,7 +67,7 @@ export async function registerUser(formData: FormData) {
     throw new Error("An account already exists for this email address.");
   }
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  const passwordHash = await hashPassword(parsed.data.password);
 
   await prisma.user.create({
     data: {
@@ -91,14 +91,13 @@ export async function requestPasswordReset(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid email address.");
   }
 
-  const email = parsed.data.email.toLowerCase();
+  const email = normalizeIdentityEmail(parsed.data.email);
   await assertAuthActionRateLimit("auth:password-reset", email);
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true } });
 
   if (user) {
     const identifier = `${passwordResetPrefix}${user.id}`;
-    const rawToken = randomBytes(32).toString("hex");
-    const token = hashResetToken(rawToken);
+    const { token: rawToken, tokenHash: token } = createHashedOpaqueToken();
 
     await prisma.$transaction([
       prisma.verificationToken.deleteMany({ where: { identifier } }),
@@ -138,8 +137,8 @@ export async function resetPassword(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid password reset request.");
   }
 
-  const tokenHash = hashResetToken(parsed.data.token);
-  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  const tokenHash = hashOpaqueToken(parsed.data.token);
+  const passwordHash = await hashPassword(parsed.data.password);
 
   const reset = await prisma.$transaction(async (transaction) => {
     const verification = await transaction.verificationToken.findFirst({

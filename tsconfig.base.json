@@ -22,6 +22,12 @@
       "@/*": [
         "apps/web/src/*"
       ],
+      "@vfurst/auth": [
+        "packages/auth/src/index.ts"
+      ],
+      "@vfurst/auth/*": [
+        "packages/auth/src/*"
+      ],
       "@vfurst/db": [
         "packages/db/src/index.ts"
       ],
@@ -30,6 +36,12 @@
       ],
       "@vfurst/email": [
         "packages/email/src/index.ts"
+      ],
+      "@vfurst/tenant-context": [
+        "packages/tenant-context/src/index.ts"
+      ],
+      "@vfurst/tenant-context/prisma": [
+        "packages/tenant-context/src/prisma.ts"
       ]
     }
   }

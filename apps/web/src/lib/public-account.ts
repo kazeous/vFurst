@@ -1,5 +1,10 @@
 import { auth } from "@/lib/auth";
 import { getCentralLoginUrl } from "@/lib/central-url";
+import {
+  assertPublicAccountEmail as assertSharedPublicAccountEmail,
+  normalizePublicAccountName,
+  shouldUpdatePublicAccountName
+} from "@vfurst/auth/public-account";
 import { prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
 
@@ -30,15 +35,13 @@ export async function requirePublicAccount(returnTo = "/account"): Promise<Publi
 }
 
 export function assertPublicAccountEmail(user: Pick<PublicAccountUser, "email">, submittedEmail: string) {
-  if (user.email.trim().toLowerCase() !== submittedEmail.trim().toLowerCase()) {
-    throw new Error("Use the email address from your signed-in vFurst account.");
-  }
+  assertSharedPublicAccountEmail(user, submittedEmail);
 }
 
 export async function syncPublicAccountName(user: PublicAccountUser, submittedName: string) {
-  const name = submittedName.trim();
+  const name = normalizePublicAccountName(submittedName);
 
-  if (!name || name === user.name) {
+  if (!shouldUpdatePublicAccountName(user.name, name)) {
     return user;
   }
 

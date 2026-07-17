@@ -1,39 +1,17 @@
 import { prisma, type Organization } from "@vfurst/db";
-import { getRootDomain, isPlatformHostname, normalizeHostname } from "./platform-hosts";
+import { buildTenantUrl, resolveActiveTenantContext } from "@vfurst/tenant-context";
+import { prismaTenantDirectory } from "@vfurst/tenant-context/prisma";
+import { getTenantHostPolicy } from "./tenant-host-policy";
 
 export async function resolveOrganization(hostname: string) {
-  const normalized = normalizeHostname(hostname);
-  const rootDomain = getRootDomain();
-
-  if (!normalized || isPlatformHostname(normalized)) {
+  try {
+    const context = await resolveActiveTenantContext(hostname, getTenantHostPolicy(), prismaTenantDirectory);
+    return prisma.organization.findUnique({ where: { id: context.organizationId } });
+  } catch {
     return null;
   }
-
-  if (normalized.endsWith(`.${rootDomain}`)) {
-    const subdomain = normalized.replace(`.${rootDomain}`, "");
-
-    return prisma.organization.findFirst({
-      where: {
-        subdomain,
-        status: "ACTIVE"
-      }
-    });
-  }
-
-  return prisma.organization.findFirst({
-    where: {
-      customDomain: normalized,
-      status: "ACTIVE"
-    }
-  });
 }
 
 export function getConventionUrl(org: Pick<Organization, "subdomain" | "customDomain">) {
-  const rootDomain = getRootDomain();
-
-  if (org.customDomain) {
-    return `https://${org.customDomain}`;
-  }
-
-  return `https://${org.subdomain}.${rootDomain}`;
+  return buildTenantUrl(org, getTenantHostPolicy());
 }
