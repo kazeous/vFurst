@@ -1084,30 +1084,21 @@ export async function requireVendorApplicationAccess(
 }
 
 export async function requireEventPageAccess(eventId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
-  const session = await requireDashboardSession();
-  const membership = session.user.orgMemberships.find(
-    (candidate) =>
-      allowedRoles.includes(candidate.role as OrgRole) && candidate.events.some((event) => event.id === eventId)
-  );
+  const userId = await requireDashboardUser();
+  const event = await getEventTenant(eventId);
 
-  if (!membership) {
+  if (!event) {
     notFound();
   }
 
-  const sessionEvent = membership.events.find((event) => event.id === eventId);
+  const membership = await getOrgMembership(userId, event.orgId);
 
-  if (!sessionEvent) {
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
     notFound();
   }
-
-  const event = {
-    id: sessionEvent.id,
-    orgId: membership.orgId,
-    currency: sessionEvent.currency
-  };
 
   return {
-    userId: session.user.id,
+    userId,
     membership,
     event
   };

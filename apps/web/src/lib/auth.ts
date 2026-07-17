@@ -1,11 +1,17 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { normalizeIdentityEmail, verifyPassword } from "@vfurst/auth/core";
-import { prisma, type CurrencyCode, type OrganizationStatus } from "@vfurst/db";
+import { prisma } from "@vfurst/db";
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { cache } from "react";
 import { z } from "zod";
+import {
+  bindIdentitySessionToJwt,
+  IDENTITY_SESSION_MAX_AGE_SECONDS,
+  revokeIdentitySession,
+  type IdentityJwtClaims
+} from "@/lib/identity-session";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -14,23 +20,9 @@ const credentialsSchema = z.object({
 
 declare module "next-auth" {
   interface Session {
+    identitySessionId: string;
     user: {
       id: string;
-      orgMemberships: Array<{
-        orgId: string;
-        orgSlug: string;
-        orgName: string;
-        orgLogo: string | null;
-        orgStatus: OrganizationStatus;
-        role: string;
-        events: Array<{
-          id: string;
-          name: string;
-          status: string;
-          startDate: string;
-          currency: CurrencyCode;
-        }>;
-      }>;
       platformRole: "USER" | "PLATFORM_ADMIN";
     } & DefaultSession["user"];
   }
@@ -40,7 +32,8 @@ const nextAuth = NextAuth({
   adapter: PrismaAdapter(prisma),
   secret: process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "development" ? "vfurst-local-development-secret" : undefined),
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: IDENTITY_SESSION_MAX_AGE_SECONDS
   },
   providers: [
     Credentials({
@@ -90,81 +83,32 @@ const nextAuth = NextAuth({
   },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.sub = user.id;
-        const account = await prisma.user.findUnique({ where: { id: user.id }, select: { authVersion: true } });
-        token.authVersion = account?.authVersion ?? 0;
-      }
-
-      return token;
+      return bindIdentitySessionToJwt(token, user?.id);
     },
     async session({ session, token }) {
-      if (!token.sub) {
-        return session;
-      }
-
-      const user = await prisma.user.findUnique({
-        where: {
-          id: token.sub
-        },
-        select: {
-          authVersion: true,
-          platformRole: true,
-          orgMemberships: {
-            orderBy: {
-              createdAt: "asc"
-            },
-            select: {
-              role: true,
-              org: {
-                select: {
-                  id: true,
-                  slug: true,
-                  name: true,
-                  logo: true,
-                  status: true,
-                  events: {
-                    orderBy: {
-                      startDate: "desc"
-                    },
-                    select: {
-                      id: true,
-                      name: true,
-                      status: true,
-                      startDate: true,
-                      currency: true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
-
-      if (!user || token.authVersion !== user.authVersion) {
-        // Auth.js JWT sessions are otherwise valid until cookie expiry. Returning
-        // a null session makes every token issued before a password reset
-        // unauthorized without adding another database read to each request.
+      const identityToken = token as typeof token & IdentityJwtClaims;
+      if (
+        !identityToken.sub ||
+        !identityToken.identitySessionId ||
+        identityToken.identitySessionValid !== true ||
+        !identityToken.platformRole
+      ) {
         return null as never;
       }
 
-      session.user.id = token.sub;
-      session.user.platformRole = user?.platformRole ?? "USER";
-      session.user.orgMemberships = (user?.orgMemberships ?? []).map((membership) => ({
-        orgId: membership.org.id,
-        orgSlug: membership.org.slug,
-        orgName: membership.org.name,
-        orgLogo: membership.org.logo,
-        orgStatus: membership.org.status,
-        role: membership.role,
-        events: membership.org.events.map((event) => ({
-          ...event,
-          startDate: event.startDate.toISOString()
-        }))
-      }));
+      session.user.id = identityToken.sub;
+      session.user.platformRole = identityToken.platformRole;
+      session.identitySessionId = identityToken.identitySessionId;
 
       return session;
+    }
+  },
+  events: {
+    async signOut(message) {
+      const identityToken = "token" in message ? (message.token as IdentityJwtClaims | null) : null;
+      if (identityToken?.identitySessionId) {
+        await revokeIdentitySession(identityToken.identitySessionId);
+      }
     }
   }
 });

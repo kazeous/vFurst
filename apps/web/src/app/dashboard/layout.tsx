@@ -1,5 +1,6 @@
 import { DashboardAppShell } from "@/components/dashboard/app-shell";
 import { auth } from "@/lib/auth";
+import { prisma } from "@vfurst/db";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -10,12 +11,34 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
     redirect("/login");
   }
 
-  const membershipCount = session.user.orgMemberships.length;
-  const memberships = session.user.orgMemberships
-    .filter((membership) => ["OWNER", "ADMIN"].includes(membership.role))
-    .sort((left, right) => left.orgName.localeCompare(right.orgName));
+  const allMemberships = await prisma.orgMember.findMany({
+    where: { userId: session.user.id },
+    orderBy: { org: { name: "asc" } },
+    select: {
+      role: true,
+      org: {
+        select: {
+          id: true,
+          name: true,
+          logo: true,
+          status: true,
+          events: {
+            orderBy: { startDate: "desc" },
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              startDate: true
+            }
+          }
+        }
+      }
+    }
+  });
 
-  if (membershipCount === 0) {
+  const memberships = allMemberships.filter((membership) => ["OWNER", "ADMIN"].includes(membership.role));
+
+  if (allMemberships.length === 0) {
     if (session.user.platformRole === "PLATFORM_ADMIN") {
       redirect("/platform");
     }
@@ -23,19 +46,19 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   }
 
   const organizations = memberships.map((membership) => ({
-    id: membership.orgId,
-    name: membership.orgName,
-    logo: membership.orgLogo,
-    status: membership.orgStatus
+    id: membership.org.id,
+    name: membership.org.name,
+    logo: membership.org.logo,
+    status: membership.org.status
   }));
   const events = memberships.flatMap((membership) =>
-    membership.events.map((event) => ({
+    membership.org.events.map((event) => ({
       id: event.id,
-      orgId: membership.orgId,
+      orgId: membership.org.id,
       name: event.name,
-      orgName: membership.orgName,
+      orgName: membership.org.name,
       status: event.status,
-      startDate: event.startDate
+      startDate: event.startDate.toISOString()
     }))
   );
 
