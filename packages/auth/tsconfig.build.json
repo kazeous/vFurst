@@ -8,6 +8,7 @@
     "moduleResolution": "NodeNext",
     "noEmit": false,
     "outDir": "dist",
+    "paths": {},
     "rootDir": "src",
     "sourceMap": true,
     "target": "ES2022",

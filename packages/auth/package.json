@@ -15,6 +15,18 @@
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js"
     },
+    "./authorization-code": {
+      "types": "./dist/authorization-code.d.ts",
+      "import": "./dist/authorization-code.js"
+    },
+    "./authorization-transaction": {
+      "types": "./dist/authorization-transaction.d.ts",
+      "import": "./dist/authorization-transaction.js"
+    },
+    "./identity-assertion": {
+      "types": "./dist/identity-assertion.d.ts",
+      "import": "./dist/identity-assertion.js"
+    },
     "./public-account": {
       "types": "./dist/public-account.d.ts",
       "import": "./dist/public-account.js"
@@ -32,6 +44,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@vfurst/contracts": "0.0.0",
     "bcryptjs": "^3.0.3"
   }
 }
