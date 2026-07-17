@@ -37,6 +37,12 @@ export function middleware(request: NextRequest) {
   if (decision.kind === "reject-misdirected") {
     return jsonError(421, "misdirected_request", "This host does not belong to the tenant web runtime.");
   }
+  if (
+    (request.nextUrl.pathname === "/dashboard" || request.nextUrl.pathname.startsWith("/dashboard/")) &&
+    (decision.kind !== "allow-shell" || decision.surface !== "console")
+  ) {
+    return jsonError(421, "misdirected_request", "Organizer routes are available only on the console host.");
+  }
   const requestHeaders = scrubVfurstInternalHeaders(request.headers);
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
