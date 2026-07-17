@@ -12,6 +12,13 @@ const environment = parseTenantWebEnvironment({
   VFURST_MANAGER_URL: "https://vfurst.example.com",
   VFURST_CONSOLE_URL: "https://console.vfurst.example.com",
   VFURST_API_URL: "https://api.vfurst.example.com",
+  VFURST_AUTH_CLIENT_ID: "tenant-web",
+  VFURST_AUTH_TRANSACTION_KEY_BASE64URL: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  VFURST_TENANT_SESSION_SECRET_BASE64URL: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  VFURST_MANAGER_IDENTITY_PUBLIC_KEYS_JSON: JSON.stringify({
+    "manager-2026-01": "unused-public-key-material-with-enough-characters"
+  }),
+  VFURST_IDENTITY_SERVICE_SECRET: "service-secret-with-at-least-32-characters",
   DATABASE_URL: "postgresql://user:password@database.internal/vfurst",
   REDIS_URL: "redis://redis.internal:6379"
 });

@@ -10,6 +10,13 @@ const validEnvironment: Readonly<Record<string, string | undefined>> = {
   VFURST_MANAGER_URL: "https://vfurst.example.com/",
   VFURST_CONSOLE_URL: "https://console.vfurst.example.com",
   VFURST_API_URL: "https://api.vfurst.example.com",
+  VFURST_AUTH_CLIENT_ID: "tenant-web",
+  VFURST_AUTH_TRANSACTION_KEY_BASE64URL: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  VFURST_TENANT_SESSION_SECRET_BASE64URL: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  VFURST_MANAGER_IDENTITY_PUBLIC_KEYS_JSON: JSON.stringify({
+    "manager-2026-01": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA000000000000000000000000000000000000000=\n-----END PUBLIC KEY-----"
+  }),
+  VFURST_IDENTITY_SERVICE_SECRET: "service-secret-with-at-least-32-characters",
   DATABASE_URL: "postgresql://user:password@database.internal:5432/vfurst?schema=public",
   REDIS_URL: "rediss://:password@redis.internal:6380/0"
 };
@@ -24,6 +31,13 @@ describe("parseTenantWebEnvironment", () => {
       consoleHostname: "console.vfurst.example.com",
       apiUrl: "https://api.vfurst.example.com",
       apiHostname: "api.vfurst.example.com",
+      authClientId: "tenant-web",
+      authTransactionKeyBase64Url: validEnvironment.VFURST_AUTH_TRANSACTION_KEY_BASE64URL,
+      tenantSessionSecretBase64Url: validEnvironment.VFURST_TENANT_SESSION_SECRET_BASE64URL,
+      managerIdentityPublicKeys: {
+        "manager-2026-01": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA000000000000000000000000000000000000000=\n-----END PUBLIC KEY-----"
+      },
+      identityServiceSecret: validEnvironment.VFURST_IDENTITY_SERVICE_SECRET,
       databaseUrl: validEnvironment.DATABASE_URL,
       redisUrl: validEnvironment.REDIS_URL
     });
@@ -40,6 +54,11 @@ describe("parseTenantWebEnvironment", () => {
         TENANT_WEB_ENV_NAMES.managerUrl,
         TENANT_WEB_ENV_NAMES.consoleUrl,
         TENANT_WEB_ENV_NAMES.apiUrl,
+        TENANT_WEB_ENV_NAMES.authClientId,
+        TENANT_WEB_ENV_NAMES.authTransactionKey,
+        TENANT_WEB_ENV_NAMES.tenantSessionSecret,
+        TENANT_WEB_ENV_NAMES.managerIdentityPublicKeys,
+        TENANT_WEB_ENV_NAMES.identityServiceSecret,
         TENANT_WEB_ENV_NAMES.databaseUrl,
         TENANT_WEB_ENV_NAMES.redisUrl
       ]);
@@ -51,6 +70,11 @@ describe("parseTenantWebEnvironment", () => {
     ["VFURST_MANAGER_URL", "https://user:secret@vfurst.example.com"],
     ["VFURST_CONSOLE_URL", "https://console.vfurst.example.com/dashboard"],
     ["VFURST_API_URL", "ftp://api.vfurst.example.com"],
+    ["VFURST_AUTH_CLIENT_ID", "tenant web"],
+    ["VFURST_AUTH_TRANSACTION_KEY_BASE64URL", "too-short"],
+    ["VFURST_TENANT_SESSION_SECRET_BASE64URL", "also-too-short"],
+    ["VFURST_MANAGER_IDENTITY_PUBLIC_KEYS_JSON", "[]"],
+    ["VFURST_IDENTITY_SERVICE_SECRET", "short"],
     ["DATABASE_URL", "mysql://database.internal/vfurst"],
     ["REDIS_URL", "http://redis.internal:6379"]
   ])("rejects invalid %s configuration", (name, value) => {

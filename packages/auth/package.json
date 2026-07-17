@@ -27,6 +27,10 @@
       "types": "./dist/identity-assertion.d.ts",
       "import": "./dist/identity-assertion.js"
     },
+    "./tenant-session": {
+      "types": "./dist/tenant-session.d.ts",
+      "import": "./dist/tenant-session.js"
+    },
     "./public-account": {
       "types": "./dist/public-account.d.ts",
       "import": "./dist/public-account.js"
