@@ -69,6 +69,26 @@ describe("shared contracts", () => {
     expect(event.type).toBe("tenant.lifecycle-changed");
   });
 
+  it("models payment policy as a platform aggregate without a fake organization", () => {
+    const event = controlPlaneEventSchema.parse({
+      id: ids.event,
+      type: "platform.payment-policy-changed",
+      occurredAt: "2026-07-17T00:00:00.000Z",
+      actorUserId: ids.actor,
+      aggregateVersion: 3,
+      correlationId: ids.correlation,
+      data: {
+        providers: [
+          { provider: "STRIPE", enabled: true },
+          { provider: "SEPAY", enabled: false }
+        ],
+        policyVersion: 3
+      }
+    });
+
+    expect(event).not.toHaveProperty("organizationId");
+  });
+
   it("normalizes initial-owner email in the provisioning command", () => {
     const command = provisionTenantCommandSchema.parse({
       idempotencyKey: ids.event,

@@ -5,21 +5,24 @@ export const CONTROL_PLANE_EVENT_TYPES = [
   "tenant.lifecycle-changed",
   "tenant.domain-activated",
   "tenant.domain-disabled",
-  "tenant.payment-policy-changed"
+  "platform.payment-policy-changed"
 ] as const;
 
 export const tenantLifecycleStatusSchema = z.enum(TENANT_LIFECYCLE_STATUSES);
 
 const eventMetadataSchema = z.object({
   id: z.uuid(),
-  organizationId: z.uuid(),
   occurredAt: z.iso.datetime(),
   actorUserId: z.uuid().nullable(),
   aggregateVersion: z.number().int().positive(),
   correlationId: z.uuid()
 });
 
-export const tenantLifecycleChangedEventSchema = eventMetadataSchema.extend({
+const tenantEventMetadataSchema = eventMetadataSchema.extend({
+  organizationId: z.uuid()
+});
+
+export const tenantLifecycleChangedEventSchema = tenantEventMetadataSchema.extend({
   type: z.literal("tenant.lifecycle-changed"),
   data: z.object({
     previousStatus: tenantLifecycleStatusSchema,
@@ -27,7 +30,7 @@ export const tenantLifecycleChangedEventSchema = eventMetadataSchema.extend({
   })
 });
 
-export const tenantDomainActivatedEventSchema = eventMetadataSchema.extend({
+export const tenantDomainActivatedEventSchema = tenantEventMetadataSchema.extend({
   type: z.literal("tenant.domain-activated"),
   data: z.object({
     hostname: z.string().trim().toLowerCase().min(3).max(253),
@@ -35,17 +38,22 @@ export const tenantDomainActivatedEventSchema = eventMetadataSchema.extend({
   })
 });
 
-export const tenantDomainDisabledEventSchema = eventMetadataSchema.extend({
+export const tenantDomainDisabledEventSchema = tenantEventMetadataSchema.extend({
   type: z.literal("tenant.domain-disabled"),
   data: z.object({
     hostname: z.string().trim().toLowerCase().min(3).max(253)
   })
 });
 
-export const tenantPaymentPolicyChangedEventSchema = eventMetadataSchema.extend({
-  type: z.literal("tenant.payment-policy-changed"),
+export const platformPaymentPolicyChangedEventSchema = eventMetadataSchema.extend({
+  type: z.literal("platform.payment-policy-changed"),
   data: z.object({
-    providers: z.array(z.enum(["STRIPE", "SEPAY"])),
+    providers: z.array(
+      z.object({
+        provider: z.enum(["STRIPE", "SEPAY"]),
+        enabled: z.boolean()
+      })
+    ),
     policyVersion: z.number().int().positive()
   })
 });
@@ -54,7 +62,7 @@ export const controlPlaneEventSchema = z.discriminatedUnion("type", [
   tenantLifecycleChangedEventSchema,
   tenantDomainActivatedEventSchema,
   tenantDomainDisabledEventSchema,
-  tenantPaymentPolicyChangedEventSchema
+  platformPaymentPolicyChangedEventSchema
 ]);
 
 export const provisionTenantCommandSchema = z.object({
