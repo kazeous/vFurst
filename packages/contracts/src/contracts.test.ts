@@ -84,6 +84,8 @@ describe("shared contracts", () => {
     const event = controlPlaneEventSchema.parse({
       id: ids.event,
       type: "tenant.lifecycle-changed",
+      aggregateType: "tenant",
+      aggregateId: ids.org,
       organizationId: ids.org,
       occurredAt: "2026-07-17T00:00:00.000Z",
       actorUserId: ids.actor,
@@ -99,6 +101,8 @@ describe("shared contracts", () => {
     const event = controlPlaneEventSchema.parse({
       id: ids.event,
       type: "platform.payment-policy-changed",
+      aggregateType: "platform-payment-policy",
+      aggregateId: "global",
       occurredAt: "2026-07-17T00:00:00.000Z",
       actorUserId: ids.actor,
       aggregateVersion: 3,

@@ -72,6 +72,14 @@ export const authorizationCodeExchangeResponseSchema = z.object({
   identityAssertion: base64UrlSchema.min(32).max(4096)
 });
 
+export const identitySessionRevocationRequestSchema = z.object({
+  identitySessionId: z.uuid()
+});
+
+export const identitySessionRevocationResponseSchema = z.object({
+  revoked: z.boolean()
+});
+
 export const authorizationErrorCodes = [
   "invalid_request",
   "invalid_state",
@@ -94,5 +102,7 @@ export type AuthorizationStart = z.infer<typeof authorizationStartSchema>;
 export type AuthorizationCodeClaims = z.infer<typeof authorizationCodeClaimsSchema>;
 export type AuthorizationCodeExchangeRequest = z.infer<typeof authorizationCodeExchangeRequestSchema>;
 export type AuthorizationCodeExchangeResponse = z.infer<typeof authorizationCodeExchangeResponseSchema>;
+export type IdentitySessionRevocationRequest = z.infer<typeof identitySessionRevocationRequestSchema>;
+export type IdentitySessionRevocationResponse = z.infer<typeof identitySessionRevocationResponseSchema>;
 export type RelyingSessionClaims = z.infer<typeof relyingSessionClaimsSchema>;
 export type IdentityAssertionClaims = z.infer<typeof identityAssertionClaimsSchema>;

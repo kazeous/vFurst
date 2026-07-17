@@ -12,6 +12,8 @@ export const tenantLifecycleStatusSchema = z.enum(TENANT_LIFECYCLE_STATUSES);
 
 const eventMetadataSchema = z.object({
   id: z.uuid(),
+  aggregateType: z.string().trim().min(1).max(100),
+  aggregateId: z.string().trim().min(1).max(255),
   occurredAt: z.iso.datetime(),
   actorUserId: z.uuid().nullable(),
   aggregateVersion: z.number().int().positive(),
