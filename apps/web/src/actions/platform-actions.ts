@@ -6,9 +6,16 @@ import { deliverOrganizationInvitation } from "@/lib/organization-invitation-ema
 import { assertOrganizationTransition } from "@/lib/organization-lifecycle";
 import { issueOrganizationInvitation, revokeOrganizationInvitation } from "@/lib/organization-invitations";
 import { isPlatformDomain } from "@/lib/platform-hosts";
-import { Prisma, prisma } from "@vfurst/db";
+import type { ControlPlaneEvent } from "@vfurst/contracts";
+import { enqueueTenantControlPlaneEvent, Prisma, prisma } from "@vfurst/db";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+
+type ControlPlaneEventData<T extends ControlPlaneEvent["type"]> = Extract<
+  ControlPlaneEvent,
+  { type: T }
+>["data"];
 
 const lifecycleSchema = z.object({
   orgId: z.string().uuid(),
@@ -34,6 +41,10 @@ export async function changeOrganizationStatus(formData: FormData) {
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid lifecycle transition.");
   }
+
+  const eventId = randomUUID();
+  const idempotencyKey = randomUUID();
+  const correlationId = randomUUID();
 
   const changed = await prisma.$transaction(
     async (tx) => {
@@ -78,6 +89,21 @@ export async function changeOrganizationStatus(formData: FormData) {
       if (update.count !== 1) {
         throw new Error("Organization status changed while this request was being processed. Please try again.");
       }
+
+      const data = {
+        previousStatus: org.status,
+        status: parsed.data.targetStatus
+      } satisfies ControlPlaneEventData<"tenant.lifecycle-changed">;
+
+      await enqueueTenantControlPlaneEvent(tx, {
+        id: eventId,
+        idempotencyKey,
+        organizationId: org.id,
+        eventType: "tenant.lifecycle-changed",
+        correlationId,
+        actorUserId: platformAdmin.id,
+        data
+      });
 
       return org;
     },
@@ -210,6 +236,10 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization.");
   }
 
+  const eventId = randomUUID();
+  const idempotencyKey = randomUUID();
+  const correlationId = randomUUID();
+
   try {
     const activated = await prisma.$transaction(
       async (tx) => {
@@ -219,6 +249,7 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
             id: true,
             slug: true,
             status: true,
+            customDomain: true,
             requestedCustomDomain: true,
             customDomainStatus: true,
             customDomainVerifiedAt: true,
@@ -269,6 +300,21 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
         if (update.count !== 1) {
           throw new Error("The organization or domain request changed during activation. Please try again.");
         }
+
+        const data = {
+          hostname: domain,
+          previousHostname: org.customDomain
+        } satisfies ControlPlaneEventData<"tenant.domain-activated">;
+
+        await enqueueTenantControlPlaneEvent(tx, {
+          id: eventId,
+          idempotencyKey,
+          organizationId: org.id,
+          eventType: "tenant.domain-activated",
+          correlationId,
+          actorUserId: platformAdmin.id,
+          data
+        });
 
         return {
           id: org.id,

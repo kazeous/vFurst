@@ -1,13 +1,27 @@
 "use server";
 
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
+import {
+  getNextControlPlaneAggregateVersion,
+  runSerializableControlPlaneTransaction
+} from "@/lib/control-plane-transactions";
 import { reverseOrderFulfillment } from "@/lib/fulfillment";
 import { isSePayEnvironmentReady, isSePaySettingsReady, sepaySettingsSchema } from "@/lib/payments/platform";
 import { parseMoney } from "@/lib/registration/pricing";
-import { PAYMENT_ATTEMPT_TTL_MS, Prisma, prisma } from "@vfurst/db";
+import type { ControlPlaneEvent } from "@vfurst/contracts";
+import { enqueueControlPlaneEvent, PAYMENT_ATTEMPT_TTL_MS, Prisma, prisma } from "@vfurst/db";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+
+type ControlPlaneEventData<T extends ControlPlaneEvent["type"]> = Extract<
+  ControlPlaneEvent,
+  { type: T }
+>["data"];
+
+const PAYMENT_POLICY_AGGREGATE_TYPE = "platform-payment-policy";
+const PAYMENT_POLICY_AGGREGATE_ID = "global";
 
 export async function savePlatformPaymentSettings(formData: FormData) {
   const admin = await requirePlatformAdmin();
@@ -27,8 +41,12 @@ export async function savePlatformPaymentSettings(formData: FormData) {
     throw new Error("Complete the SePay account fields and required environment secrets before enabling SePay.");
   }
 
-  await prisma.$transaction([
-    prisma.paymentProviderConfig.upsert({
+  const eventId = randomUUID();
+  const idempotencyKey = randomUUID();
+  const correlationId = randomUUID();
+
+  await runSerializableControlPlaneTransaction(prisma, async (tx) => {
+    await tx.paymentProviderConfig.upsert({
       where: {
         provider: "STRIPE"
       },
@@ -41,8 +59,8 @@ export async function savePlatformPaymentSettings(formData: FormData) {
         enabled: stripeEnabled,
         updatedById: admin.id
       }
-    }),
-    prisma.paymentProviderConfig.upsert({
+    });
+    await tx.paymentProviderConfig.upsert({
       where: {
         provider: "SEPAY"
       },
@@ -57,8 +75,34 @@ export async function savePlatformPaymentSettings(formData: FormData) {
         settings: sepaySettings,
         updatedById: admin.id
       }
-    })
-  ]);
+    });
+
+    const policyVersion = await getNextControlPlaneAggregateVersion(
+      tx,
+      PAYMENT_POLICY_AGGREGATE_TYPE,
+      PAYMENT_POLICY_AGGREGATE_ID
+    );
+    const data = {
+      providers: [
+        { provider: "STRIPE", enabled: stripeEnabled },
+        { provider: "SEPAY", enabled: sepayEnabled }
+      ],
+      policyVersion
+    } satisfies ControlPlaneEventData<"platform.payment-policy-changed">;
+
+    await enqueueControlPlaneEvent(tx, {
+      id: eventId,
+      idempotencyKey,
+      organizationId: null,
+      aggregateType: PAYMENT_POLICY_AGGREGATE_TYPE,
+      aggregateId: PAYMENT_POLICY_AGGREGATE_ID,
+      aggregateVersion: policyVersion,
+      eventType: "platform.payment-policy-changed",
+      correlationId,
+      actorUserId: admin.id,
+      data
+    });
+  });
 
   revalidatePath("/platform/payments");
   redirect("/platform/payments?paymentsSaved=1");
