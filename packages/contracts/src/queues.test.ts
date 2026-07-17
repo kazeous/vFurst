@@ -38,6 +38,7 @@ describe("queue contracts", () => {
       badge: "generate-badges",
       reconcileSePay: "reconcile-sepay",
       expireCheckouts: "expire-checkouts",
+      cleanupIdentityProtocolRecords: "cleanup-identity-protocol-records",
       dispatchControlPlaneEvents: "dispatch-control-plane-events",
       applyControlPlaneEvent: "apply-control-plane-event"
     });
@@ -134,6 +135,14 @@ describe("queue contracts", () => {
         data: {}
       }).name
     ).toBe("recover-email-deliveries");
+
+    expect(
+      reconcileQueueJobSchema.parse({
+        queue: "reconcile",
+        name: "cleanup-identity-protocol-records",
+        data: {}
+      }).name
+    ).toBe("cleanup-identity-protocol-records");
 
     expect(() =>
       reconcileQueueJobSchema.parse({

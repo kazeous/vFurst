@@ -18,6 +18,7 @@ import { processExpireCheckouts } from "./jobs/expire-checkouts.js";
 import { processSendEmail } from "./jobs/send-email.js";
 import { processSendWebhook } from "./jobs/send-webhook.js";
 import { processRecoverEmailDeliveries } from "./jobs/recover-email-deliveries.js";
+import { processCleanupIdentityProtocolRecords } from "./jobs/cleanup-identity-protocol-records.js";
 
 const controlPlaneRedis = new Redis(workerEnv.REDIS_URL, {
   lazyConnect: true,
@@ -53,9 +54,11 @@ function createWorkers() {
             ? processExpireCheckouts()
             : job.name === "recover-email-deliveries"
               ? processRecoverEmailDeliveries()
-              : job.name === QUEUE_JOB_NAMES.dispatchControlPlaneEvents
-                ? processDispatchControlPlaneEvents()
-            : processReconcileFees(job),
+              : job.name === QUEUE_JOB_NAMES.cleanupIdentityProtocolRecords
+                ? processCleanupIdentityProtocolRecords()
+                : job.name === QUEUE_JOB_NAMES.dispatchControlPlaneEvents
+                  ? processDispatchControlPlaneEvents()
+                  : processReconcileFees(job),
       {
       connection
     }),
@@ -220,6 +223,16 @@ async function scheduleRecurringJobs() {
     }
   );
   await reconcileQueue.add(
+    QUEUE_JOB_NAMES.cleanupIdentityProtocolRecords,
+    {},
+    {
+      jobId: "cleanup-identity-protocol-records",
+      repeat: {
+        pattern: "7 * * * *"
+      }
+    }
+  );
+  await reconcileQueue.add(
     QUEUE_JOB_NAMES.dispatchControlPlaneEvents,
     {},
     {
@@ -255,6 +268,7 @@ async function start() {
   );
 
   await scheduleRecurringJobs();
+  await processCleanupIdentityProtocolRecords();
   await processRecoverEmailDeliveries();
   await processDispatchControlPlaneEvents();
   await listenHealthServer();

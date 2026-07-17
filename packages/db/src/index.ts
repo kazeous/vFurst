@@ -27,4 +27,5 @@ export * from "./authorization-codes.js";
 export * from "./connection-policy.js";
 export * from "./control-plane-outbox.js";
 export * from "./fee-report.js";
+export * from "./identity-retention.js";
 export * from "./payment-attempts.js";

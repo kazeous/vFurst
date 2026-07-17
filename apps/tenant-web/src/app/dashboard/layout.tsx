@@ -54,7 +54,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
         </div>
         <nav aria-label="Account">
           <a href="/dashboard" aria-current="page">Dashboard</a>
-          <form action="/auth/logout" method="post">
+          <form action="/auth/logout?return=manager" method="post">
             <button type="submit">Sign out</button>
           </form>
         </nav>

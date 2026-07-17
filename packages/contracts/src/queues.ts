@@ -18,6 +18,7 @@ export const QUEUE_JOB_NAMES = {
   reconcileSePay: "reconcile-sepay",
   expireCheckouts: "expire-checkouts",
   recoverEmailDeliveries: "recover-email-deliveries",
+  cleanupIdentityProtocolRecords: "cleanup-identity-protocol-records",
   dispatchControlPlaneEvents: "dispatch-control-plane-events",
   applyControlPlaneEvent: "apply-control-plane-event"
 } as const;
@@ -118,6 +119,11 @@ export const reconcileQueueJobSchema = z.discriminatedUnion("name", [
   z.object({
     queue: z.literal("reconcile"),
     name: z.literal(QUEUE_JOB_NAMES.recoverEmailDeliveries),
+    data: emptyReconciliationJobDataSchema
+  }),
+  z.object({
+    queue: z.literal("reconcile"),
+    name: z.literal(QUEUE_JOB_NAMES.cleanupIdentityProtocolRecords),
     data: emptyReconciliationJobDataSchema
   }),
   z.object({
