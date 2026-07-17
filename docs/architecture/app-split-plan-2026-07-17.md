@@ -42,7 +42,7 @@ The edge/router selects a deployment before Next.js runs. It does not rely on th
 | `{subdomain}.vfurst.reyuugames.com/*` | `tenant-web` | Tenant context comes from the hostname |
 | Activated custom domain | `tenant-web` | Tenant context comes from the hostname only after platform activation |
 | `api.vfurst.reyuugames.com/v1/*` or the canonical tenant API host selected during implementation | `tenant-web` | Preserve existing v1 response contracts |
-| Legacy root checkout/transfer URLs | `platform-manager` compatibility handlers | Resolve the stored resource, then issue one safe redirect to the canonical tenant-web route |
+| Legacy root checkout/transfer and `/{orgSlug}/...` portal URLs | `platform-manager` compatibility handlers | Resolve the stored resource, then issue one safe absolute redirect to the canonical tenant-web route |
 
 The edge host allowlist is platform-owned. An arbitrary `Host` header, an unverified custom domain, or a suspended organization must never reach a tenant route as an authorized tenant context.
 
@@ -127,7 +127,7 @@ Use a separate service credential for each runtime, with rotation, issuer/audien
 | Marketing, legal, request access, embedded docs | `platform-manager` | Preserve root-domain public entry points |
 | `dashboard/**`, organizer shell, event/organization actions | `tenant-web` | Canonical host becomes `console`; preserve membership/resource-derived guards |
 | `(convention)/**`, portal components, public account gate | `tenant-web` | Resolve tenant only from verified hostname/context |
-| `checkout/**`, payment-status API, public confirmation API | `tenant-web` | Retain signed checkout context and provider-neutral fulfillment |
+| `checkout/**`, payment-status API, public confirmation API | `tenant-web` | Retain signed checkout context and provider-neutral fulfillment; cut over with the public portal that creates these orders |
 | `/api/v1/**`, tenant API-key/webhook settings/actions | `tenant-web` | API key remains the tenant authority, not a caller-provided org ID |
 | Stripe/SePay inbound routes | `tenant-web` initially | Keep signed, idempotent callback behavior and settlement-after-suspension contract; provider configuration UI remains manager-only |
 | PWA/Serwist and WebUSB event-day UI | `tenant-web` only | Build and serve the service worker from tenant-web; do not let manager routes share its scope |
@@ -161,10 +161,12 @@ Use a separate service credential for each runtime, with rotation, issuer/audien
 
 ### 4. Move tenant runtime atomically by route family
 
-- Move public portal plus its actions and tenant context first, then organizer dashboard by complete event/organization action family.
-- Move checkout together with its order-status API, signed token validation, payment actions, and webhook fulfilment dependencies. Do not split a payment state machine across two writable web apps.
+- Move public portal and checkout/payment as one atomic family: portal mutations, order creation, checkout page/status, signed token validation, payment actions, provider callbacks, fulfillment and checkout expiry always have one transitional owner.
+- Move organizer dashboard by complete event/organization action family.
 - Move tenant REST API, outbound webhooks, PWA, and event-day routes only after their action/resource guards are in tenant-web.
 - A route family has one canonical writer during each cutover. Never run copied server actions from both apps against the same mutable resource.
+
+Central account registration-transfer decisions and platform payment-support actions are cross-runtime UI cases, not exceptions to the single-writer rule. Platform-manager sends an authenticated idempotent command to the canonical tenant writer for registration/add-on/badge or order/fulfillment state changes; it does not keep a duplicate transactional mutation.
 
 ### 5. Replace single-runtime assumptions
 
