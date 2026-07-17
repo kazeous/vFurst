@@ -95,7 +95,7 @@ export async function completeTenantAuthorization(
   environment: TenantWebEnvironment,
   dependencies: HandoffDependencies = {}
 ) {
-  const now = dependencies.now ?? new Date();
+  const transactionNow = dependencies.now ?? new Date();
   let response: NextResponse;
 
   try {
@@ -118,7 +118,7 @@ export async function completeTenantAuthorization(
       encryptionKey: runtime.transactionKey,
       cookieValue: transactionCookie,
       state,
-      now
+      now: transactionNow
     });
     const exchangeRequest = authorizationCodeExchangeRequestSchema.parse({
       audience: runtime.audience,
@@ -147,10 +147,15 @@ export async function completeTenantAuthorization(
       return clearTransactionCookie(response);
     }
     const exchange = authorizationCodeExchangeResponseSchema.parse(await exchangeResponse.json());
+    // The manager issues the assertion after the network exchange begins. A
+    // request-start timestamp can therefore predate its `iat` by a second and
+    // incorrectly reject a fresh assertion. Tests may inject one fixed clock;
+    // real requests take a fresh post-exchange timestamp here.
+    const assertionNow = dependencies.now ?? new Date();
     const assertion = verifyIdentityAssertion(exchange.identityAssertion, {
       audience: runtime.audience,
       publicKeys: runtime.managerIdentityPublicKeys,
-      now
+      now: assertionNow
     });
     const tenantSession = mintTenantSession({
       secret: runtime.tenantSessionSecret,
@@ -158,7 +163,7 @@ export async function completeTenantAuthorization(
       identitySessionId: assertion.sessionId,
       userId: assertion.userId,
       authVersion: assertion.authVersion,
-      now
+      now: assertionNow
     });
 
     response = noStore(

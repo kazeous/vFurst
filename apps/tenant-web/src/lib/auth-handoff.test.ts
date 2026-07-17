@@ -152,6 +152,39 @@ describe("tenant browser authorization handoff", () => {
     expect(response.cookies.get(AUTH_COOKIE_NAMES.tenantTransaction)?.value).toBe("");
   });
 
+  it("validates a manager assertion against a fresh post-exchange clock", async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const startResponse = begin();
+      const authorizeUrl = new URL(startResponse.headers.get("location")!);
+      const transactionCookie = startResponse.cookies.get(AUTH_COOKIE_NAMES.tenantTransaction)!.value;
+      const callback = new NextRequest(
+        `https://console.vfurst.example.com/auth/callback?code=${randomBytes(32).toString("base64url")}&state=${authorizeUrl.searchParams.get("state")}`,
+        {
+          headers: {
+            host: "console.vfurst.example.com",
+            cookie: `${AUTH_COOKIE_NAMES.tenantTransaction}=${transactionCookie}`
+          }
+        }
+      );
+      const response = await completeTenantAuthorization(callback, environment, {
+        fetch: vi.fn<typeof fetch>().mockImplementation(async () => {
+          const issuedAt = new Date(NOW.getTime() + 1_500);
+          vi.setSystemTime(issuedAt);
+          return new Response(JSON.stringify({
+            tokenType: "vfurst_identity_assertion",
+            identityAssertion: createExchangeAssertion(issuedAt)
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        })
+      });
+
+      expect(response.status).toBe(303);
+      expect(response.cookies.get(AUTH_COOKIE_NAMES.tenantSession)?.value).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears the transaction and refuses exchange when state is wrong", async () => {
     const startResponse = begin("//attacker.example");
     const transactionCookie = startResponse.cookies.get(AUTH_COOKIE_NAMES.tenantTransaction)!.value;
