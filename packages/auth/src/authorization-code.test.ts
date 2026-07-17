@@ -217,6 +217,25 @@ describe("authorization code issuance and exchange", () => {
     });
   });
 
+  it("prefers the store's fresh auth version and revocation state over caller input", async () => {
+    const fixture = createFixture();
+    const issued = await fixture.issue();
+    const stored = fixture.store.records.get(hashOpaqueToken(issued.code));
+    expect(stored).toBeDefined();
+    stored!.record = {
+      ...stored!.record,
+      currentUserAuthVersion: 8,
+      identitySessionRevokedAt: null
+    };
+
+    await expect(
+      fixture.exchange(issued.code, issued.verifier, { currentAuthVersion: 7 })
+    ).rejects.toSatisfy((error) => {
+      expectAuthorizationError(error, "session_revoked");
+      return true;
+    });
+  });
+
   it("rejects the wrong PKCE verifier and consumes the code", async () => {
     const fixture = createFixture();
     const issued = await fixture.issue();

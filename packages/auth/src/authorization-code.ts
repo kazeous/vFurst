@@ -37,6 +37,9 @@ export type AuthorizationCodeRecord = Readonly<{
   issuedAt: number;
   expiresAt: number;
   identitySessionExpiresAt: number;
+  /** Fresh values supplied by durable stores at consume time. */
+  currentUserAuthVersion?: number;
+  identitySessionRevokedAt?: number | null;
 }>;
 
 export type AtomicAuthorizationCodeConsumeResult =
@@ -71,7 +74,8 @@ export type ExchangeAuthorizationCodeInput = Readonly<{
   redirectUri: string;
   audience: typeof IDENTITY_ASSERTION_AUDIENCE | string;
   clientId: string;
-  currentAuthVersion: number;
+  /** Compatibility fallback for non-durable stores; production stores supply a fresh value on consume. */
+  currentAuthVersion?: number;
 }>;
 
 export type AuthorizationCodeExchangeResult = Readonly<{
@@ -284,10 +288,6 @@ export class AuthorizationCodeService {
       throw new AuthorizationCodeError("invalid_audience", "Authorization audience is invalid.");
     }
     const request = parseExchangeRequest(input);
-    if (!Number.isSafeInteger(input.currentAuthVersion) || input.currentAuthVersion < 0) {
-      throw new AuthorizationCodeError("invalid_request", "Current authentication version is invalid.");
-    }
-
     const nowDate = this.#now();
     const now = epochSeconds(nowDate);
     const codeHash = hashOpaqueToken(request.code);
@@ -329,7 +329,15 @@ export class AuthorizationCodeService {
     if (!constantTimeStringEqual(record.codeChallenge, suppliedChallenge)) {
       throw new AuthorizationCodeError("invalid_code_verifier", "PKCE verifier does not match.");
     }
-    if (record.authVersion !== input.currentAuthVersion || record.identitySessionExpiresAt <= now) {
+    const currentAuthVersion = record.currentUserAuthVersion ?? input.currentAuthVersion;
+    if (
+      typeof currentAuthVersion !== "number" ||
+      !Number.isSafeInteger(currentAuthVersion) ||
+      currentAuthVersion < 0 ||
+      record.authVersion !== currentAuthVersion ||
+      record.identitySessionRevokedAt != null ||
+      record.identitySessionExpiresAt <= now
+    ) {
       throw new AuthorizationCodeError("session_revoked", "Identity session is no longer valid.");
     }
 
