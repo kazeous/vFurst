@@ -16,8 +16,8 @@ export const TENANT_WEB_RESERVED_SUBDOMAINS = Object.freeze([
 
 export type TenantWebShellHostDecision =
   | Readonly<{ kind: "allow-shell"; surface: "console" | "api"; hostname: string }>
-  | Readonly<{ kind: "reject-misdirected"; hostname: string; reason: "platform" | "reserved" }>
-  | Readonly<{ kind: "tenant-resolution-unavailable"; hostname: string; candidate: "managed" | "custom" }>;
+  | Readonly<{ kind: "allow-tenant-candidate"; hostname: string; candidate: "managed" | "custom" }>
+  | Readonly<{ kind: "reject-misdirected"; hostname: string; reason: "platform" | "reserved" }>;
 
 export function createTenantWebHostPolicy(environment: TenantWebEnvironment): HostPolicy {
   return createHostPolicy({
@@ -29,11 +29,8 @@ export function createTenantWebHostPolicy(environment: TenantWebEnvironment): Ho
   });
 }
 
-/**
- * This shell deliberately does not query the tenant directory. Managed and
- * custom host candidates remain unavailable until the real route boundary is
- * wired and covered; returning a candidate is never an authorization grant.
- */
+/** Middleware classifies only. Tenant candidates still need the Node/Prisma
+ * resolution boundary before any route may trust an organization identity. */
 export function evaluateTenantWebShellHost(host: string, policy: HostPolicy): TenantWebShellHostDecision {
   const classification = classifyTenantHost(host, policy);
   if (classification.kind === "platform") {
@@ -49,7 +46,7 @@ export function evaluateTenantWebShellHost(host: string, policy: HostPolicy): Te
     return Object.freeze({ kind: "reject-misdirected", hostname: classification.hostname, reason: "reserved" });
   }
   return Object.freeze({
-    kind: "tenant-resolution-unavailable",
+    kind: "allow-tenant-candidate",
     hostname: classification.hostname,
     candidate: classification.kind === "managed-subdomain" ? "managed" : "custom"
   });

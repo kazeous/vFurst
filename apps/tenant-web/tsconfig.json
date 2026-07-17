@@ -9,6 +9,9 @@
       "@vfurst/tenant-context": [
         "../../packages/tenant-context/src/index.ts"
       ],
+      "@vfurst/tenant-context/prisma": [
+        "../../packages/tenant-context/src/prisma.ts"
+      ],
       "@vfurst/auth": [
         "../../packages/auth/src/index.ts"
       ],

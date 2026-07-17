@@ -37,15 +37,6 @@ export function middleware(request: NextRequest) {
   if (decision.kind === "reject-misdirected") {
     return jsonError(421, "misdirected_request", "This host does not belong to the tenant web runtime.");
   }
-  if (decision.kind === "tenant-resolution-unavailable") {
-    return jsonError(
-      503,
-      "tenant_routing_not_enabled",
-      "Tenant hostname resolution is not enabled in this runtime shell.",
-      { "retry-after": "60" }
-    );
-  }
-
   const requestHeaders = scrubVfurstInternalHeaders(request.headers);
   return NextResponse.next({ request: { headers: requestHeaders } });
 }

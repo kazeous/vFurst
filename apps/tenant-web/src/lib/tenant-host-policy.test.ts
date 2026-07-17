@@ -67,14 +67,14 @@ describe("tenant web host policy adapter", () => {
     });
   });
 
-  it("does not authorize managed or custom candidates before directory integration", () => {
+  it("passes managed and custom candidates to the server-side resolution boundary", () => {
     expect(evaluateTenantWebShellHost("sample-con.vfurst.example.com", policy)).toEqual({
-      kind: "tenant-resolution-unavailable",
+      kind: "allow-tenant-candidate",
       hostname: "sample-con.vfurst.example.com",
       candidate: "managed"
     });
     expect(evaluateTenantWebShellHost("events.customer.example", policy)).toEqual({
-      kind: "tenant-resolution-unavailable",
+      kind: "allow-tenant-candidate",
       hostname: "events.customer.example",
       candidate: "custom"
     });
