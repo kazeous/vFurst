@@ -31,6 +31,12 @@ Legend: Not started - In progress - Audit reopened - Blocked - Verified complete
 
 ## Session log
 
+### 2026-07-17 - Approved two-application runtime split plan (no application code)
+- Recorded `docs/architecture/app-split-plan-2026-07-17.md` after reading the complete maintained documentation set and auditing the current monorepo/runtime boundaries.
+- The approved target is two independently deployed Next.js applications in the existing Turborepo: `apps/platform-manager` owns central identity/account plus platform lifecycle/domain/payment control; `apps/tenant-web` owns the organizer console, public tenant portals, checkout, tenant API/webhooks, and event-day PWA. `apps/worker`, PostgreSQL, Redis, object storage, and the shared monorepo remain in place initially.
+- The plan requires `@vfurst/auth`, `@vfurst/tenant-context`, and `@vfurst/contracts` packages while retaining `@vfurst/db`. It explicitly avoids per-tenant repositories/databases and avoids making tenant-web synchronously call the manager on ordinary requests; manager-controlled lifecycle/domain changes use a durable control-plane outbox for cache invalidation.
+- No source code, schema, deployment, routes, or tests changed in this planning session. The next implementation session must begin with Phase 7 split-preparation work: inventory every route/action/API/webhook/cache invalidation, then extract and test the shared package seams before creating/moving either web application. Do not move protected routes until the central identity authorization-code exchange is designed and covered.
+
 ### 2026-07-17 - Product gap remediation, refresh contract and durable email operations (GAP-08/GAP-09)
 - Resolved GAP-08 by aligning the reference and product copy with the implemented server-first refresh model: Server Actions plus route revalidation/navigation, and targeted three-second checkout polling. A general SSE stream is no longer an unsupported architecture promise; any future realtime consumer needs an explicit event/auth/fan-out/reconnect design.
 - Replaced synchronous web email delivery and plaintext-rich BullMQ jobs with a durable PostgreSQL outbox. `EmailDelivery` and numbered `EmailDeliveryAttempt` records retain tenant/event scope, provider IDs, retry status, replay lineage, and sanitized bounded errors; AES-256-GCM protects the recipient/template data envelope and Redis receives only `deliveryId`.
