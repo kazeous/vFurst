@@ -59,3 +59,54 @@ p {
 code {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
+
+.login-card {
+  max-width: 30rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.login-form label {
+  font-weight: 700;
+}
+
+.login-form input {
+  min-height: 2.75rem;
+  border: 1px solid #91aaa3;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+.login-form button {
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #12665c;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-login {
+  margin-top: 0.75rem;
+}
+
+.login-form .secondary-button {
+  border: 1px solid #12665c;
+  background: transparent;
+  color: #12665c;
+}
+
+.form-error {
+  border-left: 0.25rem solid #b42318;
+  background: #fff1f0;
+  padding: 0.75rem 1rem;
+  color: #7a271a;
+}

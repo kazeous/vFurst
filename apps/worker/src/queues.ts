@@ -1,4 +1,10 @@
 import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
+import {
+  EMAIL_DEAD_LETTER_JOB_OPTIONS,
+  QUEUE_NAMES,
+  STANDARD_QUEUE_JOB_OPTIONS,
+  type ControlPlaneJobData
+} from "@vfurst/contracts";
 import { workerEnv } from "./env.js";
 
 function getConnectionOptions(): ConnectionOptions {
@@ -17,15 +23,7 @@ function getConnectionOptions(): ConnectionOptions {
 
 const connection = getConnectionOptions();
 
-const defaultJobOptions: JobsOptions = {
-  attempts: 5,
-  backoff: {
-    type: "exponential",
-    delay: 5_000
-  },
-  removeOnComplete: 500,
-  removeOnFail: false
-};
+const defaultJobOptions: JobsOptions = STANDARD_QUEUE_JOB_OPTIONS;
 
 export type SendEmailJob = {
   deliveryId: string;
@@ -67,11 +65,7 @@ export const emailQueue = new Queue<SendEmailJob>("email", {
 
 export const emailDeadLetterQueue = new Queue<EmailDeadLetterJob>("email-dead-letter", {
   connection,
-  defaultJobOptions: {
-    attempts: 1,
-    removeOnComplete: false,
-    removeOnFail: false
-  }
+  defaultJobOptions: EMAIL_DEAD_LETTER_JOB_OPTIONS
 });
 
 export const badgeQueue = new Queue<GenerateBadgesJob>("badge", {
@@ -89,6 +83,20 @@ export const webhookQueue = new Queue<SendWebhookJob>("webhook", {
   defaultJobOptions
 });
 
-export const allQueues = [emailQueue, emailDeadLetterQueue, badgeQueue, reconcileQueue, webhookQueue];
+export const controlPlaneQueue = new Queue<ControlPlaneJobData>("control-plane", {
+  connection,
+  defaultJobOptions
+});
+
+export const allQueues = [
+  emailQueue,
+  emailDeadLetterQueue,
+  badgeQueue,
+  reconcileQueue,
+  webhookQueue,
+  controlPlaneQueue
+];
+
+export const queueNames = QUEUE_NAMES.filter((name) => name !== "email-dead-letter");
 
 export { connection };

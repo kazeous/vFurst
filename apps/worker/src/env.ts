@@ -113,6 +113,7 @@ const envSchema = z
     AWS_ACCESS_KEY_ID: requiredText("AWS_ACCESS_KEY_ID"),
     AWS_REGION: requiredText("AWS_REGION"),
     AWS_SECRET_ACCESS_KEY: requiredText("AWS_SECRET_ACCESS_KEY"),
+    CONTROL_PLANE_INVALIDATION_CHANNEL: optionalText().default("vfurst:control-plane:invalidations"),
     AWS_SESSION_TOKEN: optionalText(),
     DATABASE_URL: requiredUrl("DATABASE_URL", ["postgres:", "postgresql:"]),
     EMAIL_DELIVERY_ENCRYPTION_KEY: requiredText("EMAIL_DELIVERY_ENCRYPTION_KEY").refine(

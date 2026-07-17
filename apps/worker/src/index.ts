@@ -1,8 +1,16 @@
 import { prisma } from "@vfurst/db";
+import { QUEUE_JOB_NAMES } from "@vfurst/contracts";
 import { QueueEvents, Worker } from "bullmq";
+import { Redis } from "ioredis";
 import { createServer, type Server } from "node:http";
 import { workerEnv, requiredWorkerRuntimeVariables } from "./env.js";
-import { allQueues, connection, reconcileQueue } from "./queues.js";
+import { allQueues, connection, queueNames, reconcileQueue } from "./queues.js";
+import {
+  createControlPlaneEventProcessor,
+  createRedisControlPlaneVersionStore,
+  prismaControlPlaneConsumerRepository
+} from "./jobs/apply-control-plane-event.js";
+import { processDispatchControlPlaneEvents } from "./jobs/dispatch-control-plane-events.js";
 import { processGenerateBadges } from "./jobs/generate-badges.js";
 import { processReconcileFees } from "./jobs/reconcile-fees.js";
 import { processReconcileSePay } from "./jobs/reconcile-sepay.js";
@@ -11,7 +19,17 @@ import { processSendEmail } from "./jobs/send-email.js";
 import { processSendWebhook } from "./jobs/send-webhook.js";
 import { processRecoverEmailDeliveries } from "./jobs/recover-email-deliveries.js";
 
-const queueNames = ["email", "badge", "reconcile", "webhook"] as const;
+const controlPlaneRedis = new Redis(workerEnv.REDIS_URL, {
+  lazyConnect: true,
+  maxRetriesPerRequest: null
+});
+const processControlPlaneEvent = createControlPlaneEventProcessor({
+  repository: prismaControlPlaneConsumerRepository,
+  versionStore: createRedisControlPlaneVersionStore(
+    controlPlaneRedis,
+    workerEnv.CONTROL_PLANE_INVALIDATION_CHANNEL
+  )
+});
 
 let workers: Worker[] = [];
 let queueEvents: QueueEvents[] = [];
@@ -35,11 +53,16 @@ function createWorkers() {
             ? processExpireCheckouts()
             : job.name === "recover-email-deliveries"
               ? processRecoverEmailDeliveries()
+              : job.name === QUEUE_JOB_NAMES.dispatchControlPlaneEvents
+                ? processDispatchControlPlaneEvents()
             : processReconcileFees(job),
       {
       connection
     }),
     new Worker("webhook", processSendWebhook, {
+      connection
+    }),
+    new Worker("control-plane", processControlPlaneEvent, {
       connection
     })
   ];
@@ -101,7 +124,10 @@ function listenHealthServer() {
   }
 
   healthServer = createServer((_request, response) => {
-    const acceptingJobs = !shutdownPromise && workers.every((worker) => worker.isRunning() && !worker.isPaused());
+    const acceptingJobs =
+      !shutdownPromise &&
+      controlPlaneRedis.status === "ready" &&
+      workers.every((worker) => worker.isRunning() && !worker.isPaused());
 
     response.writeHead(acceptingJobs ? 200 : 503, {
       "content-type": "application/json"
@@ -109,7 +135,8 @@ function listenHealthServer() {
     response.end(
       JSON.stringify({
         ok: acceptingJobs,
-        workers: workers.length
+        workers: workers.length,
+        queues: queueNames
       })
     );
   });
@@ -192,15 +219,25 @@ async function scheduleRecurringJobs() {
       }
     }
   );
+  await reconcileQueue.add(
+    QUEUE_JOB_NAMES.dispatchControlPlaneEvents,
+    {},
+    {
+      jobId: "dispatch-control-plane-events",
+      repeat: {
+        pattern: "* * * * *"
+      }
+    }
+  );
 }
 
 async function start() {
   console.info(`Worker runtime environment validated. Required variables: ${requiredWorkerRuntimeVariables.join(", ")}.`);
 
   await withTimeout(
-    prisma.$connect(),
+    Promise.all([prisma.$connect(), controlPlaneRedis.connect()]),
     workerEnv.WORKER_STARTUP_TIMEOUT_MS,
-    "Timed out while connecting to the database during worker startup."
+    "Timed out while connecting to the database or control-plane Redis during worker startup."
   );
 
   workers = createWorkers();
@@ -219,6 +256,7 @@ async function start() {
 
   await scheduleRecurringJobs();
   await processRecoverEmailDeliveries();
+  await processDispatchControlPlaneEvents();
   await listenHealthServer();
 
   console.info(`vFurst worker started. Processing queues: ${queueNames.join(", ")}.`);
@@ -232,6 +270,7 @@ async function performShutdown(reason: string) {
   await Promise.all(workers.map((worker) => worker.close(false)));
   await Promise.all(queueEvents.map((events) => events.close()));
   await Promise.all(allQueues.map((queue) => queue.close()));
+  await controlPlaneRedis.quit();
   await prisma.$disconnect();
 
   console.info("Worker shutdown complete.");

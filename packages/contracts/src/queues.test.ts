@@ -5,6 +5,7 @@ import {
   QUEUE_NAMES,
   STANDARD_QUEUE_JOB_OPTIONS,
   badgeQueueJobSchema,
+  controlPlaneQueueJobSchema,
   emailDeadLetterQueueJobSchema,
   emailQueueJobSchema,
   queueJobSchema,
@@ -24,13 +25,38 @@ const ids = {
 
 describe("queue contracts", () => {
   it("publishes the complete current queue and job-name vocabulary", () => {
-    expect(QUEUE_NAMES).toEqual(["email", "email-dead-letter", "badge", "reconcile", "webhook"]);
+    expect(QUEUE_NAMES).toEqual([
+      "email",
+      "email-dead-letter",
+      "badge",
+      "reconcile",
+      "webhook",
+      "control-plane"
+    ]);
     expect(QUEUE_JOB_NAMES).toMatchObject({
       email: "send-email",
       badge: "generate-badges",
       reconcileSePay: "reconcile-sepay",
-      expireCheckouts: "expire-checkouts"
+      expireCheckouts: "expire-checkouts",
+      dispatchControlPlaneEvents: "dispatch-control-plane-events",
+      applyControlPlaneEvent: "apply-control-plane-event"
     });
+  });
+
+  it("keeps control-plane delivery pointer-only", () => {
+    const pointer = {
+      queue: "control-plane" as const,
+      name: "apply-control-plane-event" as const,
+      data: { eventId: ids.event }
+    };
+
+    expect(controlPlaneQueueJobSchema.parse(pointer).data).toEqual({ eventId: ids.event });
+    expect(() =>
+      controlPlaneQueueJobSchema.parse({
+        ...pointer,
+        data: { eventId: ids.event, payload: { status: "ACTIVE" } }
+      })
+    ).toThrow();
   });
 
   it("keeps the standard retry policy aligned across producers and consumers", () => {

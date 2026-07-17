@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "npm run build --workspace @vfurst/db && npm run build --workspace @vfurst/email && npm run clean && tsc -p tsconfig.build.json",
+    "build": "npm run build --workspace @vfurst/contracts && npm run build --workspace @vfurst/db && npm run build --workspace @vfurst/email && npm run clean && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "npm run build --workspace @vfurst/contracts && vitest run --passWithNoTests"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",
+    "@vfurst/contracts": "0.0.0",
     "@vfurst/db": "0.0.0",
     "@vfurst/email": "0.0.0",
     "bullmq": "^5.79.2",

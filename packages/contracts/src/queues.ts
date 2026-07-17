@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { webhookEventTypeSchema } from "./webhooks.js";
 
-export const QUEUE_NAMES = ["email", "email-dead-letter", "badge", "reconcile", "webhook"] as const;
+export const QUEUE_NAMES = [
+  "email",
+  "email-dead-letter",
+  "badge",
+  "reconcile",
+  "webhook",
+  "control-plane"
+] as const;
 
 export const QUEUE_JOB_NAMES = {
   email: "send-email",
@@ -10,7 +17,9 @@ export const QUEUE_JOB_NAMES = {
   reconcileFees: "reconcile-fees",
   reconcileSePay: "reconcile-sepay",
   expireCheckouts: "expire-checkouts",
-  recoverEmailDeliveries: "recover-email-deliveries"
+  recoverEmailDeliveries: "recover-email-deliveries",
+  dispatchControlPlaneEvents: "dispatch-control-plane-events",
+  applyControlPlaneEvent: "apply-control-plane-event"
 } as const;
 
 export const STANDARD_QUEUE_JOB_OPTIONS = {
@@ -62,6 +71,16 @@ export const outboundWebhookJobDataSchema = z.object({
   data: z.record(z.string(), z.unknown())
 });
 
+/**
+ * Queue payloads intentionally carry only the durable PostgreSQL event pointer.
+ * Consumers must load and validate the canonical envelope from the outbox.
+ */
+export const controlPlaneJobDataSchema = z
+  .object({
+    eventId: z.uuid()
+  })
+  .strict();
+
 export const emailQueueJobSchema = z.object({
   queue: z.literal("email"),
   name: z.literal(QUEUE_JOB_NAMES.email),
@@ -100,6 +119,11 @@ export const reconcileQueueJobSchema = z.discriminatedUnion("name", [
     queue: z.literal("reconcile"),
     name: z.literal(QUEUE_JOB_NAMES.recoverEmailDeliveries),
     data: emptyReconciliationJobDataSchema
+  }),
+  z.object({
+    queue: z.literal("reconcile"),
+    name: z.literal(QUEUE_JOB_NAMES.dispatchControlPlaneEvents),
+    data: emptyReconciliationJobDataSchema
   })
 ]);
 
@@ -114,12 +138,19 @@ export const webhookQueueJobSchema = z
     path: ["name"]
   });
 
+export const controlPlaneQueueJobSchema = z.object({
+  queue: z.literal("control-plane"),
+  name: z.literal(QUEUE_JOB_NAMES.applyControlPlaneEvent),
+  data: controlPlaneJobDataSchema
+});
+
 export const queueJobSchema = z.union([
   emailQueueJobSchema,
   emailDeadLetterQueueJobSchema,
   badgeQueueJobSchema,
   reconcileQueueJobSchema,
-  webhookQueueJobSchema
+  webhookQueueJobSchema,
+  controlPlaneQueueJobSchema
 ]);
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
@@ -128,4 +159,5 @@ export type EmailDeadLetterJobData = z.infer<typeof emailDeadLetterJobDataSchema
 export type GenerateBadgesJobData = z.infer<typeof generateBadgesJobDataSchema>;
 export type ReconcileFeesJobData = z.infer<typeof reconcileFeesJobDataSchema>;
 export type OutboundWebhookJobData = z.infer<typeof outboundWebhookJobDataSchema>;
+export type ControlPlaneJobData = z.infer<typeof controlPlaneJobDataSchema>;
 export type QueueJob = z.infer<typeof queueJobSchema>;
