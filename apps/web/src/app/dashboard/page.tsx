@@ -67,7 +67,7 @@ export default async function DashboardPage() {
         <StatCard label="Active events" value={activeEvents.toString()} detail={`${events.length} total in your workspace`} icon={CalendarCheck} tone="info" />
         <StatCard label="Registrations" value={registrationCount.toLocaleString()} detail="Across events you manage" icon={TicketCheck} />
         <StatCard label="Pending reviews" value={pendingReviews.toString()} detail={`${pendingVendors} vendor · ${pendingVolunteers} volunteer`} icon={ClipboardList} tone={pendingReviews ? "warning" : "success"} />
-        <StatCard label="Checked in today" value={checkedInToday.toLocaleString()} detail="Live attendee throughput" icon={ScanLine} tone="success" />
+        <StatCard label="Checked in today" value={checkedInToday.toLocaleString()} detail="Today's attendee throughput" icon={ScanLine} tone="success" />
       </section>
 
       {nextEvent ? (

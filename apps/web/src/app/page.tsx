@@ -12,7 +12,7 @@ const capabilities = [
 const workflow = [
   { number: "01", title: "Plan", body: "Create the event, ticket inventory, hotel blocks, staff departments, vendor products, and store catalog." },
   { number: "02", title: "Sell", body: "Publish one branded portal for registration, hotel, shop, volunteer, and vendor journeys." },
-  { number: "03", title: "Operate", body: "Run check-in, badge printing, cashier desks, shift coordination, and live analytics from one console." }
+  { number: "03", title: "Operate", body: "Run check-in, badge printing, cashier desks, shift coordination, and event analytics from one console." }
 ];
 
 export default function HomePage() {
@@ -29,14 +29,14 @@ export default function HomePage() {
             <div className="vf-home-trust"><span><BadgeCheck size={16} />Built for live event pressure</span><span><BadgeCheck size={16} />WCAG-minded workflows</span></div>
           </div>
 
-          <div className="vf-hero-operations-preview vf-home-product-preview" role="img" aria-label="Live convention operations dashboard showing registration, check-in, and volunteer staffing">
-            <div className="vf-home-preview-chrome"><span><i /><i /><i /></span><small>Operations · Reyuu Summer Con</small><b>Live</b></div>
+          <div className="vf-hero-operations-preview vf-home-product-preview" role="img" aria-label="Convention operations dashboard showing registration, check-in, and volunteer staffing">
+            <div className="vf-home-preview-chrome"><span><i /><i /><i /></span><small>Operations · Reyuu Summer Con</small><b>Event day</b></div>
             <div className="vf-home-preview-layout">
               <aside><strong>vF</strong><span /><span /><span data-active="true" /><span /><span /></aside>
               <div className="vf-home-preview-content">
                 <header><div><small>Saturday, July 18</small><h2>Doors are open</h2></div><span>09:42</span></header>
                 <div className="vf-home-preview-stats"><article><small>Registered</small><strong>1,284</strong><em>+86 today</em></article><article><small>Checked in</small><strong>63%</strong><em>812 guests</em></article><article><small>Open shifts</small><strong>9</strong><em>3 departments</em></article></div>
-                <section className="vf-home-preview-flow"><div><span>Live arrivals</span><b>View all</b></div>{[["ML","Mai Le","VIP · Badge 0842"],["TN","Tuan Nguyen","General · Badge 0843"],["AS","Ari Santos","Vendor · Hall B"]].map(([initial,name,detail]) => <article key={name}><i>{initial}</i><span><strong>{name}</strong><small>{detail}</small></span><BadgeCheck size={17} /></article>)}</section>
+                <section className="vf-home-preview-flow"><div><span>Recent arrivals</span><b>View all</b></div>{[["ML","Mai Le","VIP · Badge 0842"],["TN","Tuan Nguyen","General · Badge 0843"],["AS","Ari Santos","Vendor · Hall B"]].map(([initial,name,detail]) => <article key={name}><i>{initial}</i><span><strong>{name}</strong><small>{detail}</small></span><BadgeCheck size={17} /></article>)}</section>
               </div>
             </div>
           </div>

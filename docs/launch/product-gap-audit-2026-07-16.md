@@ -179,12 +179,9 @@ Worker coverage proves successful PDF/ZPL image output, missing-object failure, 
 
 **Priority: P2 decision.**
 
-The reference lists Server-Sent Events as the real-time technology, but there is no SSE endpoint or EventSource client. No phase specifies a concrete live-update artifact, so this is a roadmap inconsistency rather than a request to add live updates blindly.
+**Decision update (2026-07-17): resolved by removing the unsupported SSE promise.** No phase defines an event schema, stream endpoint, cross-replica fan-out mechanism, client consumer, reconnect contract, or verification gate for SSE. The implemented product is intentionally server-first: mutations use Server Actions and route revalidation, organizer/event-day snapshots become current after their own mutation or navigation/reload, and only checkout payment confirmation uses targeted three-second polling.
 
-Choose one of the following and update the reference accordingly:
-
-- implement a tenant/event-authorized SSE stream for the specific live dashboard/check-in counters that need it, including reconnect and authorization tests; or
-- remove the SSE promise and explicitly state that refresh/polling is the current product behavior.
+The reference and misleading dashboard/marketing copy now describe that behavior explicitly. A future realtime feature requires its own product consumer and design for tenant/event authorization, Redis-backed cross-replica fan-out, reconnect/resume semantics, and backpressure; it is not an implicit requirement of the current plan.
 
 ### GAP-09 — Make worker failure/dead-letter and delivery-status behavior observable
 

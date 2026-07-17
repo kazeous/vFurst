@@ -124,7 +124,7 @@ USD card payments are processed via **Stripe Connect** using **destination charg
 | **Badge Designer** | `react-konva` | Canvas-based drag-and-drop badge template editor. Renders `BadgeTemplate.layout` elements on an HTML5 Canvas via React declarative API. |
 | **Drag & Drop** | `@dnd-kit/core` + `@dnd-kit/sortable` | Accessible DnD for tier reordering (Phase 2), form builder field ordering (Phase 4), shift schedule assignment (Phase 4). |
 | **Printing** | WebUSB API | Direct browser-to-Zebra thermal printer (Chrome/Edge only — see compat note in `webusb-printer.ts`) |
-| **Real-time** | Server-Sent Events | Live check-in counters, dashboard updates |
+| **Refresh model** | Server Actions + route revalidation; targeted polling | Organizer and event-day views refresh after their own mutations or on navigation/reload. Checkout payment confirmation polls every three seconds. No general Server-Sent Events stream is part of the current product. |
 | **Mobile** | Responsive web/PWA | Check-in, cashier, express kiosk, and monitoring without a separate native codebase |
 | **CI/CD** | GitHub Actions | Lint, test, build, deploy pipeline |
 | **Hosting** | Local Docker Compose for Phases 0–7; Vercel (web) + Railway (Redis/workers) at deployment time only | See "Local Development" below. Vercel/Railway aren't set up until the project deploys — every phase builds and verifies against local containers. |
