@@ -499,7 +499,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 | Batch | Items | Status | Session date | Evidence |
 |---|---|---|---|---|
 | 0 — Configuration | ENV-01, ENV-02, SPL-01 | **Complete** | 2026-07-26 | See "Batch 0 outcome" below |
-| 1 — Error visibility | ERR-01, ERR-02 | Not started | | |
+| 1 — Error visibility | ERR-01, ERR-02 | **Complete** | 2026-07-26 | See "Batch 1 outcome" below |
 | 2 — Public flows | ERR-03 (public), ERR-04 | Not started | | |
 | 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | Not started | | |
 | 4 — Data and tests | DAT-01, TST-01, TST-03 | Not started | | |
@@ -563,3 +563,34 @@ setting them only at runtime does nothing.
 `www.*` and `console.*` still return 404 (RTE-01) and a `Host` header containing
 an underscore still returns 500 (RTE-02). Both were re-confirmed after this batch
 and belong to Batch 3.
+
+---
+
+# Batch 1 outcome — 2026-07-26
+
+**ERR-01 and ERR-02 are closed.**
+
+## What changed
+
+| Change | File |
+|---|---|
+| Shared route-level error boundary UI: generic copy (server messages are masked in production), `error.digest` reference code, "Try again" via `reset()`, and a route-appropriate escape hatch | `apps/web/src/components/route-error.tsx` |
+| One `error.tsx` per surface: root (also catches group-layout errors and ungrouped routes), `(auth)` → `/login`, `(marketing)` → `/`, `(convention)/[orgSlug]` → history back (portal roots are host-relative; an absolute link would be wrong on one of the two host forms), `account` → `/account`, `dashboard` → `/dashboard`, `platform` → `/platform`, `checkout` → `/account/orders` | `apps/web/src/app/**/error.tsx` (8 files) |
+| `global-error.tsx` renders real copy (inline-styled — it replaces the root layout, so `globals.css` is unavailable), keeps the Sentry capture, offers retry and a hard `location.assign("/")` escape | `apps/web/src/app/global-error.tsx` |
+| `loginWithCredentials` catches `AuthError`, redirects to `/login?error=invalid_credentials&returnTo=…` (pattern copied from `apps/platform-manager`), rethrows everything else; the page renders the code through an `errorMessages` record via the accessible `Alert` (`role="alert"`) | `apps/web/src/app/(auth)/login/page.tsx` |
+| Playwright regression: wrong password stays on `/login` with the alert, zero ≥500 responses, correct password then honors `returnTo`; an invalid voucher during registration renders the boundary (not a blank page) and "Try again" recovers to the flow start | `tests/e2e/error-visibility.spec.ts` |
+
+Route `error.tsx` files intentionally do **not** re-capture to Sentry: server-side
+exceptions are already reported through `onRequestError` in `instrumentation.ts`,
+and `global-error.tsx` covers client-side render crashes.
+
+## Evidence
+
+- Focused Chromium E2E: `error-visibility.spec.ts` + `account-registration.spec.ts` — 3/3 in dev mode; `error-visibility.spec.ts` 2/2 in production mode (`E2E_PRODUCTION=1`), where server error messages are masked and the generic boundary copy renders.
+- Dev-server log during the run shows `[auth][error] CredentialsSignin` being caught (no 500), and the voucher throw arriving at the boundary with its digest logged.
+- `turbo run type-check lint test` 32/32 tasks; `turbo run build` 10/10 (known BullMQ warning only).
+
+## Notes for later batches
+
+- ERR-03 remains: the boundary makes thrown action errors readable, but inline structured state (values retained, field-level messages) is still Batch 2's conversion work.
+- The E2E runner starts a dev server that overwrites `.next`; production-mode runs need a fresh `next build` first. Worth folding into TST-02's CI smoke design.

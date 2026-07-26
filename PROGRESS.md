@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Batch 0 of the runtime audit (env configuration) is complete. **Next session: unit 1.1 = audit Batch 1** — `error.tsx` per route group and the `/login` `AuthError` catch. Read `docs/launch/runtime-defect-audit-2026-07-26.md` §ERR-01/ERR-02 first.
+Audit Batches 0 (env) and 1 (error visibility) are complete. **Next session: unit 1.2 = audit Batch 2** — convert public-flow actions (registration, cart, hotel, volunteer, vendor, transfers) to structured state / redirect-with-code, plus the ERR-04 `revalidatePath` fix. Read `docs/launch/runtime-defect-audit-2026-07-26.md` §ERR-03/ERR-04 first; use the Pattern A/B references named there.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batch 0 done (2026-07-26); Batches 1–6 open; split runtime frozen |
+| 1 — Stabilize | In progress | Audit Batches 0–1 done (2026-07-26); Batches 2–6 open; split runtime frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-26 — Phase 1 unit 1.1: error visibility (audit Batch 1)
+
+- Closed ERR-01 and ERR-02. The audit's "Batch 1 outcome" section carries the full change list and evidence.
+- Added the shared `RouteError` boundary component and an `error.tsx` per surface (root, `(auth)`, `(marketing)`, `(convention)/[orgSlug]`, `account`, `dashboard`, `platform`, `checkout`); rewrote `global-error.tsx` with real copy while keeping its Sentry capture. Thrown action errors now render a readable, retryable page with a digest reference instead of a blank "Application error".
+- `/login` no longer 500s on a wrong password: the inline server action catches `AuthError` and redirects to `/login?error=invalid_credentials` preserving `returnTo`; the page renders the accessible alert (platform-manager pattern).
+- Added `tests/e2e/error-visibility.spec.ts`: wrong-password (no ≥500 responses, alert, `returnTo` preserved on success) and invalid-voucher boundary + working "Try again". Passed 3/3 dev-mode together with `account-registration.spec.ts`, and 2/2 in production mode where server messages are masked.
+- Gates: `turbo run type-check lint test` 32/32; `turbo run build` 10/10 (known BullMQ warning). Full E2E not re-run this session — Batch 4 owns making it green; no pass claim recorded.
+- Flake note for later specs: with a cold `.next`, dev-server compile latency can outlast Playwright's 5 s expect timeout; wait on the action's POST response (`waitForResponse`) before asserting, as the existing policy spec does.
 
 ### 2026-07-26 — Plan v2 rebuild (docs only; no application code changed)
 

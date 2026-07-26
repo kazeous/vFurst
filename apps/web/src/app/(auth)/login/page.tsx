@@ -2,23 +2,38 @@ import { signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Divider } from "@/components/ui/separator";
+import { AuthError } from "next-auth";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { safeReturnTo } from "@/lib/return-to";
 import { LoginForm } from "./login-form";
 import { Alert } from "@/components/ui/alert";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string; returnTo?: string | string[] }> }) {
+const errorMessages: Record<string, string> = {
+  invalid_credentials: "The email or password was not accepted."
+};
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string; error?: string; returnTo?: string | string[] }> }) {
   const query = await searchParams;
   const returnTo = safeReturnTo(query.returnTo);
+  const errorMessage = query.error ? errorMessages[query.error] : undefined;
 
   async function loginWithCredentials(formData: FormData) {
     "use server";
 
-    await signIn("credentials", {
-      email: formData.get("email"),
-      password: formData.get("password"),
-      redirectTo: returnTo
-    });
+    try {
+      await signIn("credentials", {
+        email: formData.get("email"),
+        password: formData.get("password"),
+        redirectTo: returnTo
+      });
+    } catch (error) {
+      if (error instanceof AuthError) {
+        const params = new URLSearchParams({ error: "invalid_credentials", returnTo });
+        redirect(`/login?${params.toString()}`);
+      }
+      throw error;
+    }
   }
 
   async function loginWithGoogle() {
@@ -36,6 +51,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="vf-label">Welcome back</p>
           <h1>Log in to vFurst</h1>
         </div>
+        {errorMessage ? (
+          <Alert variant="error" data-testid="login-error">
+            {errorMessage}
+          </Alert>
+        ) : null}
         <LoginForm action={loginWithCredentials} />
         {query.reset ? <Alert variant="success">Password updated. You can log in now.</Alert> : null}
         <p className="vf-muted"><Link href={`/forgot-password?returnTo=${encodeURIComponent(returnTo)}`}>Forgot your password?</Link></p>
