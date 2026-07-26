@@ -3,10 +3,12 @@
 import { auth } from "@/lib/auth";
 import { requireEventAccess as requireStoredEventAccess } from "@/lib/dashboard-access";
 import { parseMoney } from "@/lib/registration/pricing";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import type { CurrencyCode } from "@vfurst/db";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
@@ -171,7 +173,7 @@ async function validateVoucher(event: { id: string; orgId: string }, code: strin
   const normalized = normalizeCode(code);
 
   if (!normalized) {
-    throw new Error("Enter a voucher code.");
+    throw new PublicActionError("Enter a voucher code.");
   }
 
   const voucher = await prisma.voucher.findUnique({
@@ -184,21 +186,36 @@ async function validateVoucher(event: { id: string; orgId: string }, code: strin
   });
 
   if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
-    throw new Error("Voucher code was not found.");
+    throw new PublicActionError("Voucher code was not found.");
   }
 
   if (voucher.expiresAt && voucher.expiresAt < new Date()) {
-    throw new Error("Voucher code has expired.");
+    throw new PublicActionError("Voucher code has expired.");
   }
 
   if (voucher.maxUses != null && voucher.usedCount >= voucher.maxUses) {
-    throw new Error("Voucher code has reached its usage limit.");
+    throw new PublicActionError("Voucher code has reached its usage limit.");
   }
 
   return voucher;
 }
 
-export async function applyVoucher(formData: FormData) {
+export async function applyVoucher(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await applyVoucherInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
   const userId = await requireUserId();
   const parsed = z
     .object({
@@ -211,7 +228,7 @@ export async function applyVoucher(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid voucher code.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid voucher code." };
   }
 
   const cart = await prisma.cart.findFirst({
@@ -233,7 +250,7 @@ export async function applyVoucher(formData: FormData) {
   });
 
   if (!cart || cart.orgId !== cart.event.orgId || cart.eventId !== cart.event.id) {
-    throw new Error("Cart not found.");
+    throw new PublicActionError("Cart not found.");
   }
 
   assertOrganizationActive(cart.event.org.status);
@@ -242,11 +259,11 @@ export async function applyVoucher(formData: FormData) {
   const restrictions = getVoucherRestrictions(voucher.restrictions);
 
   if (restrictions.compedRegistration) {
-    throw new Error("Comped registration vouchers can only be used during registration.");
+    throw new PublicActionError("Comped registration vouchers can only be used during registration.");
   }
 
   if (restrictions.tierIds.length > 0) {
-    throw new Error("Registration-tier vouchers cannot be applied to the event store.");
+    throw new PublicActionError("Registration-tier vouchers cannot be applied to the event store.");
   }
 
   const updated = await prisma.cart.updateMany({
@@ -266,4 +283,5 @@ export async function applyVoucher(formData: FormData) {
   }
 
   revalidatePath(String(formData.get("returnPath") ?? "/"));
+  return {};
 }

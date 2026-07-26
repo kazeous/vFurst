@@ -1,4 +1,5 @@
 import { acceptRegistrationTransfer, declineRegistrationTransfer } from "@/actions/registration-transfer-actions";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { requirePublicAccount } from "@/lib/public-account";
 import {
@@ -9,15 +10,27 @@ import {
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 
+const noticeMessages: Record<string, { variant: "success" | "info" | "error"; message: string }> = {
+  accepted: { variant: "success", message: "Transfer accepted. The registration now belongs to your account." },
+  declined: { variant: "info", message: "Transfer declined. The original attendee keeps the registration." },
+  expired: { variant: "error", message: "This transfer invitation has expired." },
+  used: { variant: "error", message: "This transfer invitation has already been used. The current status is shown below." },
+  invalid: { variant: "error", message: "This transfer invitation is invalid or has already been used. The current status is shown below." },
+  ineligible: { variant: "error", message: "The source registration is no longer eligible for transfer." },
+  policy: { variant: "error", message: "The transfer could not be completed because of the event's registration policy (capacity or per-account limit)." }
+};
+
 export default async function AccountTransferDecisionPage({
   params,
   searchParams
 }: {
   params: Promise<{ requestId: string }>;
-  searchParams: Promise<{ token?: string | string[] }>;
+  searchParams: Promise<{ token?: string | string[]; notice?: string | string[] }>;
 }) {
   const [{ requestId }, query] = await Promise.all([params, searchParams]);
   const token = Array.isArray(query.token) ? query.token[0] : query.token;
+  const noticeKey = Array.isArray(query.notice) ? query.notice[0] : query.notice;
+  const notice = noticeKey ? noticeMessages[noticeKey] : undefined;
 
   if (!token || token.length < 32 || token.length > 256) {
     notFound();
@@ -57,6 +70,11 @@ export default async function AccountTransferDecisionPage({
         <h2>{request.event.name}</h2>
         <p className="vf-muted">{request.org.name}</p>
       </div>
+      {notice ? (
+        <Alert variant={notice.variant} data-testid="transfer-notice">
+          {notice.message}
+        </Alert>
+      ) : null}
       <dl className="vf-details">
         <dt>From</dt>
         <dd>{request.sourceRegistration.user.name ?? request.sourceRegistration.user.email}</dd>

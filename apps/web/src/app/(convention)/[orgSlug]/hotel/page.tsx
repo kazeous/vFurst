@@ -1,4 +1,4 @@
-import { bookRoom } from "@/actions/hotel-actions";
+import { HotelBookingForm } from "./booking-form";
 import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { auth } from "@/lib/auth";
@@ -119,49 +119,24 @@ export default async function PublicHotelPage({
             const roomTypes = parseRoomTypes(block.roomTypes);
 
             return session?.user?.id ? (
-              <form key={block.id} action={bookRoom} className="vf-section">
-                <input type="hidden" name="eventId" value={event.id} />
-                <input type="hidden" name="blockId" value={block.id} />
-                <div>
-                  <p className="vf-label">Cutoff {block.cutoffDate.toLocaleDateString()}</p>
-                  <h2>{block.hotelName}</h2>
-                </div>
-                <label>
-                  Room type
-                  <select name="roomType" required>
-                    {roomTypes.map((roomType) => {
-                      const booked = block.bookings.filter((booking) => booking.roomType === roomType.name).length;
+              <HotelBookingForm
+                key={block.id}
+                eventId={event.id}
+                blockId={block.id}
+                hotelName={block.hotelName}
+                cutoffLabel={block.cutoffDate.toLocaleDateString()}
+                roomTypes={roomTypes.map((roomType) => {
+                  const booked = block.bookings.filter((booking) => booking.roomType === roomType.name).length;
 
-                      return (
-                        <option key={roomType.name} value={roomType.name} disabled={booked >= roomType.totalRooms}>
-                          {roomType.name} - {formatCurrency(roomType.rate, event.currency)} / night - {roomType.totalRooms - booked} left
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-                <div className="vf-form-grid">
-                  <label>
-                    Check-in
-                    <input name="checkIn" type="date" required />
-                  </label>
-                  <label>
-                    Check-out
-                    <input name="checkOut" type="date" required />
-                  </label>
-                </div>
-                <div className="vf-form-grid">
-                  <label>
-                    Guest name
-                    <input name="guestName" defaultValue={session.user.name ?? ""} required />
-                  </label>
-                  <label>
-                    Guest email
-                    <input name="guestEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
-                  </label>
-                </div>
-                <Button label="Continue to checkout" type="submit" variant="primary" />
-              </form>
+                  return {
+                    name: roomType.name,
+                    label: `${roomType.name} - ${formatCurrency(roomType.rate, event.currency)} / night - ${roomType.totalRooms - booked} left`,
+                    soldOut: booked >= roomType.totalRooms
+                  };
+                })}
+                defaultGuestName={session.user.name ?? ""}
+                guestEmail={session.user.email ?? ""}
+              />
             ) : null;
           })}
           {event.hotelBlocks.length === 0 ? (

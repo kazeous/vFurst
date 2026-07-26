@@ -1,3 +1,5 @@
+﻿import { PublicActionError } from "@/lib/public-action-error";
+
 const VENDOR_DOCUMENT_TYPES = {
   "application/pdf": "pdf",
   "image/jpeg": "jpg",
@@ -12,11 +14,11 @@ export type VendorDocumentType = keyof typeof VENDOR_DOCUMENT_TYPES;
 
 export function validateVendorDocumentMetadata(file: { size: number; type: string }) {
   if (!(file.type in VENDOR_DOCUMENT_TYPES)) {
-    throw new Error("Vendor files must be PDF, PNG, JPEG, or WebP files.");
+    throw new PublicActionError("Vendor files must be PDF, PNG, JPEG, or WebP files.");
   }
 
   if (file.size > VENDOR_DOCUMENT_MAX_BYTES) {
-    throw new Error("Vendor files must be 10 MB or smaller.");
+    throw new PublicActionError("Vendor files must be 10 MB or smaller.");
   }
 
   return {
@@ -62,7 +64,7 @@ export function validateVendorDocumentContents(bytes: Uint8Array, contentType: V
     (contentType === "image/webp" && isWebp);
 
   if (!matches) {
-    throw new Error("Vendor file contents do not match the declared file type.");
+    throw new PublicActionError("Vendor file contents do not match the declared file type.");
   }
 }
 
@@ -70,17 +72,17 @@ export function validateVendorDocumentUrl(value: string) {
   let url: URL;
 
   if (value.length > 2_048) {
-    throw new Error("Vendor file URLs must be valid HTTP or HTTPS URLs.");
+    throw new PublicActionError("Vendor file URLs must be valid HTTP or HTTPS URLs.");
   }
 
   try {
     url = new URL(value);
   } catch {
-    throw new Error("Vendor file URLs must be valid HTTP or HTTPS URLs.");
+    throw new PublicActionError("Vendor file URLs must be valid HTTP or HTTPS URLs.");
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Vendor file URLs must be valid HTTP or HTTPS URLs.");
+    throw new PublicActionError("Vendor file URLs must be valid HTTP or HTTPS URLs.");
   }
 
   return url.toString();

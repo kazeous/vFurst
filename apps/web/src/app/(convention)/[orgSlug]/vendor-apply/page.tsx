@@ -1,4 +1,5 @@
-import { payVendorBooth, submitApplication } from "@/actions/vendor-actions";
+import { payVendorBooth } from "@/actions/vendor-actions";
+import { VendorApplyForm } from "./vendor-apply-form";
 import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { auth } from "@/lib/auth";
@@ -127,98 +128,21 @@ export default async function PublicVendorApplyPage({
           <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
         </section>
       ) : (
-        <form action={submitApplication} className="vf-section vf-form">
-          <input type="hidden" name="orgSlug" value={org.subdomain} />
-          <div>
-            <p className="vf-label">{event.name}</p>
-            <h2>Apply for dealer space</h2>
-            <p className="vf-muted">{event.description ?? "Share business details, assistants, preferences, and requested table products."}</p>
-          </div>
-          <div className="vf-form-grid">
-            <label>
-              Contact name
-              <input name="contactName" defaultValue={session.user.name ?? ""} required />
-            </label>
-            <label>
-              Contact email
-              <input name="contactEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
-            </label>
-          </div>
-          <div className="vf-form-grid">
-            <label>
-              Business name
-              <input name="businessName" required />
-            </label>
-            <label>
-              Website
-              <input name="website" placeholder="https://..." />
-            </label>
-          </div>
-          <label>
-            Product description
-            <textarea name="productDescription" rows={4} required />
-          </label>
-          <div className="vf-form-grid">
-            <label>
-              Table type
-              <select name="tableType" defaultValue={config.tableTypes[0]?.id ?? ""}>
-                <option value="">No table selected</option>
-                {config.tableTypes.map((table) => (
-                  <option key={table.id} value={table.id}>
-                    {table.name} - {formatCurrency(table.price, event.currency)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Neighbor preference
-              <input name="neighborPreference" placeholder="Near / away from..." />
-            </label>
-            <label>
-              Location preference
-              <input name="locationPreference" placeholder="End cap, wall, quiet area" />
-            </label>
-          </div>
-          <section className="vf-stack">
-            <h2>Amenities</h2>
-            {config.amenities.map((amenity) => (
-              <label key={amenity.id} className="vf-check">
-                <input name="amenityId" type="checkbox" value={amenity.id} />
-                {amenity.name} ({formatCurrency(amenity.price, event.currency)})
-              </label>
-            ))}
-            {config.amenities.length === 0 ? <p className="vf-empty">No paid amenities are configured.</p> : null}
-          </section>
-          <section className="vf-stack">
-            <h2>Dealer assistants</h2>
-            {[0, 1, 2].map((index) => (
-              <div key={index} className="vf-subform-row">
-                <label>
-                  Assistant name
-                  <input name="assistantName" />
-                </label>
-                <label>
-                  Assistant email
-                  <input name="assistantEmail" type="email" />
-                </label>
-              </div>
-            ))}
-          </section>
-          <section className="vf-stack">
-            <h2>Files</h2>
-            <div className="vf-subform-row">
-              <label>
-                File URL
-                <input name="fileUrl" placeholder="https://..." />
-              </label>
-              <label>
-                Upload file
-                <input name="fileUpload" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-              </label>
-            </div>
-          </section>
-          <Button label="Submit vendor application" type="submit" variant="primary" />
-        </form>
+        <VendorApplyForm
+          orgSlug={org.subdomain}
+          eventName={event.name}
+          eventDescription={event.description ?? "Share business details, assistants, preferences, and requested table products."}
+          tableTypes={config.tableTypes.map((table) => ({
+            id: table.id,
+            label: `${table.name} - ${formatCurrency(table.price, event.currency)}`
+          }))}
+          amenities={config.amenities.map((amenity) => ({
+            id: amenity.id,
+            label: `${amenity.name} (${formatCurrency(amenity.price, event.currency)})`
+          }))}
+          defaultContactName={session.user.name ?? ""}
+          contactEmail={session.user.email ?? ""}
+        />
       )}
     </main>
   );

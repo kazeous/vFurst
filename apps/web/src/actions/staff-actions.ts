@@ -9,10 +9,12 @@ import {
   requireVolunteerApplicationAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const formFieldSchema = z.object({
@@ -332,7 +334,25 @@ export async function deleteStaffRole(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/staff/schedule`);
 }
 
-export async function submitVolunteerApplication(formData: FormData) {
+export async function submitVolunteerApplication(
+  _previousState: PublicFormState,
+  formData: FormData
+): Promise<PublicFormState> {
+  try {
+    return await submitVolunteerApplicationInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function submitVolunteerApplicationInner(formData: FormData): Promise<PublicFormState> {
   const parsed = z
     .object({
       orgSlug: z.string().trim().min(1),
@@ -348,13 +368,13 @@ export async function submitVolunteerApplication(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid volunteer application.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid volunteer application." };
   }
 
   const org = await getConventionOrg(parsed.data.orgSlug);
 
   if (!org) {
-    throw new Error("Organization not found.");
+    throw new PublicActionError("Organization not found.");
   }
 
   const event = await prisma.event.findFirstOrThrow({
@@ -383,7 +403,7 @@ export async function submitVolunteerApplication(formData: FormData) {
       const value = String(formData.get(`field-${field.id}`) ?? "").trim();
 
       if (field.required && value.length === 0) {
-        throw new Error(`${field.label} is required.`);
+        throw new PublicActionError(`${field.label} is required.`);
       }
 
       responses[field.id] = value;

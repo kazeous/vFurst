@@ -1,6 +1,5 @@
-import { clearCart, removeFromCart, updateQuantity } from "@/actions/cart-actions";
-import { createOrder } from "@/actions/store-actions";
-import { applyVoucher } from "@/actions/voucher-actions";
+import { clearCart, removeFromCart } from "@/actions/cart-actions";
+import { CartCheckoutForm, CartQuantityForm, CartVoucherForm } from "@/components/store/cart-forms";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getCartSummary, getSurchargeTotal, parseProductSurcharges } from "@/lib/store/pricing";
 import { Button } from "@/components/ui/button";
@@ -84,12 +83,12 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
                 {options.length > 0 ? <small>{options.join(" / ")}</small> : null}
                 {surcharges.length > 0 ? <small>{surcharges.map((surcharge) => `${surcharge.name} ${formatCurrency(surcharge.amount, currency)}`).join(", ")}</small> : null}
               </div>
-              <form action={updateQuantity} className="vf-inline-form">
-                <input type="hidden" name="cartItemId" value={item.id} />
-                <input type="hidden" name="returnPath" value={returnPath} />
-                <input aria-label={`Quantity for ${item.product?.name ?? "cart item"}`} name="quantity" type="number" min="1" max="99" defaultValue={item.quantity} />
-                <Button label="Update" type="submit" size="sm" />
-              </form>
+              <CartQuantityForm
+                cartItemId={item.id}
+                returnPath={returnPath}
+                initialQuantity={item.quantity}
+                itemLabel={item.product?.name ?? "cart item"}
+              />
               <form action={removeFromCart}>
                 <input type="hidden" name="cartItemId" value={item.id} />
                 <input type="hidden" name="returnPath" value={returnPath} />
@@ -101,15 +100,7 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
         {cart.items.length === 0 ? <p className="vf-empty">Your cart is empty.</p> : null}
       </div>
 
-      <form action={applyVoucher} className="vf-inline-form">
-        <input type="hidden" name="cartId" value={cart.id} />
-        <input type="hidden" name="returnPath" value={returnPath} />
-        <label>
-          Discount code
-          <input name="code" placeholder="CODE" defaultValue={cart.voucher?.code ?? ""} />
-        </label>
-        <Button label="Apply" type="submit" />
-      </form>
+      <CartVoucherForm cartId={cart.id} returnPath={returnPath} initialCode={cart.voucher?.code ?? ""} />
 
       <div className="vf-cart-summary">
         <span>Subtotal</span>
@@ -124,13 +115,13 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
         <strong>{formatCurrency(summary.total, currency)}</strong>
       </div>
 
-      <form action={createOrder}>
-        <input type="hidden" name="cartId" value={cart.id} />
-        <input type="hidden" name="returnPath" value={returnPath} />
-        <input type="hidden" name="successPath" value={successPath} />
-        <input type="hidden" name="cancelPath" value={cancelPath} />
-        <Button label="Checkout" type="submit" variant="primary" isDisabled={cart.items.length === 0} />
-      </form>
+      <CartCheckoutForm
+        cartId={cart.id}
+        returnPath={returnPath}
+        successPath={successPath}
+        cancelPath={cancelPath}
+        isEmpty={cart.items.length === 0}
+      />
     </section>
   );
 }

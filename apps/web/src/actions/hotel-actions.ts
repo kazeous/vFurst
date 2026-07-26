@@ -6,11 +6,13 @@ import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
 import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl } from "@/lib/payments/stripe";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getNightCount, parseMoney, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
@@ -111,7 +113,22 @@ export async function updateHotelBlock(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/hotel`);
 }
 
-export async function bookRoom(formData: FormData) {
+export async function bookRoom(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await bookRoomInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const parsed = z
     .object({
@@ -132,7 +149,7 @@ export async function bookRoom(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel booking.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid hotel booking." };
   }
 
   const block = await prisma.hotelBlock.findFirst({
@@ -154,7 +171,7 @@ export async function bookRoom(formData: FormData) {
   });
 
   if (!block) {
-    throw new Error("Hotel block not found or unavailable.");
+    throw new PublicActionError("Hotel block not found or unavailable.");
   }
 
   if (block.orgId !== block.event.orgId) {
@@ -169,20 +186,20 @@ export async function bookRoom(formData: FormData) {
   await assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${account.id}`);
 
   if (block.cutoffDate < new Date()) {
-    throw new Error("This hotel block is past its booking cutoff.");
+    throw new PublicActionError("This hotel block is past its booking cutoff.");
   }
 
   const roomTypes = parseRoomTypes(block.roomTypes);
   const roomType = roomTypes.find((room) => room.name === parsed.data.roomType);
 
   if (!roomType) {
-    throw new Error("Room type is not available.");
+    throw new PublicActionError("Room type is not available.");
   }
 
   const bookedCount = block.bookings.filter((booking) => booking.roomType === roomType.name).length;
 
   if (bookedCount >= roomType.totalRooms) {
-    throw new Error("That room type is sold out.");
+    throw new PublicActionError("That room type is sold out.");
   }
 
   const nights = getNightCount(parsed.data.checkIn, parsed.data.checkOut);

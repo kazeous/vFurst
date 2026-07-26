@@ -1,10 +1,12 @@
 "use client";
 
 import { createRegistration } from "@/actions/registration-actions";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { initialPublicFormState } from "@/lib/public-form-state";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { Check, ChevronLeft, ChevronRight, LockKeyhole } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
 type AddOn = { id: string; name: string; price: number; isComplimentary: boolean; maxQuantity: number };
@@ -14,6 +16,7 @@ const stepLabels = ["Ticket", "Attendee", "Review"];
 
 export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string; currency: "USD" | "VND"; tiers: Tier[] }) {
   const { data: session } = useSession();
+  const [submitState, submitAction, isSubmitPending] = useActionState(createRegistration, initialPublicFormState);
   const availableTier = tiers.find((tier) => !tier.soldOut);
   const [step, setStep] = useState(0);
   const [isReady, setIsReady] = useState(false);
@@ -88,14 +91,19 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
           ) : null}
 
           {step === 2 && selectedTier ? (
-            <form action={createRegistration} className="vf-stack">
+            <form action={submitAction} className="vf-stack">
+              {submitState.error ? (
+                <Alert variant="error" data-testid="registration-error">
+                  {submitState.error}
+                </Alert>
+              ) : null}
               <input type="hidden" name="eventId" value={eventId} /><input type="hidden" name="typeId" value={selectedTier.id} />
               <input type="hidden" name="attendeeName" value={attendeeName} /><input type="hidden" name="attendeeEmail" value={attendeeEmail} /><input type="hidden" name="voucherCode" value={voucherCode} />
               {selectedTier.addOns.map((addOn) => <input key={addOn.id} type="hidden" name={`addon-${addOn.id}`} value={quantities[addOn.id] ?? 0} />)}
               <div><p className="vf-label">Step 3 of 3</p><h2 id="registration-flow-title">Review registration</h2><p className="vf-muted">Confirm the attendee and ticket before continuing to secure checkout.</p></div>
               <dl className="vf-review-list"><div><dt>Ticket</dt><dd>{selectedTier.name}</dd></div><div><dt>Attendee</dt><dd>{attendeeName}<small>{attendeeEmail}</small></dd></div>{selectedAddOns.map((addOn) => <div key={addOn.id}><dt>Add-on</dt><dd>{addOn.name} × {quantities[addOn.id]}</dd></div>)}{voucherCode ? <div><dt>Voucher</dt><dd>{voucherCode}</dd></div> : null}</dl>
               <div className="vf-secure-note"><LockKeyhole size={17} /><span>Payment details are handled securely by Stripe or SePay. vFurst never stores card numbers.</span></div>
-              <div className="vf-registration-actions"><Button type="button" onClick={() => setStep(1)}><ChevronLeft size={16} />Back</Button><div><Button label="Add to cart" name="checkoutMode" value="cart" type="submit" /><Button label={estimatedTotal === 0 ? "Complete registration" : "Continue to payment"} name="checkoutMode" value="stripe" type="submit" variant="primary" /></div></div>
+              <div className="vf-registration-actions"><Button type="button" onClick={() => setStep(1)} isDisabled={isSubmitPending}><ChevronLeft size={16} />Back</Button><div><Button label="Add to cart" name="checkoutMode" value="cart" type="submit" isDisabled={isSubmitPending} /><Button label={isSubmitPending ? "Submitting..." : estimatedTotal === 0 ? "Complete registration" : "Continue to payment"} name="checkoutMode" value="stripe" type="submit" variant="primary" isDisabled={isSubmitPending} /></div></div>
             </form>
           ) : null}
         </div>

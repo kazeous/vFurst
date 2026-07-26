@@ -20,8 +20,10 @@ import {
   normalizeTransferEmail
 } from "@/lib/registration-transfer";
 import { randomBytes } from "node:crypto";
+import { RegistrationPolicyError } from "@/lib/registration-policy";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const transferRequestSchema = z.object({
@@ -37,6 +39,18 @@ const transferDecisionSchema = z.object({
 
 function transferReturnPath(requestId: string, token: string) {
   return getRegistrationTransferPath(requestId, token);
+}
+
+/** Expected decision outcomes redirect back to the decision page with a notice code instead of throwing. */
+class TransferDecisionError extends Error {
+  constructor(public readonly notice: "invalid" | "used" | "ineligible") {
+    super("The transfer decision could not be completed.");
+    this.name = "TransferDecisionError";
+  }
+}
+
+function redirectWithTransferNotice(requestId: string, token: string, notice: string): never {
+  redirect(`${getRegistrationTransferPath(requestId, token)}&notice=${notice}`);
 }
 
 export async function createRegistrationTransferRequest(formData: FormData) {
@@ -137,6 +151,25 @@ export async function acceptRegistrationTransfer(formData: FormData) {
     requestId: formData.get("requestId"),
     token: formData.get("token")
   });
+
+  try {
+    await acceptRegistrationTransferInner(parsed);
+  } catch (error) {
+    unstable_rethrow(error);
+
+    if (error instanceof TransferDecisionError) {
+      redirectWithTransferNotice(parsed.requestId, parsed.token, error.notice);
+    }
+
+    if (error instanceof RegistrationPolicyError) {
+      redirectWithTransferNotice(parsed.requestId, parsed.token, "policy");
+    }
+
+    throw error;
+  }
+}
+
+async function acceptRegistrationTransferInner(parsed: { requestId: string; token: string }) {
   const account = await requirePublicAccount(transferReturnPath(parsed.requestId, parsed.token));
   const tokenHash = hashRegistrationTransferToken(parsed.token);
   const now = new Date();
@@ -158,7 +191,7 @@ export async function acceptRegistrationTransfer(formData: FormData) {
       request.tokenHash !== tokenHash ||
       normalizeTransferEmail(request.recipientEmail) !== normalizeTransferEmail(account.email)
     ) {
-      throw new Error("This transfer invitation is invalid or has already been used.");
+      throw new TransferDecisionError("invalid");
     }
 
     if (request.expiresAt <= now) {
@@ -176,7 +209,7 @@ export async function acceptRegistrationTransfer(formData: FormData) {
       source.userId === account.id ||
       !registrationReservationStatuses.includes(source.status as (typeof registrationReservationStatuses)[number])
     ) {
-      throw new Error("This registration is no longer eligible for transfer.");
+      throw new TransferDecisionError("ineligible");
     }
 
     assertTransfersAllowed(request.event.settings);
@@ -248,7 +281,7 @@ export async function acceptRegistrationTransfer(formData: FormData) {
     });
 
     if (consumed.count !== 1) {
-      throw new Error("This transfer invitation has already been used.");
+      throw new TransferDecisionError("used");
     }
 
     return {
@@ -263,7 +296,7 @@ export async function acceptRegistrationTransfer(formData: FormData) {
 
   if (result.kind === "expired") {
     revalidatePath("/account/transfers");
-    throw new Error("This transfer invitation has expired.");
+    redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
   }
 
   for (const badge of result.badgeJobs) {
@@ -286,6 +319,7 @@ export async function acceptRegistrationTransfer(formData: FormData) {
   revalidatePath(`/dashboard/events/${result.eventId}/registrations`);
   revalidatePath(`/dashboard/events/${result.eventId}/registrations/${result.sourceRegistrationId}`);
   revalidatePath(`/dashboard/events/${result.eventId}/registrations/transfers`);
+  redirectWithTransferNotice(parsed.requestId, parsed.token, "accepted");
 }
 
 export async function declineRegistrationTransfer(formData: FormData) {
@@ -293,6 +327,21 @@ export async function declineRegistrationTransfer(formData: FormData) {
     requestId: formData.get("requestId"),
     token: formData.get("token")
   });
+
+  try {
+    await declineRegistrationTransferInner(parsed);
+  } catch (error) {
+    unstable_rethrow(error);
+
+    if (error instanceof TransferDecisionError) {
+      redirectWithTransferNotice(parsed.requestId, parsed.token, error.notice);
+    }
+
+    throw error;
+  }
+}
+
+async function declineRegistrationTransferInner(parsed: { requestId: string; token: string }) {
   const account = await requirePublicAccount(transferReturnPath(parsed.requestId, parsed.token));
   const tokenHash = hashRegistrationTransferToken(parsed.token);
   const now = new Date();
@@ -306,7 +355,7 @@ export async function declineRegistrationTransfer(formData: FormData) {
       current.tokenHash !== tokenHash ||
       normalizeTransferEmail(current.recipientEmail) !== normalizeTransferEmail(account.email)
     ) {
-      throw new Error("This transfer invitation is invalid or has already been used.");
+      throw new TransferDecisionError("invalid");
     }
 
     if (current.expiresAt <= now) {
@@ -323,7 +372,7 @@ export async function declineRegistrationTransfer(formData: FormData) {
     });
 
     if (declined.count !== 1) {
-      throw new Error("This transfer invitation has already been used.");
+      throw new TransferDecisionError("used");
     }
 
     return { kind: "declined" as const, eventId: current.eventId };
@@ -332,9 +381,10 @@ export async function declineRegistrationTransfer(formData: FormData) {
   if (request.kind === "expired") {
     revalidatePath("/account/transfers");
     revalidatePath(`/dashboard/events/${request.eventId}/registrations/transfers`);
-    throw new Error("This transfer invitation has expired.");
+    redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
   }
 
   revalidatePath("/account/transfers");
   revalidatePath(`/dashboard/events/${request.eventId}/registrations/transfers`);
+  redirectWithTransferNotice(parsed.requestId, parsed.token, "declined");
 }

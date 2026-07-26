@@ -6,11 +6,13 @@ import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
 import { reserveOrderInventory } from "@/lib/payments/reservations";
 import { assertActionRateLimit } from "@/lib/rate-limit";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { getCartSummary, parseProductOptions } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
 import type { Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
@@ -67,7 +69,22 @@ function selectedOptionsFromForm(formData: FormData, options: ReturnType<typeof 
   );
 }
 
-export async function addToCart(formData: FormData) {
+export async function addToCart(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await addToCartInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function addToCartInner(formData: FormData): Promise<PublicFormState> {
   const parsed = z
     .object({
       productId: z.string().uuid(),
@@ -79,7 +96,7 @@ export async function addToCart(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid cart item.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid cart item." };
   }
 
   const userId = await requireUserId();
@@ -97,13 +114,13 @@ export async function addToCart(formData: FormData) {
   });
 
   if (!product || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
-    throw new Error("This product is not available for purchase.");
+    return { error: "This product is not available for purchase." };
   }
 
   assertOrganizationActive(product.event.org.status);
 
   if (product.stock < parsed.data.quantity) {
-    throw new Error("Not enough inventory is available.");
+    return { error: "Not enough inventory is available." };
   }
 
   const cart = await getOrCreateCart(userId, product.event);
@@ -126,6 +143,7 @@ export async function addToCart(formData: FormData) {
 
   revalidatePath(`/${product.event.org.subdomain}/store`);
   revalidatePath(`/dashboard/events/${product.event.id}/store`);
+  return {};
 }
 
 export async function removeFromCart(formData: FormData) {
@@ -144,7 +162,22 @@ export async function removeFromCart(formData: FormData) {
   revalidatePath(String(formData.get("returnPath") ?? "/"));
 }
 
-export async function updateQuantity(formData: FormData) {
+export async function updateQuantity(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await updateQuantityInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function updateQuantityInner(formData: FormData): Promise<PublicFormState> {
   const userId = await requireUserId();
   const parsed = z
     .object({
@@ -157,7 +190,7 @@ export async function updateQuantity(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid quantity.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid quantity." };
   }
 
   const item = await prisma.cartItem.findFirstOrThrow({
@@ -186,7 +219,7 @@ export async function updateQuantity(formData: FormData) {
   assertOrganizationActive(item.cart.event.org.status);
 
   if (item.product && item.product.stock < parsed.data.quantity) {
-    throw new Error("Not enough inventory is available.");
+    return { error: "Not enough inventory is available." };
   }
 
   await prisma.cartItem.update({
@@ -199,6 +232,7 @@ export async function updateQuantity(formData: FormData) {
   });
 
   revalidatePath(String(formData.get("returnPath") ?? "/"));
+  return {};
 }
 
 export async function clearCart(formData: FormData) {
@@ -257,7 +291,7 @@ export async function convertCartToOrder(formData: FormData) {
   });
 
   if (cart.items.length === 0) {
-    throw new Error("Your cart is empty.");
+    throw new PublicActionError("Your cart is empty.");
   }
 
   if (cart.orgId !== cart.event.orgId) {
@@ -275,7 +309,7 @@ export async function convertCartToOrder(formData: FormData) {
     }
 
     if (item.product && item.product.stock < item.quantity) {
-      throw new Error(`${item.product.name} does not have enough stock remaining.`);
+      throw new PublicActionError(`${item.product.name} does not have enough stock remaining.`);
     }
   }
 

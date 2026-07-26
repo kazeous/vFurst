@@ -6,6 +6,7 @@ import {
   type PaymentProvider,
   type Prisma
 } from "@vfurst/db";
+import { PublicActionError } from "@/lib/public-action-error";
 import { z } from "zod";
 
 export const sepaySettingsSchema = z.object({
@@ -122,6 +123,6 @@ export async function getEligiblePaymentProviders(orgId: string, currency: Curre
 
 export async function assertPaidCheckoutAvailable(orgId: string, currency: CurrencyCode) {
   if ((await getEligiblePaymentProviders(orgId, currency)).length === 0) {
-    throw new Error("Payments are temporarily unavailable for this event. No reservation or order was created.");
+    throw new PublicActionError("Payments are temporarily unavailable for this event. No reservation or order was created.");
   }
 }

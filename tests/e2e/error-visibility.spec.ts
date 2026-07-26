@@ -6,17 +6,25 @@ const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
 const password = "ErrorVisibilityPass123!";
 const userEmail = `error-visibility-user-${runId}@example.com`;
+const memberEmail = `error-visibility-member-${runId}@example.com`;
 const orgSlug = `error-visibility-org-${runId}`;
+const boundaryOrgSlug = `error-visibility-boundary-${runId}`;
 let userId: string;
+let memberId: string;
+let boundaryOrgId: string;
 
+test.describe.configure({ mode: "serial" });
 test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const user = await prisma.user.create({
-    data: { email: userEmail, name: "Error Visibility User", passwordHash: await bcrypt.hash(password, 12) }
-  });
+  const passwordHash = await bcrypt.hash(password, 12);
+  const [user, member] = await Promise.all([
+    prisma.user.create({ data: { email: userEmail, name: "Error Visibility User", passwordHash } }),
+    prisma.user.create({ data: { email: memberEmail, name: "Error Visibility Member", passwordHash } })
+  ]);
   userId = user.id;
+  memberId = member.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -41,11 +49,28 @@ test.beforeAll(async () => {
   await prisma.registrationType.create({
     data: { orgId: org.id, eventId: org.events[0]!.id, name: "Error Visibility Ticket", price: 0 }
   });
+
+  const boundaryOrg = await prisma.organization.create({
+    data: {
+      name: "Error Visibility Boundary Organization",
+      slug: boundaryOrgSlug,
+      subdomain: boundaryOrgSlug,
+      contactEmail: userEmail,
+      status: "ACTIVE",
+      members: {
+        create: [
+          { userId: user.id, role: "OWNER" },
+          { userId: member.id, role: "MEMBER" }
+        ]
+      }
+    }
+  });
+  boundaryOrgId = boundaryOrg.id;
 });
 
 test.afterAll(async () => {
-  await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { id: userId } });
+  await prisma.organization.deleteMany({ where: { slug: { in: [orgSlug, boundaryOrgSlug] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [userId, memberId] } } });
   await prisma.$disconnect();
 });
 
@@ -87,7 +112,7 @@ test("a wrong password stays on /login with an accessible message and no 500", a
   await page.waitForURL((url) => url.pathname.startsWith("/account"));
 });
 
-test("an invalid voucher renders the route error boundary with a working retry", async ({ page }) => {
+test("an invalid voucher renders inline, keeps entered values, and allows retry", async ({ page }) => {
   await login(page, "/account");
 
   await page.goto(`/${orgSlug}/register`);
@@ -98,11 +123,24 @@ test("an invalid voucher renders the route error boundary with a working retry",
   await expect(page.getByRole("heading", { name: "Review registration" })).toBeVisible();
   await page.getByRole("button", { name: "Complete registration" }).click();
 
+  const inline = page.getByTestId("registration-error");
+  await expect(inline).toContainText("Voucher code was not found.");
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Review registration" })).toBeVisible();
+  await expect(page.locator("dl.vf-review-list")).toContainText(`INVALID-${runId}`);
+  await expect(page.getByRole("button", { name: "Complete registration" })).toBeEnabled();
+});
+
+test("an unconverted organizer action still lands on the readable route error boundary", async ({ page }) => {
+  await login(page, "/dashboard");
+
+  await page.goto(`/dashboard/organizations/${boundaryOrgId}/members`);
+  const inviteForm = page.locator("form").filter({ has: page.locator('input[name="email"]') }).first();
+  await inviteForm.locator('input[name="email"]').fill(memberEmail);
+  await inviteForm.getByRole("button").first().click();
+
   const boundary = page.getByTestId("route-error");
   await expect(boundary).toBeVisible();
   await expect(boundary.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByText("Application error: a client-side exception has occurred")).toHaveCount(0);
-
-  await boundary.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
 });

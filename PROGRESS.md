@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0 (env) and 1 (error visibility) are complete. **Next session: unit 1.2 = audit Batch 2** — convert public-flow actions (registration, cart, hotel, volunteer, vendor, transfers) to structured state / redirect-with-code, plus the ERR-04 `revalidatePath` fix. Read `docs/launch/runtime-defect-audit-2026-07-26.md` §ERR-03/ERR-04 first; use the Pattern A/B references named there.
+Audit Batches 0 (env), 1 (error visibility), and 2 (public flows) are complete. **Next session: unit 1.3 = audit Batch 3** — routing/redirect/checkout safety: RTE-01/02/04/06/07, CHK-01, and the CHK-02 open-redirect security fix (must not slip). Read the audit's Batch 3 section and defect entries first; verify with the host probe table plus a tenant-host store checkout walkthrough.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batches 0–1 done (2026-07-26); Batches 2–6 open; split runtime frozen |
+| 1 — Stabilize | In progress | Audit Batches 0–2 done (2026-07-27); Batches 3–6 open; split runtime frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-27 — Phase 1 unit 1.2: public-flow structured errors (audit Batch 2)
+
+- Closed ERR-03 (public subset) and ERR-04. The audit's "Batch 2 outcome" section carries the full conversion table and evidence.
+- Added the `PublicFormState`/`PublicActionError` contract; converted registration, store add/cart/checkout, voucher apply, hotel booking, volunteer, and vendor submissions to `useActionState` with controlled client forms — invalid input renders inline, entered values are retained, submits disable while pending, and success-path `redirect()` still works through the `…Inner` + `unstable_rethrow` wrapper (ERR-05 guard landed in every converted file).
+- Transfer accept/decline became redirect-with-notice: expired/used/invalid/policy outcomes land back on the decision page showing the refreshed request state; the ERR-04 revalidate-then-throw sites are gone.
+- New `tests/e2e/public-flow-errors.spec.ts` (6 cases incl. the double-submitted transfer decision); `error-visibility.spec.ts` updated — voucher case asserts inline + retained values, boundary regression re-anchored to the unconverted duplicate-member invite (Batch 5). 9/9 dev mode and 9/9 production mode (structured messages are not masked in production — that is the point of the pattern).
+- Touched-flow regressions green in isolation: policy 3/3, hotel 3/3, transfer/store/staff-vendor 13/13, account-registration 1/1. The six-file four-worker run reproduced the two documented contention flakes (policy deadlock at :121, hotel 120 s test timeout); both pass alone, matching pre-batch behavior. Repository gates 37/37.
+- `payVendorBooth` and organizer/platform action families intentionally remain throwing until Batch 5; the dashboard boundary from Batch 1 covers them meanwhile.
 
 ### 2026-07-26 — Phase 1 unit 1.1: error visibility (audit Batch 1)
 

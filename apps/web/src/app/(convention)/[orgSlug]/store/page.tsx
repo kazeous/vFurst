@@ -1,4 +1,4 @@
-import { addToCart } from "@/actions/cart-actions";
+import { AddToCartForm } from "@/components/store/add-to-cart-form";
 import { StoreCart } from "@/components/store/cart";
 import { auth } from "@/lib/auth";
 import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
@@ -349,26 +349,7 @@ export default async function PublicStorePage({
                     <strong>{formatCurrency(price, event.currency)}</strong>
                     {getSurchargeTotal(product.surcharges) > 0 ? <small className="vf-muted"> with surcharges</small> : null}
                   </p>
-                  {session?.user?.id ? <form action={addToCart} className="vf-form">
-                    <input type="hidden" name="productId" value={product.id} />
-                    {options.map((option) => (
-                      <label key={option.name}>
-                        {option.name}
-                        <select name={`option-${option.name}`} required>
-                          {option.values.map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ))}
-                    <label>
-                      Quantity
-                      <input name="quantity" type="number" min="1" max={product.stock} defaultValue="1" />
-                    </label>
-                    <Button label="Add to cart" type="submit" variant="primary" />
-                  </form> : null}
+                  {session?.user?.id ? <AddToCartForm productId={product.id} stock={product.stock} options={options} /> : null}
                 </Card>
               );
             })}

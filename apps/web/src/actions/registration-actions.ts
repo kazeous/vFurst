@@ -23,9 +23,11 @@ import {
   registrationReservationStatuses,
   runRegistrationPolicyTransaction
 } from "@/lib/registration-policy";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function getVoucherRestrictions(value: unknown) {
@@ -56,27 +58,42 @@ async function getValidVoucher(event: { id: string; orgId: string }, code: strin
   });
 
   if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
-    throw new Error("Voucher code was not found.");
+    throw new PublicActionError("Voucher code was not found.");
   }
 
   if (voucher.expiresAt && voucher.expiresAt < new Date()) {
-    throw new Error("Voucher code has expired.");
+    throw new PublicActionError("Voucher code has expired.");
   }
 
   if (voucher.maxUses != null && voucher.usedCount >= voucher.maxUses) {
-    throw new Error("Voucher code has reached its usage limit.");
+    throw new PublicActionError("Voucher code has reached its usage limit.");
   }
 
   const restrictions = getVoucherRestrictions(voucher.restrictions);
 
   if (restrictions.tierIds.length > 0 && !restrictions.tierIds.includes(typeId)) {
-    throw new Error("Voucher code is not valid for the selected registration tier.");
+    throw new PublicActionError("Voucher code is not valid for the selected registration tier.");
   }
 
   return voucher;
 }
 
-export async function createRegistration(formData: FormData) {
+export async function createRegistration(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await createRegistrationInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function createRegistrationInner(formData: FormData): Promise<PublicFormState> {
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -96,7 +113,7 @@ export async function createRegistration(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid registration.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid registration." };
   }
 
   const event = await prisma.event.findFirstOrThrow({
@@ -129,7 +146,7 @@ export async function createRegistration(formData: FormData) {
   const type = event.registrationTypes.find((registrationType) => registrationType.id === parsed.data.typeId);
 
   if (!type) {
-    throw new Error("Registration tier is not available.");
+    throw new PublicActionError("Registration tier is not available.");
   }
 
   const selectedAddOns = type.addOns
@@ -158,7 +175,7 @@ export async function createRegistration(formData: FormData) {
   const restrictions = voucher ? getVoucherRestrictions(voucher.restrictions) : null;
 
   if (parsed.data.checkoutMode === "cart" && restrictions?.compedRegistration) {
-    throw new Error("Comped registration vouchers can only be used with direct registration checkout.");
+    throw new PublicActionError("Comped registration vouchers can only be used with direct registration checkout.");
   }
 
   const registration = await runRegistrationPolicyTransaction(async (tx) => {

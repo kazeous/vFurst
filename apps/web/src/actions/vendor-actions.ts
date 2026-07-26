@@ -17,10 +17,12 @@ import {
   validateVendorDocumentMetadata,
   validateVendorDocumentUrl
 } from "@/lib/vendor/document-upload-policy";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function settingsObject(settings: unknown): Record<string, unknown> {
@@ -72,7 +74,7 @@ async function filesFromForm(orgId: string, eventId: string, formData: FormData)
     .filter((upload): upload is File => upload instanceof File && upload.size > 0);
 
   if (urls.length + uploads.length > VENDOR_DOCUMENT_MAX_COUNT) {
-    throw new Error(`Vendor applications may have at most ${VENDOR_DOCUMENT_MAX_COUNT} files.`);
+    throw new PublicActionError(`Vendor applications may have at most ${VENDOR_DOCUMENT_MAX_COUNT} files.`);
   }
 
   const uploadMetadata = uploads.map((upload) => ({ upload, ...validateVendorDocumentMetadata(upload) }));
@@ -155,7 +157,22 @@ export async function saveBoothConfig(formData: FormData) {
   revalidatePath(`/${formData.get("orgSlug") ?? ""}/vendor-apply`);
 }
 
-export async function submitApplication(formData: FormData) {
+export async function submitApplication(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    return await submitApplicationInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
+}
+
+async function submitApplicationInner(formData: FormData): Promise<PublicFormState> {
   const parsed = z
     .object({
       orgSlug: z.string().trim().min(1),
@@ -181,13 +198,13 @@ export async function submitApplication(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid vendor application.");
+    return { error: parsed.error.issues[0]?.message ?? "Invalid vendor application." };
   }
 
   const org = await getConventionOrg(parsed.data.orgSlug);
 
   if (!org) {
-    throw new Error("Organization not found.");
+    throw new PublicActionError("Organization not found.");
   }
 
   const event = await prisma.event.findFirstOrThrow({
@@ -206,7 +223,7 @@ export async function submitApplication(formData: FormData) {
   const selectedTable = config.tableTypes.find((table) => table.id === parsed.data.tableType);
 
   if (parsed.data.tableType && !selectedTable) {
-    throw new Error("The selected vendor table type does not belong to this event.");
+    throw new PublicActionError("The selected vendor table type does not belong to this event.");
   }
 
   const amenityIds = formData.getAll("amenityId").map((value) => String(value));

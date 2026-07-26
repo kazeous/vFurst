@@ -13,8 +13,11 @@ import {
   validateProductImageUrl
 } from "@/lib/store/product-image-policy";
 import { productOptionSchema, productSurchargeSchema } from "@/lib/store/pricing";
+import { publicActionErrorMessage } from "@/lib/public-action-error";
+import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function surchargesFromForm(formData: FormData, currency: "USD" | "VND") {
@@ -177,8 +180,20 @@ export async function deleteProduct(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
-export async function createOrder(formData: FormData) {
-  await convertCartToOrder(formData);
+export async function createOrder(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
+  try {
+    await convertCartToOrder(formData);
+    return {};
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+
+    if (message) {
+      return { error: message };
+    }
+
+    throw error;
+  }
 }
 
 export async function refundOrder(formData: FormData) {

@@ -1,4 +1,4 @@
-import { submitVolunteerApplication } from "@/actions/staff-actions";
+import { VolunteerForm } from "./volunteer-form";
 import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
 import { auth } from "@/lib/auth";
@@ -106,116 +106,15 @@ export default async function PublicVolunteerPage({
           <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
         </section>
       ) : (
-        <form action={submitVolunteerApplication} className="vf-section vf-form">
-          <input type="hidden" name="orgSlug" value={org.subdomain} />
-          <div>
-            <p className="vf-label">{event.name}</p>
-            <h2>Volunteer application</h2>
-            <p className="vf-muted">{event.description ?? "Tell the team where you can help."}</p>
-          </div>
-          <div className="vf-form-grid">
-            <label>
-              Full name
-              <input name="applicantName" defaultValue={session.user.name ?? ""} required />
-            </label>
-            <label>
-              Email
-              <input name="applicantEmail" type="email" defaultValue={session.user.email ?? ""} readOnly required />
-            </label>
-          </div>
-          <div className="vf-form-grid">
-            <label>
-              First choice
-              <select name="departmentId" required defaultValue={selectedDepartment?.id}>
-                {event.departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Second choice
-              <select name="preference2" defaultValue="">
-                <option value="">No preference</option>
-                {event.departments.map((department) => (
-                  <option key={department.id} value={department.name}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Third choice
-              <select name="preference3" defaultValue="">
-                <option value="">No preference</option>
-                {event.departments.map((department) => (
-                  <option key={department.id} value={department.name}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {fields.map((field) => {
-            if (field.type === "checkbox") {
-              return (
-                <label key={field.id} className="vf-check">
-                  <input name={`field-${field.id}`} type="checkbox" value="true" />
-                  {field.label}
-                </label>
-              );
-            }
-
-            if (field.type === "textarea") {
-              return (
-                <label key={field.id}>
-                  {field.label}
-                  <textarea name={`field-${field.id}`} rows={4} required={field.required} />
-                </label>
-              );
-            }
-
-            if (field.type === "select") {
-              return (
-                <label key={field.id}>
-                  {field.label}
-                  <select name={`field-${field.id}`} required={field.required}>
-                    <option value="">Choose one</option>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              );
-            }
-
-            return (
-              <label key={field.id}>
-                {field.label}
-                <input name={`field-${field.id}`} required={field.required} />
-              </label>
-            );
-          })}
-          <section className="vf-stack">
-            <h2>Availability</h2>
-            {[0, 1, 2].map((index) => (
-              <div key={index} className="vf-subform-row">
-                <label>
-                  Date
-                  <input name="availabilityDate" type="date" />
-                </label>
-                <label>
-                  Slots
-                  <input name="availabilitySlots" placeholder="morning, afternoon, evening" />
-                </label>
-              </div>
-            ))}
-          </section>
-          <Button label="Submit application" type="submit" variant="primary" />
-        </form>
+        <VolunteerForm
+          orgSlug={org.subdomain}
+          eventName={event.name}
+          eventDescription={event.description ?? "Tell the team where you can help."}
+          departments={event.departments.map((department) => ({ id: department.id, name: department.name }))}
+          fields={fields}
+          defaultApplicantName={session.user.name ?? ""}
+          applicantEmail={session.user.email ?? ""}
+        />
       )}
     </main>
   );

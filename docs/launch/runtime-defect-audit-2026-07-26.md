@@ -500,7 +500,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 |---|---|---|---|---|
 | 0 — Configuration | ENV-01, ENV-02, SPL-01 | **Complete** | 2026-07-26 | See "Batch 0 outcome" below |
 | 1 — Error visibility | ERR-01, ERR-02 | **Complete** | 2026-07-26 | See "Batch 1 outcome" below |
-| 2 — Public flows | ERR-03 (public), ERR-04 | Not started | | |
+| 2 — Public flows | ERR-03 (public), ERR-04 | **Complete** | 2026-07-27 | See "Batch 2 outcome" below |
 | 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | Not started | | |
 | 4 — Data and tests | DAT-01, TST-01, TST-03 | Not started | | |
 | 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | Not started | | |
@@ -594,3 +594,39 @@ and `global-error.tsx` covers client-side render crashes.
 
 - ERR-03 remains: the boundary makes thrown action errors readable, but inline structured state (values retained, field-level messages) is still Batch 2's conversion work.
 - The E2E runner starts a dev server that overwrites `.next`; production-mode runs need a fresh `next build` first. Worth folding into TST-02's CI smoke design.
+
+---
+
+# Batch 2 outcome — 2026-07-27
+
+**ERR-03 (public subset) and ERR-04 are closed.** Every public attendee flow now reports expected conditions as structured form state (Pattern A) or a redirect-with-notice (Pattern B); none of them reach the error boundary or a blank page.
+
+## Contract introduced
+
+- `lib/public-form-state.ts` — client-safe `PublicFormState` (`{ error?: string }`).
+- `lib/public-action-error.ts` — `PublicActionError` for expected, user-correctable conditions raised inside libs, plus `publicActionErrorMessage()` which also recognizes the pre-existing `RegistrationPolicyError` and `RateLimitExceededError`. Tenant-isolation invariants stay plain throws (the "Do not change" list is untouched).
+- Converted actions keep their body as an `…Inner` function and wrap it in `try { … } catch { unstable_rethrow; map-to-state; rethrow }`, so success-path `redirect()` still works and unexpected errors still reach the boundary/Sentry. This also lands the ERR-05 `unstable_rethrow` guard in every converted file.
+- Because structured state is returned data — not a thrown error — the messages are **not masked in production**; this was verified with production-mode Playwright runs.
+
+## Converted per flow (Pattern A = `useActionState` + controlled client form)
+
+| Flow | Action(s) | Form |
+|---|---|---|
+| Registration | `createRegistration` (voucher/tier/comped/parse → state; policy/rate-limit/payments via mapper) | `registration-flow.tsx` (alert `registration-error`, submits disabled while pending, step/client state retained) |
+| Store add | `addToCart` | new `components/store/add-to-cart-form.tsx` |
+| Cart | `updateQuantity`, `applyVoucher`, `createOrder` (checkout: empty-cart/stock → `PublicActionError`) | new `components/store/cart-forms.tsx` (quantity/voucher/checkout sub-forms; `cart.tsx` composes them) |
+| Hotel | `bookRoom` (cutoff/room-type/sold-out/not-found → expected) | new `hotel/booking-form.tsx` |
+| Volunteer | `submitVolunteerApplication` (required custom field → expected) | new `volunteer/volunteer-form.tsx` (controlled dynamic `formSchema` fields) |
+| Vendor | `submitApplication` + upload policy + file-count limit → `PublicActionError` | new `vendor-apply/vendor-apply-form.tsx` (values retained; file inputs excepted by nature) |
+| Transfers (Pattern B) | `acceptRegistrationTransfer` / `declineRegistrationTransfer` redirect to `/account/transfers/[id]?token=…&notice=accepted\|declined\|expired\|used\|invalid\|ineligible\|policy`; the decision page renders the notice above the refreshed status. The ERR-04 revalidate-then-throw sites are gone — expired/committed outcomes now revalidate and redirect, so the recipient always sees the real state. |
+| Libs | `assertPaidCheckoutAvailable` and the vendor document-upload policy now raise `PublicActionError` |
+
+`payVendorBooth` and the organizer-side action families intentionally remain for Batch 5.
+
+## Evidence
+
+- New `tests/e2e/public-flow-errors.spec.ts` (6/6): mid-flow sold-out tier, cart quantity above stock, hotel past-cutoff, required volunteer field (whitespace bypasses client validation), too-short vendor description with values retained, and the double-submitted transfer decision landing on `notice=invalid` with the ACCEPTED status visible — no boundary, no blank page.
+- Updated `tests/e2e/error-visibility.spec.ts` (3/3): wrong-password login; invalid voucher now asserted **inline** with the entered code retained and resubmit enabled; the boundary regression re-anchored to a deliberately unconverted organizer action (duplicate member invite, Batch 5's `ALREADY_MEMBER` case).
+- Both specs pass in dev mode (9/9) and production mode (9/9).
+- Touched-flow regressions: `registration-policy` 3/3, `hotel-resource-authorization` 3/3, `registration-transfer` + `store-resource-authorization` + `staff-vendor-resource-authorization` 13/13, `account-registration` 1/1. Two failures under a six-file four-worker run reproduced the **documented contention flakes** (`registration-policy.spec.ts:121` Postgres deadlock; hotel spec 120 s test-timeout) and pass 3/3 each in isolation — same behavior as recorded before this batch.
+- Repository gates: `turbo run type-check lint test build` 37/37.
