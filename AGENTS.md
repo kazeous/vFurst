@@ -1,29 +1,36 @@
 # vFurst — Convention Management SaaS
 
-A convention/event management platform (ConCat clone). Next.js 15 monorepo, Turborepo, PostgreSQL + Prisma, Stripe Connect.
+A convention/event management platform (ConCat clone, plus VND/SePay capabilities ConCat lacks). Next.js 15 monorepo, Turborepo, PostgreSQL + Prisma, Stripe Connect + SePay.
 
-## How this project is planned
+## How this project is planned (plan v2, 2026-07-26)
 
-The full build plan lives in `docs/plan/`, split into one file per phase so you never need to read it all at once:
+The plan lives in `docs/plan/`, one file per concern so you never read it all at once:
 
-- `docs/plan/00-reference.md` — tech stack, data model (ER diagram + all 29 entities), JSON field schemas, project structure. Read this once per session alongside whichever phase you're on.
-- `docs/plan/phase-0-foundation.md` through `phase-7-launch.md` — one file per build phase.
-- `docs/plan/verification-and-timeline.md` — the per-phase verification checklist.
+- `docs/plan/00-reference.md` — durable contracts: product/access model, money, stack, data-model pointers. Read once per session alongside the active phase.
+- `docs/plan/01-current-state.md` — what is implemented and verified (dated baseline).
+- `docs/plan/02-concat-parity.md` — ConCat parity matrix; the backlog IDs (`REG-P*`, `STO-P*`, `EVD-P*`, `RAF-P1`) that phases 2–5 reference.
+- `docs/plan/phase-1-stabilize.md` … `phase-6-launch.md` — the six phases.
+- `docs/plan/verification.md` — per-session and per-phase gates.
+- `docs/launch/runtime-defect-audit-2026-07-26.md` — the active defect register consumed by Phase 1.
 
-**Rule: only read the phase file for the phase you are currently building, plus `00-reference.md`. Do not read other phase files unless you're checking a cross-phase dependency (e.g. confirming an entity or action file created in an earlier phase actually exists).**
+**Rule: read `PROGRESS.md`, then `00-reference.md`, then only the active phase file. Open `01`/`02`/the audit only at the rows the phase file references. Do not read other phase files except to check a cross-phase dependency.**
+
+The pre-2026-07-26 plan (phases 0–7) and its session history are in git history only. Do not resurrect them.
 
 ## Current status
 
-Read `PROGRESS.md` before doing anything. It says which phase is active and what's already built. Don't trust this AGENTS.md file or the plan docs for "what's done" — they describe intent, not reality. `PROGRESS.md` and the actual repo contents are the only ground truth for what exists.
+Read `PROGRESS.md` before doing anything. It says which phase and unit is active. Don't trust this file or plan docs for "what's done" — `PROGRESS.md` and the repository are the only ground truth.
 
 ## Working rules
 
-1. **One phase per session (or one sub-section of a phase if it's large).** Don't start the next phase in the same session just because there's room left.
-2. **Verify before building.** Before creating a file the plan says is `[NEW]`, check if it already exists (`ls`, `grep`, or your file search tool). The plan is a spec, not a diff — if a previous session already built something, building it again will overwrite or duplicate it.
-3. **If the plan contradicts the actual codebase, stop and flag it** rather than guessing which one is right or silently improvising a fix.
-4. **End every session by updating `PROGRESS.md`** — even if the phase isn't finished. Note what's done, what's partial, and what the next session should do first.
-5. **Commit after each logical unit of work** (e.g. after a working feature, not after every file). Use conventional commit messages. This makes `git log` a reliable second source of truth if `PROGRESS.md` ever falls out of sync.
-6. **Run the phase's verification checklist** (see `docs/plan/verification-and-timeline.md`) before marking a phase complete in `PROGRESS.md`.
+1. **One phase unit per session** (a numbered unit in the phase file, or one audit batch in Phase 1). Don't start the next unit just because there's room left.
+2. **Verify before building.** Before creating anything, check whether it exists (`ls`, grep, file search). The plan is a spec, not a diff.
+3. **If the plan contradicts the codebase, stop and flag it** — never guess or silently improvise.
+4. **End every session by updating `PROGRESS.md`** — status, what's partial, and a concrete "next session should" line.
+5. **Commit after each logical unit** with conventional messages; `git log` is the second source of truth.
+6. **Run the gates in `docs/plan/verification.md`** for the session type; never record a pass claim from a focused run.
+7. **Error-handling patterns are fixed:** expected user conditions return structured form state or redirect-with-code — never bare `throw`. Tenant-isolation and payment-safety throws in the audit's "Do not change" list stay as throws.
+8. **Split runtime is frozen** (`apps/platform-manager`, `apps/tenant-web`): no new split work, no cutover, until Phase 1 completes and a decision is recorded. Keep `npm run test:split-topology` green.
 
 ## Environment files
 
@@ -46,7 +53,8 @@ and runs automatically on `npm run dev`. `node scripts/check-app-env.mjs <web|wo
 validates the required set and runs from `predev`/`prestart` — never during
 `next build`, so CI (which sets only `DATABASE_URL`) is unaffected. When adding a
 variable, add it to the app's `.env.example` **and** to the root files, or the
-sync will not carry it.
+sync will not carry it. `NEXT_PUBLIC_*` values are inlined at **build** time —
+runtime-only injection does nothing in production builds.
 
 Ports in local development: `apps/web` 3000, split runtimes 3200/3201 behind the
 edge proxy on 3100. Keep those ranges disjoint — `apps/web` silently retries onto
@@ -55,9 +63,8 @@ another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
 ## Commands
 
 - `turbo run dev` — start all apps
-- `turbo run build` — full build check
-- `turbo run type-check` — type check across monorepo
-- `turbo run lint` — lint across monorepo
+- `turbo run build` / `type-check` / `lint` — repo-wide gates
 - `cd packages/db && npx prisma validate` — validate schema
-- `npm run test` / `npm run test:e2e` — unit/integration + E2E tests
+- `npm run test` / `npm run test:e2e` — unit/integration + E2E (`E2E_PRODUCTION=1` for production mode)
 - `npm run env:sync` — regenerate per-app env files from `.env.local`
+- `docker compose up -d` + `npm run prestart --workspace @vfurst/web` — local stack + schema sync/backfills
