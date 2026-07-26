@@ -35,14 +35,14 @@ describe("platform-manager environment", () => {
 
   it("uses build-safe local defaults without production credentials", () => {
     expect(parsePlatformManagerEnv({})).toEqual({
-      managerUrl: "http://localhost:3000",
+      managerUrl: "http://localhost:3200",
       rootDomain: "localhost",
-      authUrl: "http://localhost:3000",
+      authUrl: "http://localhost:3200",
       authSecret: undefined,
       googleClientId: undefined,
       googleClientSecret: undefined,
       authClientId: "tenant-web",
-      authCallbackUrls: ["http://localhost:3001/auth/callback"],
+      authCallbackUrls: ["http://localhost:3201/auth/callback"],
       identityServiceSecret: undefined,
       identityPrivateKey: undefined,
       identityKeyId: "manager-local",

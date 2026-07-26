@@ -25,6 +25,33 @@ Read `PROGRESS.md` before doing anything. It says which phase is active and what
 5. **Commit after each logical unit of work** (e.g. after a working feature, not after every file). Use conventional commit messages. This makes `git log` a reliable second source of truth if `PROGRESS.md` ever falls out of sync.
 6. **Run the phase's verification checklist** (see `docs/plan/verification-and-timeline.md`) before marking a phase complete in `PROGRESS.md`.
 
+## Environment files
+
+Next.js only reads `.env*` from the application directory, and nothing in this
+repository loads the repository-root file into a process. Each runtime therefore
+owns its own file. Do not assume a value in the root file reaches an app.
+
+| File | Tracked | Role |
+|---|---|---|
+| `.env.local` | Yes | Local development source of truth. Edit this one. |
+| `.env.example` | Yes | Full documented template. |
+| `.env` | No | Personal overrides; may hold real credentials. Shadowed by `.env.local` for the sync script. |
+| `apps/web/.env.example`, `apps/worker/.env.example` | Yes | Each app's key contract; also the layout template for the generated file. |
+| `apps/web/.env.local`, `apps/worker/.env` | No | **Generated.** Never edit by hand. |
+| `packages/db/.env` | Yes | Prisma CLI default so `prisma validate` works standalone. |
+| `apps/platform-manager/.env.example`, `apps/tenant-web/.env.example` | Yes | Split-runtime contracts; `dev:split` injects values itself. |
+
+`node scripts/sync-app-env.mjs` regenerates the per-app files from `.env.local`
+and runs automatically on `npm run dev`. `node scripts/check-app-env.mjs <web|worker>`
+validates the required set and runs from `predev`/`prestart` — never during
+`next build`, so CI (which sets only `DATABASE_URL`) is unaffected. When adding a
+variable, add it to the app's `.env.example` **and** to the root files, or the
+sync will not carry it.
+
+Ports in local development: `apps/web` 3000, split runtimes 3200/3201 behind the
+edge proxy on 3100. Keep those ranges disjoint — `apps/web` silently retries onto
+another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
+
 ## Commands
 
 - `turbo run dev` — start all apps
@@ -33,3 +60,4 @@ Read `PROGRESS.md` before doing anything. It says which phase is active and what
 - `turbo run lint` — lint across monorepo
 - `cd packages/db && npx prisma validate` — validate schema
 - `npm run test` / `npm run test:e2e` — unit/integration + E2E tests
+- `npm run env:sync` — regenerate per-app env files from `.env.local`

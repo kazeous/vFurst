@@ -1,7 +1,12 @@
 import { spawn, execFileSync } from "node:child_process";
 import process from "node:process";
 
-const host = "127.0.0.1";
+// This host must match the NEXT_PUBLIC_APP_URL that apps/web was BUILT with
+// (apps/web/.env.local, derived from the repository-root file). Next.js inlines
+// every NEXT_PUBLIC_* variable into the bundle at build time, including in
+// server code, so the value injected below cannot override it in production
+// mode — it only takes effect in dev mode. Keep the two in agreement.
+const host = "localhost";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
 const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";

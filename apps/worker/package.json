@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node ../../scripts/sync-app-env.mjs && node ../../scripts/check-app-env.mjs worker",
     "dev": "tsx watch src/index.ts",
+    "prestart": "node ../../scripts/check-app-env.mjs worker",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run build --workspace @vfurst/contracts && npm run build --workspace @vfurst/db && npm run build --workspace @vfurst/email && npm run clean && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",

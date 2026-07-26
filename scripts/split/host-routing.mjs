@@ -74,8 +74,12 @@ export function readSplitHostConfig(environment = process.env) {
   return {
     bindHost: environment.VFURST_SPLIT_BIND_HOST?.trim() || "127.0.0.1",
     proxyPort: positivePort("VFURST_SPLIT_PROXY_PORT", environment.VFURST_SPLIT_PROXY_PORT, 3100),
-    managerPort: positivePort("VFURST_SPLIT_MANAGER_PORT", environment.VFURST_SPLIT_MANAGER_PORT, 3000),
-    tenantPort: positivePort("VFURST_SPLIT_TENANT_PORT", environment.VFURST_SPLIT_TENANT_PORT, 3001),
+    // Deliberately outside the legacy 3000/3001 range. `apps/web` binds 3000 and
+    // passes no explicit --port, so it silently retries onto another port when
+    // 3000 is taken while AUTH_URL still points at 3000 — which then resolves to
+    // platform-manager and breaks legacy login. Keep these disjoint.
+    managerPort: positivePort("VFURST_SPLIT_MANAGER_PORT", environment.VFURST_SPLIT_MANAGER_PORT, 3200),
+    tenantPort: positivePort("VFURST_SPLIT_TENANT_PORT", environment.VFURST_SPLIT_TENANT_PORT, 3201),
     managerHosts,
     tenantHosts,
     managedRootDomains,

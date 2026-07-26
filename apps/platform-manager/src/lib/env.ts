@@ -27,8 +27,9 @@ export const PLATFORM_MANAGER_ENV_NAMES = Object.freeze({
   revokeRateLimitPerMinute: "VFURST_MANAGER_REVOKE_RATE_LIMIT_PER_MINUTE"
 } as const);
 
-const LOCAL_MANAGER_URL = "http://localhost:3000";
-const LOCAL_TENANT_CALLBACK = "http://localhost:3001/auth/callback";
+// Kept off 3000/3001, which belong to the legacy `apps/web` runtime.
+const LOCAL_MANAGER_URL = "http://localhost:3200";
+const LOCAL_TENANT_CALLBACK = "http://localhost:3201/auth/callback";
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 

@@ -1,3 +1,5 @@
+// Must stay first: populates process.env before ./env.js validates it.
+import "./load-env.js";
 import { prisma } from "@vfurst/db";
 import { QUEUE_JOB_NAMES } from "@vfurst/contracts";
 import { QueueEvents, Worker } from "bullmq";

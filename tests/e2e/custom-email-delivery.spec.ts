@@ -318,6 +318,6 @@ test("transfer requests deliver the saved template with a safe single-use URL", 
 
   const transferMail = await waitForMail(markers.transfer, recipientEmail);
   expect(transferMail.HTML).toContain("Attendee &lt;One&gt; &amp; Co");
-  expect(transferMail.HTML).toContain('href="http://127.0.0.1:3000/transfer/');
-  expect(transferMail.Text).toContain("http://127.0.0.1:3000/transfer/");
+  expect(transferMail.HTML).toContain('href="http://localhost:3000/transfer/');
+  expect(transferMail.Text).toContain("http://localhost:3000/transfer/");
 });

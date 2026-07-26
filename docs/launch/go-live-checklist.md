@@ -30,7 +30,11 @@ The following managed-tenant gates are also mandatory. They require automated re
 - Suspending an organization blocks new tenant activity while signed callbacks, reconciliation, refunds, and settlement of existing orders continue safely.
 - The organizer UI contains no “create organization”, “all organizations”, or platform payment controls; marketing contains no self-service “create your workspace” promise.
 
-Required environment:
+Required environment. Supply these to each application process directly — the
+platform's own environment configuration, not a file. Next.js reads `.env*` only
+from the application directory and nothing loads the repository-root file, so a
+value placed there reaches nothing. `EMAIL_DELIVERY_ENCRYPTION_KEY` must be
+identical for the web and worker processes or queued email cannot be decrypted.
 
 ```bash
 NEXT_PUBLIC_APP_URL=https://your-production-domain.example
@@ -46,6 +50,7 @@ VFURST_DB_CONNECTION_BUDGET=80
 VFURST_WEB_REPLICAS=6
 VFURST_WORKER_REPLICAS=1
 REDIS_URL=rediss://your-managed-redis.example:6379
+EMAIL_DELIVERY_ENCRYPTION_KEY=...
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 CHECKOUT_TOKEN_SECRET=...

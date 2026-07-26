@@ -8,7 +8,10 @@
     "packages/*"
   ],
   "scripts": {
+    "env:sync": "node scripts/sync-app-env.mjs",
+    "predev": "node scripts/sync-app-env.mjs",
     "dev": "turbo run dev --filter=@vfurst/web --filter=@vfurst/worker",
+    "predev:split": "node scripts/sync-app-env.mjs",
     "dev:split": "node scripts/split/run-shells.mjs",
     "build": "turbo run build",
     "build:split": "turbo run build --filter=@vfurst/platform-manager --filter=@vfurst/tenant-web",
