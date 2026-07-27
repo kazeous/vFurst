@@ -80,7 +80,7 @@ describe("platform control-plane mutations", () => {
       _count: { members: 1 }
     });
 
-    await changeOrganizationStatus(lifecycleForm("SUSPENDED"));
+    await changeOrganizationStatus({}, lifecycleForm("SUSPENDED"));
 
     expect(mocks.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: "Serializable"
@@ -114,9 +114,9 @@ describe("platform control-plane mutations", () => {
       _count: { members: 1 }
     });
 
-    await expect(changeOrganizationStatus(lifecycleForm("PROVISIONING"))).rejects.toThrow(
-      "cannot move from Active to Provisioning"
-    );
+    await expect(changeOrganizationStatus({}, lifecycleForm("PROVISIONING"))).resolves.toEqual({
+      error: "Organization cannot move from Active to Provisioning."
+    });
 
     expect(mocks.tx.organization.updateMany).not.toHaveBeenCalled();
     expect(mocks.enqueueTenantControlPlaneEvent).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe("platform control-plane mutations", () => {
     });
     mocks.enqueueTenantControlPlaneEvent.mockRejectedValue(new Error("outbox unavailable"));
 
-    await expect(changeOrganizationStatus(lifecycleForm("SUSPENDED"))).rejects.toThrow("outbox unavailable");
+    await expect(changeOrganizationStatus({}, lifecycleForm("SUSPENDED"))).rejects.toThrow("outbox unavailable");
 
     expect(mocks.tx.organization.updateMany).toHaveBeenCalledOnce();
     expect(mocks.enqueueTenantControlPlaneEvent).toHaveBeenCalledOnce();
@@ -151,7 +151,7 @@ describe("platform control-plane mutations", () => {
       customDomainVerifiedById: adminId
     });
 
-    await activateOrganizationCustomDomain(organizationForm());
+    await activateOrganizationCustomDomain({}, organizationForm());
 
     expect(mocks.enqueueTenantControlPlaneEvent).toHaveBeenCalledWith(
       mocks.tx,

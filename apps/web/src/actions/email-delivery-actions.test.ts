@@ -76,7 +76,7 @@ describe("email delivery replay actions", () => {
   });
 
   it("derives organizer authorization from the delivery's stored event and preserves replay lineage", async () => {
-    await replayEventEmailDelivery(formData());
+    await replayEventEmailDelivery({}, formData());
 
     expect(mocks.requireEventAccess).toHaveBeenCalledWith(eventId);
     expect(mocks.prisma.emailDelivery.create).toHaveBeenCalledWith({
@@ -95,7 +95,7 @@ describe("email delivery replay actions", () => {
   it("stops before replay when the stored event is outside the organizer's authority", async () => {
     mocks.requireEventAccess.mockRejectedValue(new Error("forbidden"));
 
-    await expect(replayEventEmailDelivery(formData())).rejects.toThrow("forbidden");
+    await expect(replayEventEmailDelivery({}, formData())).rejects.toThrow("forbidden");
 
     expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
     expect(mocks.enqueueEmailDelivery).not.toHaveBeenCalled();
@@ -106,7 +106,9 @@ describe("email delivery replay actions", () => {
       original({ template: "password-reset", replayable: false, payloadCiphertext: null, payloadIv: null, payloadAuthTag: null })
     );
 
-    await expect(replayPlatformEmailDelivery(formData())).rejects.toThrow("cannot be replayed");
+    await expect(replayPlatformEmailDelivery({}, formData())).resolves.toEqual({
+      error: "This email contains an expired or single-use link and cannot be replayed."
+    });
 
     expect(mocks.prisma.emailDelivery.create).not.toHaveBeenCalled();
     expect(mocks.enqueueEmailDelivery).not.toHaveBeenCalled();

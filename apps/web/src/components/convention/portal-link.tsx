@@ -8,16 +8,16 @@ import type { ReactNode } from "react";
 export function PortalLink({
   children,
   className,
-  subdomain,
+  slug,
   suffix = ""
 }: {
   children: ReactNode;
   className?: string;
-  subdomain: string;
+  slug: string;
   suffix?: string;
 }) {
   const pathname = usePathname();
-  const href = getPortalHref(pathname, subdomain, suffix);
+  const href = getPortalHref(pathname, slug, suffix);
 
   return (
     <Link className={className} href={href}>

@@ -1,6 +1,8 @@
 "use server";
 
 import { convertCartToOrder } from "@/actions/cart-actions";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requireOrderAccess, requireStoreProductAccess } from "@/lib/dashboard-access";
 import { parseMoney } from "@/lib/registration/pricing";
 import { getStripe } from "@/lib/payments/stripe";
@@ -13,7 +15,7 @@ import {
   validateProductImageUrl
 } from "@/lib/store/product-image-policy";
 import { productOptionSchema, productSurchargeSchema } from "@/lib/store/pricing";
-import { publicActionErrorMessage } from "@/lib/public-action-error";
+import { ExpectedActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -65,7 +67,7 @@ async function imagesFromForm(orgId: string, eventId: string, formData: FormData
   const requestedImageCount = imageUrls.length + uploads.length;
 
   if (requestedImageCount > 0 && existingImageCount + requestedImageCount > PRODUCT_IMAGE_MAX_COUNT) {
-    throw new Error(`Products may have at most ${PRODUCT_IMAGE_MAX_COUNT} images.`);
+    throw new ExpectedActionError(`Products may have at most ${PRODUCT_IMAGE_MAX_COUNT} images.`);
   }
 
   const uploadedUrls: string[] = [];
@@ -90,7 +92,14 @@ const productSchema = z.object({
   category: z.string().trim().optional()
 });
 
-export async function createProduct(formData: FormData) {
+export async function createProduct(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createProductInner(formData), "Product created.");
+}
+
+async function createProductInner(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const { event } = await requireEventAccess(eventId);
   const parsed = productSchema.safeParse({
@@ -102,7 +111,7 @@ export async function createProduct(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid product.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid product.");
   }
 
   const surcharges = surchargesFromForm(formData, event.currency);
@@ -127,7 +136,14 @@ export async function createProduct(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
-export async function updateProduct(formData: FormData) {
+export async function updateProduct(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => updateProductInner(formData), "Product saved.");
+}
+
+async function updateProductInner(formData: FormData) {
   const productId = z.string().uuid().parse(formData.get("productId"));
   const { storeProduct, event } = await requireStoreProductAccess(productId);
   const parsed = productSchema.safeParse({
@@ -139,7 +155,7 @@ export async function updateProduct(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid product.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid product.");
   }
 
   const existingImages = storedImageUrls(storeProduct.images);

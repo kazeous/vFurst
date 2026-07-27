@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import { allowedEventEmailTokens, renderCustomEmailTemplate, type EventEmailTemplateKey } from "@vfurst/email";
 import { replayEventEmailDelivery } from "@/actions/email-delivery-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import type { EmailDeliveryStatus } from "@vfurst/db";
 
@@ -191,10 +192,10 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
                 </span>
                 <span>
                   {canReplay ? (
-                    <form action={replayEventEmailDelivery}>
+                    <ActionStateForm action={replayEventEmailDelivery} errorTestId="event-email-replay-error">
                       <input type="hidden" name="deliveryId" value={delivery.id} />
                       <Button label="Replay" type="submit" size="sm" />
-                    </form>
+                    </ActionStateForm>
                   ) : delivery.status === "DEAD_LETTERED" && !delivery.replayable ? (
                     <small>Single-use content</small>
                   ) : (

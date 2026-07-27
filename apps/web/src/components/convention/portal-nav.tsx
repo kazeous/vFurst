@@ -13,14 +13,14 @@ const items = [
   { suffix: "/vendor-apply", label: "Vendors" }
 ];
 
-export function PortalNav({ subdomain }: { subdomain: string }) {
+export function PortalNav({ slug }: { slug: string }) {
   const pathname = usePathname();
 
   return (
     <nav className="vf-portal-nav" aria-label="Convention portal navigation">
       {items.map((item) => {
-        const href = getPortalHref(pathname, subdomain, item.suffix);
-        const portalRoot = getPortalHref(pathname, subdomain);
+        const href = getPortalHref(pathname, slug, item.suffix);
+        const portalRoot = getPortalHref(pathname, slug);
         const active = item.suffix ? pathname.startsWith(href) : pathname === portalRoot || pathname === `${portalRoot}/`;
         return <Link key={item.label} href={href} aria-current={active ? "page" : undefined}>{item.label}</Link>;
       })}

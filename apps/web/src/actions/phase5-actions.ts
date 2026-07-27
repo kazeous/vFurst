@@ -1,6 +1,8 @@
 "use server";
 
 import { badgeQueue } from "@/lib/badge-queue";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { createRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 import {
   requireBadgeAccess,
@@ -15,6 +17,7 @@ import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { parseMoney } from "@/lib/registration/pricing";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -89,14 +92,14 @@ async function prepareBadgeImageAssets(
 
       if (upload instanceof File && upload.size > 0) {
         const extension = badgeImageTypes.get(upload.type);
-        if (!extension) throw new Error("Badge images must be PNG or JPEG files.");
-        if (upload.size > BADGE_IMAGE_MAX_BYTES) throw new Error("Badge images must be 5 MB or smaller.");
+        if (!extension) throw new ExpectedActionError("Badge images must be PNG or JPEG files.");
+        if (upload.size > BADGE_IMAGE_MAX_BYTES) throw new ExpectedActionError("Badge images must be 5 MB or smaller.");
         const bytes = Buffer.from(await upload.arrayBuffer());
         const hasPngSignature =
           bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
         const hasJpegSignature = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
         if ((extension === "png" && !hasPngSignature) || (extension === "jpg" && !hasJpegSignature)) {
-          throw new Error("Badge image content does not match its PNG or JPEG file type.");
+          throw new ExpectedActionError("Badge image content does not match its PNG or JPEG file type.");
         }
 
         assetKey = buildObjectKey(
@@ -108,7 +111,7 @@ async function prepareBadgeImageAssets(
       }
 
       if (!assetKey) {
-        throw new Error(`Upload a PNG or JPEG file for image layer ${element.id}.`);
+        throw new ExpectedActionError(`Upload a PNG or JPEG file for image layer ${element.id}.`);
       }
       if (!isTenantAssetKey(assetKey, orgId)) {
         throw new Error(`Image layer ${element.id} does not reference an asset owned by this organization.`);
@@ -197,7 +200,21 @@ function badgeBarcode(registrationId: string) {
   return `VF-${registrationId.slice(0, 8).toUpperCase()}`;
 }
 
-export async function saveBadgeTemplate(formData: FormData) {
+export async function saveBadgeTemplate(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => saveBadgeTemplateInner(formData), "Badge template saved.");
+}
+
+async function saveBadgeTemplateInner(formData: FormData) {
+  let rawLayout: unknown;
+  try {
+    rawLayout = JSON.parse(String(formData.get("layout") ?? "{}"));
+  } catch {
+    throw new ExpectedActionError("The badge layout is invalid.");
+  }
+
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -210,7 +227,7 @@ export async function saveBadgeTemplate(formData: FormData) {
       eventId: formData.get("eventId"),
       templateId: formData.get("templateId") || undefined,
       name: formData.get("name"),
-      layout: JSON.parse(String(formData.get("layout") ?? "{}")),
+      layout: rawLayout,
       defaultTypeIds: formData
         .getAll("defaultTypeIds")
         .map(String)
@@ -218,7 +235,7 @@ export async function saveBadgeTemplate(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid badge template.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid badge template.");
   }
 
   const authorized = parsed.data.templateId
@@ -871,7 +888,14 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/raffle`);
 }
 
-export async function drawRaffleWinner(formData: FormData) {
+export async function drawRaffleWinner(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => drawRaffleWinnerInner(formData), "Raffle winner recorded.");
+}
+
+async function drawRaffleWinnerInner(formData: FormData) {
   const raffleId = z.string().uuid().parse(formData.get("raffleId"));
   const prizeName = z.string().trim().min(1).parse(formData.get("prizeName"));
   const { raffle: authorizedRaffle, event } = await requireRaffleAccess(raffleId);
@@ -891,7 +915,7 @@ export async function drawRaffleWinner(formData: FormData) {
 
     const awardedCount = await tx.raffleDrawResult.count({ where: { raffleId: raffle.id, prizeName: selectedPrize.name } });
     if (awardedCount >= selectedPrize.quantity) {
-      throw new Error("All available quantities of this prize have already been awarded.");
+      throw new ExpectedActionError("All available quantities of this prize have already been awarded.");
     }
 
     const previousWinners = new Set(
@@ -918,7 +942,7 @@ export async function drawRaffleWinner(formData: FormData) {
     }
 
     const winner = weightedWinner(Array.from(eligibleByUser.values()));
-    if (!winner) throw new Error("This raffle has no eligible entries remaining.");
+    if (!winner) throw new ExpectedActionError("This raffle has no eligible entries remaining.");
 
     const draw = await tx.raffleDrawResult.create({
       data: {

@@ -1,4 +1,5 @@
 import { activateOrganizationCustomDomain, verifyOrganizationCustomDomain } from "@/actions/platform-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,13 +113,13 @@ export default async function PlatformDomainsPage() {
                 <div className="vf-actions">
                   <Button label="Open organization" href={`/platform/organizations/${org.id}`} />
                   {canVerify ? (
-                    <form action={verifyOrganizationCustomDomain}>
+                    <ActionStateForm action={verifyOrganizationCustomDomain} errorTestId="domain-verification-error">
                       <input type="hidden" name="orgId" value={org.id} />
                       <Button label="Verify DNS ownership" type="submit" variant="primary" />
-                    </form>
+                    </ActionStateForm>
                   ) : null}
                   {org.customDomainStatus === "VERIFIED" ? (
-                    <form action={activateOrganizationCustomDomain}>
+                    <ActionStateForm action={activateOrganizationCustomDomain}>
                       <input type="hidden" name="orgId" value={org.id} />
                       <Button
                         label="Activate public routing"
@@ -126,7 +127,7 @@ export default async function PlatformDomainsPage() {
                         variant="primary"
                         isDisabled={!canActivate}
                       />
-                    </form>
+                    </ActionStateForm>
                   ) : null}
                 </div>
                 {org.customDomainStatus === "VERIFIED" && org.status !== "ACTIVE" ? (

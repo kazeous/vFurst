@@ -8,6 +8,7 @@ import { getVendorConfig } from "@/lib/vendor/config";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ActionStateForm } from "@/components/action-state-form";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -98,11 +99,11 @@ export default async function PublicVendorApplyPage({
             <Badge label={successApplication.status} variant={statusVariant(successApplication.status)} />
           </div>
           {successApplication.status === "APPROVED" && successApplication.boothAssignment && !successApplication.boothPaidAt ? (
-            <form action={payVendorBooth}>
+            <ActionStateForm action={payVendorBooth} errorTestId="vendor-booth-payment-error">
               <input type="hidden" name="applicationId" value={successApplication.id} />
               <input type="hidden" name="orgSlug" value={org.subdomain} />
               <Button label="Pay booth invoice" type="submit" variant="primary" />
-            </form>
+            </ActionStateForm>
           ) : null}
           {successApplication.boothPaidAt ? <p className="vf-muted">Booth payment is complete.</p> : null}
         </section>

@@ -8,7 +8,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { PortalLink } from "./portal-link";
 import { PortalNav } from "./portal-nav";
 
-type PortalOrganization = { name: string; subdomain: string; logo: string | null };
+type PortalOrganization = { name: string; slug: string; subdomain: string; logo: string | null };
 type PortalEvent = { name: string; venue: string | null; startDate: Date; endDate: Date; settings: Prisma.JsonValue } | null;
 
 function initials(value: string) {
@@ -30,7 +30,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
     <div className="vf-portal-shell" style={shellStyle}>
       <header className="vf-portal-header">
         <div className="vf-portal-topbar">
-          <PortalLink className="vf-portal-identity" subdomain={org.subdomain}>
+          <PortalLink className="vf-portal-identity" slug={org.slug}>
             <span className="vf-portal-logo" style={imageStyle(branding.logoUrl)}>{branding.logoUrl ? null : initials(event?.name ?? org.name)}</span>
             <span><strong>{event?.name ?? org.name}</strong><small>Official convention portal</small></span>
           </PortalLink>
@@ -39,7 +39,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
             <Link className="vf-portal-powered" href={getCentralAppUrl("/")}>Powered by <strong>vFurst</strong></Link>
           </div>
         </div>
-        <PortalNav subdomain={org.subdomain} />
+        <PortalNav slug={org.slug} />
       </header>
 
       {event ? (
@@ -50,7 +50,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
               <h1>{event.name}</h1>
               <span>{formatDateRange(event.startDate, event.endDate)}{event.venue ? <><i>·</i><MapPin size={15} aria-hidden="true" />{event.venue}</> : null}</span>
             </div>
-            <PortalLink className="vf-portal-primary-action" subdomain={org.subdomain} suffix="/register">Get tickets <ArrowRight size={17} /></PortalLink>
+            <PortalLink className="vf-portal-primary-action" slug={org.slug} suffix="/register">Get tickets <ArrowRight size={17} /></PortalLink>
           </div>
         </section>
       ) : null}
@@ -59,7 +59,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
 
       <footer className="vf-portal-footer">
         <span>{event?.name ?? org.name}</span>
-        <div><PortalLink subdomain={org.subdomain} suffix="/register">Tickets</PortalLink><PortalLink subdomain={org.subdomain} suffix="/volunteer">Volunteer</PortalLink><Link href={getCentralAppUrl("/privacy")}>Privacy</Link></div>
+        <div><PortalLink slug={org.slug} suffix="/register">Tickets</PortalLink><PortalLink slug={org.slug} suffix="/volunteer">Volunteer</PortalLink><Link href={getCentralAppUrl("/privacy")}>Privacy</Link></div>
         <small>Secure registration and payments by vFurst.</small>
       </footer>
     </div>

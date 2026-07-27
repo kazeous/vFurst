@@ -1,6 +1,7 @@
 "use client";
 
 import { createEventWithRegistrationTypes } from "@/actions/event-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/segmented-control";
 import { useState } from "react";
@@ -24,7 +25,11 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
   const [currency, setCurrency] = useState<"USD" | "VND">("USD");
 
   return (
-    <form action={createEventWithRegistrationTypes} className="vf-section vf-wizard">
+    <ActionStateForm
+      action={createEventWithRegistrationTypes}
+      className="vf-section vf-wizard"
+      errorTestId="event-wizard-error"
+    >
       <SegmentedControl value={step} onChange={(value) => setStep(value as Step)} label="Event creation step">
         {steps.map((item) => (
           <SegmentedControlItem key={item.id} value={item.id} label={item.label} />
@@ -133,6 +138,6 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
         <Button label="Review" type="button" onClick={() => setStep("review")} />
         <Button label="Create event" type="submit" variant="primary" />
       </div>
-    </form>
+    </ActionStateForm>
   );
 }

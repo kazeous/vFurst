@@ -11,11 +11,11 @@ export type ProductImageType = keyof typeof PRODUCT_IMAGE_TYPES;
 
 export function validateProductImageMetadata(file: { size: number; type: string }) {
   if (!(file.type in PRODUCT_IMAGE_TYPES)) {
-    throw new Error("Product images must be PNG, JPEG, or WebP files.");
+    throw new ExpectedActionError("Product images must be PNG, JPEG, or WebP files.");
   }
 
   if (file.size > PRODUCT_IMAGE_MAX_BYTES) {
-    throw new Error("Product images must be 5 MB or smaller.");
+    throw new ExpectedActionError("Product images must be 5 MB or smaller.");
   }
 
   return {
@@ -53,7 +53,7 @@ export function validateProductImageContents(bytes: Uint8Array, contentType: Pro
     (contentType === "image/webp" && isWebp);
 
   if (!matches) {
-    throw new Error("Product image contents do not match the declared file type.");
+    throw new ExpectedActionError("Product image contents do not match the declared file type.");
   }
 }
 
@@ -61,18 +61,19 @@ export function validateProductImageUrl(value: string) {
   let url: URL;
 
   if (value.length > 2_048) {
-    throw new Error("Product image URLs must be valid HTTP or HTTPS URLs.");
+    throw new ExpectedActionError("Product image URLs must be valid HTTP or HTTPS URLs.");
   }
 
   try {
     url = new URL(value);
   } catch {
-    throw new Error("Product image URLs must be valid HTTP or HTTPS URLs.");
+    throw new ExpectedActionError("Product image URLs must be valid HTTP or HTTPS URLs.");
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Product image URLs must be valid HTTP or HTTPS URLs.");
+    throw new ExpectedActionError("Product image URLs must be valid HTTP or HTTPS URLs.");
   }
 
   return url.toString();
 }
+import { ExpectedActionError } from "@/lib/public-action-error";

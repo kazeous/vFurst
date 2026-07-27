@@ -7,6 +7,9 @@ import {
   requireRegistrationTypeAccess
 } from "@/lib/dashboard-access";
 import { eventSettingsSchema, mergeCoreEventSettings } from "@/lib/event-settings";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import { parseMoney } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -36,11 +39,14 @@ const createEventSchema = eventDetailsSchema.extend({
   maxRegistrationsPerUser: z.coerce.number().int().min(1).max(20).optional()
 });
 
-const updateEventSchema = eventDetailsSchema.extend({
-  eventId: z.string().uuid()
-});
+export async function createEvent(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createEventInner(formData));
+}
 
-export async function createEvent(formData: FormData) {
+async function createEventInner(formData: FormData) {
   const parsed = createEventSchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
@@ -52,11 +58,11 @@ export async function createEvent(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid event details.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid event details.");
   }
 
   if (parsed.data.endDate < parsed.data.startDate) {
-    throw new Error("End date must be after the start date.");
+    throw new ExpectedActionError("End date must be after the start date.");
   }
 
   await requireOrgAccess(parsed.data.orgId);
@@ -78,42 +84,14 @@ export async function createEvent(formData: FormData) {
   redirect(`/dashboard/organizations/${parsed.data.orgId}?event=${event.id}`);
 }
 
-export async function updateEvent(formData: FormData) {
-  const parsed = updateEventSchema.safeParse({
-    eventId: formData.get("eventId"),
-    name: formData.get("name"),
-    description: formData.get("description"),
-    slug: formData.get("slug"),
-    venue: formData.get("venue"),
-    startDate: formData.get("startDate"),
-    endDate: formData.get("endDate")
-  });
-
-  if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid event details.");
-  }
-
-  const { event: authorizedEvent } = await requireEventAccess(parsed.data.eventId);
-
-  await prisma.event.update({
-    where: {
-      id: parsed.data.eventId
-    },
-    data: {
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      description: parsed.data.description,
-      venue: parsed.data.venue,
-      startDate: parsed.data.startDate,
-      endDate: parsed.data.endDate
-    }
-  });
-
-  revalidatePath(`/dashboard/organizations/${authorizedEvent.orgId}`);
-  revalidatePath(`/dashboard/events/${authorizedEvent.id}`);
+export async function updateEventSettings(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => updateEventSettingsInner(formData));
 }
 
-export async function updateEventSettings(formData: FormData) {
+async function updateEventSettingsInner(formData: FormData) {
   const parsed = eventSettingsSchema.safeParse({
     eventId: formData.get("eventId"),
     name: formData.get("name"),
@@ -128,7 +106,7 @@ export async function updateEventSettings(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid event settings.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid event settings.");
   }
 
   const { event: authorizedEvent } = await requireEventAccess(parsed.data.eventId);
@@ -172,7 +150,14 @@ export async function updateEventSettings(formData: FormData) {
   redirect(`/dashboard/events/${parsed.data.eventId}/settings?saved=1`);
 }
 
-export async function createEventWithRegistrationTypes(formData: FormData) {
+export async function createEventWithRegistrationTypes(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createEventWithRegistrationTypesInner(formData));
+}
+
+async function createEventWithRegistrationTypesInner(formData: FormData) {
   const parsed = createEventSchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
@@ -188,11 +173,11 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid event details.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid event details.");
   }
 
   if (parsed.data.endDate < parsed.data.startDate) {
-    throw new Error("End date must be after the start date.");
+    throw new ExpectedActionError("End date must be after the start date.");
   }
 
   await requireOrgAccess(parsed.data.orgId);
@@ -215,7 +200,7 @@ export async function createEventWithRegistrationTypes(formData: FormData) {
     .filter((tier) => tier.name.length > 0);
 
   if (tierInputs.length === 0) {
-    throw new Error("Create at least one registration tier.");
+    throw new ExpectedActionError("Create at least one registration tier.");
   }
 
   const event = await prisma.event.create({

@@ -1,4 +1,5 @@
 import { updateCustomDomain, updateOrganization } from "@/actions/org-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { getCustomDomainRecords } from "@/lib/custom-domain";
 import { requireOrgPageAccess } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
@@ -39,7 +40,7 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
       </header>
       <section className="vf-two-column">
         <Card>
-          <form action={updateOrganization} className="vf-form">
+          <ActionStateForm action={updateOrganization} className="vf-form" errorTestId="organization-settings-error">
             <input type="hidden" name="orgId" value={org.id} />
             <h2>Organization</h2>
             <label>
@@ -96,11 +97,11 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
               <input name="payoutAccountHolder" defaultValue={org.payoutAccountHolder ?? ""} />
             </label>
             <Button label="Save settings" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </Card>
         <Card>
           <div className="vf-stack">
-            <form action={updateCustomDomain} className="vf-form">
+            <ActionStateForm action={updateCustomDomain} className="vf-form" errorTestId="custom-domain-error">
               <input type="hidden" name="orgId" value={org.id} />
               <h2>Custom domain</h2>
               <p className="vf-muted">Submit a domain for verification. Only the vFurst platform operator can activate public routing.</p>
@@ -109,7 +110,7 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
                 <input name="customDomain" defaultValue={org.requestedCustomDomain ?? ""} placeholder="con.example.com" />
               </label>
               <Button label="Save request" type="submit" />
-            </form>
+            </ActionStateForm>
             <dl className="vf-details">
               <dt>Request status</dt>
               <dd>{org.customDomainStatus ?? "Not requested"}</dd>

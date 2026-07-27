@@ -353,6 +353,25 @@ test("hotel block and booking mutations derive access from stored resources", as
   expect(created.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
 });
 
+test("hotel-block validation renders inline and retains organizer input", async ({ page }) => {
+  await loginAsOwnerA(page);
+  const hotelPath = `/dashboard/events/${eventAId}/hotel`;
+  await page.goto(hotelPath);
+  const createForm = page.getByRole("button", { name: "Create block" }).locator("xpath=ancestor::form");
+  await createForm.getByLabel("Hotel name").fill(`Inline Hotel ${runId}`);
+  await createForm.locator('input[name="cutoffDate"]').fill("2028-06-01");
+  await createForm.locator('input[name="roomName"]').first().evaluate((input) => input.removeAttribute("required"));
+  await createForm.locator('input[name="roomRate"]').first().evaluate((input) => input.removeAttribute("required"));
+  await createForm.locator('input[name="roomTotal"]').first().evaluate((input) => input.removeAttribute("required"));
+  await createForm.getByRole("button", { name: "Create block" }).click();
+
+  await expect(page.getByTestId("create-hotel-block-error")).toContainText("Create at least one room type.");
+  await expect(createForm.getByLabel("Hotel name")).toHaveValue(`Inline Hotel ${runId}`);
+  await expect(createForm.getByRole("button", { name: "Create block" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.hotelBlock.count({ where: { hotelName: `Inline Hotel ${runId}` } })).toBe(0);
+});
+
 test("public VND hotel booking creates an event-scoped order", async ({ page }) => {
   await loginAs(page, validGuestEmail);
   await page.goto(`/${orgASlug}/hotel`);

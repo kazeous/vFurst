@@ -1,7 +1,11 @@
 import { createHostPolicy, normalizeHostname } from "@vfurst/tenant-context";
 
 export const CANONICAL_ROOT_DOMAIN = "vfurst.reyuugames.com";
-const RESERVED_PLATFORM_SUBDOMAINS = ["api", "app", "console", "manager", "www"] as const;
+export const RESERVED_PLATFORM_SUBDOMAINS = ["api", "app", "console", "manager", "www"] as const;
+
+export function isReservedPlatformSubdomain(value: string) {
+  return (RESERVED_PLATFORM_SUBDOMAINS as readonly string[]).includes(value.trim().toLowerCase());
+}
 
 function hostnameFromUrlOrHost(value: string | undefined) {
   const trimmed = value?.trim();

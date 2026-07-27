@@ -8,6 +8,7 @@ const password = "BoundaryPass123!";
 const platformEmail = `boundary-platform-${runId}@example.com`;
 const ownerEmail = `boundary-owner-${runId}@example.com`;
 const orgSlug = `boundary-org-${runId}`;
+const orgSubdomain = `boundary-host-${runId}`;
 const requestedDomain = `boundary-${runId}.example.test`;
 
 let orgId: string;
@@ -37,7 +38,7 @@ test.beforeAll(async () => {
     data: {
       name: "Boundary Organization",
       slug: orgSlug,
-      subdomain: orgSlug,
+      subdomain: orgSubdomain,
       contactEmail: ownerEmail,
       status: "ACTIVE",
       statusUpdatedById: platformAdmin.id,
@@ -57,6 +58,12 @@ test.beforeAll(async () => {
 
   orgId = org.id;
   platformAdminId = platformAdmin.id;
+  await prisma.organizerLedgerEntry.createMany({
+    data: [
+      { orgId, currency: "VND", amount: 700, type: "ADJUSTMENT", note: "Batch 5 payout proof A" },
+      { orgId, currency: "VND", amount: 300, type: "ADJUSTMENT", note: "Batch 5 payout proof B" }
+    ]
+  });
 });
 
 test.afterAll(async () => {
@@ -105,6 +112,16 @@ test("platform admin owns domain activation and global payment operations", asyn
   await expect(page.getByRole("heading", { name: "Custom domains" })).toBeVisible();
   await expect(page.getByText(requestedDomain, { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify DNS ownership" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Verify DNS ownership" }).click();
+  await expect(page.getByTestId("domain-verification-error")).toContainText(
+    "The required DNS ownership record is not visible yet."
+  );
+  await expect(page.getByRole("button", { name: "Verify DNS ownership" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect((await prisma.organization.findUniqueOrThrow({ where: { id: orgId } })).customDomainStatus).toBe(
+    "PENDING_VERIFICATION"
+  );
 
   // Stage the successful DNS result so this browser test can exercise activation without relying on public DNS.
   await prisma.organization.update({
@@ -157,9 +174,40 @@ test("platform admin owns domain activation and global payment operations", asyn
   const centralRegistrationHtml = await centralRegistrationResponse.text();
   expect(centralRegistrationHtml).toContain(`href="/${orgSlug}/register"`);
 
+  const managedHostResponse = await page.request.get("/register", {
+    headers: { host: `${orgSubdomain}.localhost:3000` }
+  });
+  expect(managedHostResponse.status()).toBe(200);
+  const managedHostHtml = await managedHostResponse.text();
+  expect(managedHostHtml).toContain('href="/register"');
+  expect(managedHostHtml).not.toContain(`href="/${orgSlug}/register"`);
+
+  const lanHostResponse = await page.request.get("/", { headers: { host: "192.168.1.20:3000" } });
+  if (process.env.E2E_PRODUCTION === "1") {
+    expect(lanHostResponse.status()).toBe(404);
+  } else {
+    expect(lanHostResponse.status()).toBe(200);
+    expect(await lanHostResponse.text()).toContain("Run the whole convention from one calm workspace.");
+  }
+
   await page.goto("/platform/payments");
   await expect(page.getByRole("heading", { name: "Payments and settlement" })).toBeVisible();
   await expect(page.getByText("Enable Stripe platform-wide")).toBeVisible();
   await expect(page.getByRole("link", { name: "Export open ledger CSV" })).toHaveAttribute("href", "/platform/payments/payouts/export");
   expect((await page.request.get("/platform/payments/payouts/export")).status()).toBe(200);
+
+  const payoutForm = page.getByRole("button", { name: "Record payout" }).locator("xpath=ancestor::form");
+  const entryCheckboxes = payoutForm.locator('input[name="entryId"]');
+  await expect(entryCheckboxes).toHaveCount(2);
+  await entryCheckboxes.last().uncheck();
+  await payoutForm.getByLabel("Bank transfer reference").fill(`PAY-${runId}`);
+  await payoutForm.getByRole("button", { name: "Record payout" }).click();
+  await expect(page.getByTestId("organizer-payout-error")).toContainText(
+    "The payout cannot exceed the selected positive balance."
+  );
+  await expect(payoutForm.getByLabel("Payout amount (VND)")).toHaveValue("1000");
+  await expect(payoutForm.getByLabel("Bank transfer reference")).toHaveValue(`PAY-${runId}`);
+  await expect(payoutForm.getByRole("button", { name: "Record payout" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.organizerPayout.count({ where: { orgId } })).toBe(0);
 });

@@ -229,6 +229,16 @@ test("draw stores an immutable result and exposes only the signed-in attendee's 
   await drawRaffle.getByRole("button", { name: "Draw winner" }).click({ noWaitAfter: true });
   await expect.poll(() => prisma.raffleDrawResult.count({ where: { raffleId: confirmedRaffleId } })).toBe(1);
 
+  await page.goto(`/dashboard/events/${eventId}/raffle`);
+  const exhaustedRaffle = page.locator("article", { hasText: "Confirmed Registration Raffle" });
+  await exhaustedRaffle.getByRole("button", { name: "Draw winner" }).click();
+  await expect(page.getByTestId("raffle-draw-error")).toContainText(
+    "All available quantities of this prize have already been awarded."
+  );
+  await expect(exhaustedRaffle.getByRole("button", { name: "Draw winner" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.raffleDrawResult.count({ where: { raffleId: confirmedRaffleId } })).toBe(1);
+
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
   expect((event.settings as { raffleHistory?: unknown }).raffleHistory).toBeUndefined();
 

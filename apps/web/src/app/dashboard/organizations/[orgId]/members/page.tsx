@@ -1,4 +1,5 @@
 import { inviteMember, removeMember } from "@/actions/org-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { revokeOrganizationInvitation } from "@/actions/invitation-actions";
 import { getOrganizationInvitationState } from "@/lib/organization-invitations";
 import { prisma } from "@vfurst/db";
@@ -63,7 +64,7 @@ export default async function OrganizationMembersPage({ params }: { params: Prom
         </div>
         <div className="vf-section">
           <h2>Invite member</h2>
-          <form action={inviteMember} className="vf-form">
+          <ActionStateForm action={inviteMember} className="vf-form" errorTestId="invite-member-error">
             <input type="hidden" name="orgId" value={org.id} />
             <label>
               Email
@@ -78,7 +79,7 @@ export default async function OrganizationMembersPage({ params }: { params: Prom
               </select>
             </label>
             <Button label="Send invitation" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </div>
       </section>
       <section className="vf-section">

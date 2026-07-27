@@ -156,6 +156,12 @@ export function BadgeDesigner({
     }));
   }
 
+  function addElement(type: BadgeElement["type"]) {
+    const element = nextElement(type);
+    setLayout((current) => ({ ...current, elements: [...current.elements, element] }));
+    setSelectedId(element.id);
+  }
+
   function moveLayer(direction: -1 | 1) {
     if (!selectedId) {
       return;
@@ -179,10 +185,10 @@ export function BadgeDesigner({
   return (
     <div className="vf-designer">
       <div className="vf-toolbar">
-        <Button label="Text" type="button" onClick={() => setLayout((current) => ({ ...current, elements: [...current.elements, nextElement("text")] }))} />
-        <Button label="Image" type="button" onClick={() => setLayout((current) => ({ ...current, elements: [...current.elements, nextElement("image")] }))} />
-        <Button label="Barcode" type="button" onClick={() => setLayout((current) => ({ ...current, elements: [...current.elements, nextElement("barcode")] }))} />
-        <Button label="QR" type="button" onClick={() => setLayout((current) => ({ ...current, elements: [...current.elements, nextElement("qr")] }))} />
+        <Button label="Text" type="button" onClick={() => addElement("text")} />
+        <Button label="Image" type="button" onClick={() => addElement("image")} />
+        <Button label="Barcode" type="button" onClick={() => addElement("barcode")} />
+        <Button label="QR" type="button" onClick={() => addElement("qr")} />
         <Button label="Back" type="button" onClick={() => moveLayer(-1)} />
         <Button label="Front" type="button" onClick={() => moveLayer(1)} />
       </div>

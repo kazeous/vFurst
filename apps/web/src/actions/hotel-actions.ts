@@ -1,12 +1,14 @@
 "use server";
 
 import { requireEventAccess, requireHotelBlockAccess, requireHotelBookingAccess } from "@/lib/dashboard-access";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { getConventionPortalRootForRequest } from "@/lib/convention";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
 import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl } from "@/lib/payments/stripe";
-import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import { ExpectedActionError, PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getNightCount, parseMoney, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
@@ -39,7 +41,14 @@ function roomTypesFromForm(formData: FormData, currency: "USD" | "VND") {
     );
 }
 
-export async function createHotelBlock(formData: FormData) {
+export async function createHotelBlock(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createHotelBlockInner(formData), "Hotel block created.");
+}
+
+async function createHotelBlockInner(formData: FormData) {
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const { event } = await requireEventAccess(eventId);
   const parsed = z
@@ -53,13 +62,13 @@ export async function createHotelBlock(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
   }
 
   const roomTypes = roomTypesFromForm(formData, event.currency);
 
   if (roomTypes.length === 0) {
-    throw new Error("Create at least one room type.");
+    throw new ExpectedActionError("Create at least one room type.");
   }
 
   await prisma.hotelBlock.create({
@@ -75,7 +84,14 @@ export async function createHotelBlock(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/hotel`);
 }
 
-export async function updateHotelBlock(formData: FormData) {
+export async function updateHotelBlock(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => updateHotelBlockInner(formData), "Hotel block saved.");
+}
+
+async function updateHotelBlockInner(formData: FormData) {
   const blockId = z.string().uuid().parse(formData.get("blockId"));
   const { hotelBlock, event } = await requireHotelBlockAccess(blockId);
   const parsed = z
@@ -89,13 +105,13 @@ export async function updateHotelBlock(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid hotel block.");
   }
 
   const roomTypes = roomTypesFromForm(formData, event.currency);
 
   if (roomTypes.length === 0) {
-    throw new Error("Keep at least one room type.");
+    throw new ExpectedActionError("Keep at least one room type.");
   }
 
   await prisma.hotelBlock.update({

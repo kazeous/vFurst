@@ -1,4 +1,5 @@
 import { bulkGenerateVouchers, createVoucher } from "@/actions/voucher-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma, type CurrencyCode } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +55,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
       <section className="vf-two-column">
         <div className="vf-section">
           <h2>Create voucher</h2>
-          <form action={createVoucher} className="vf-form">
+          <ActionStateForm action={createVoucher} className="vf-form" errorTestId="create-voucher-error">
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Code
@@ -92,12 +93,12 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
               ))}
             </div>
             <Button label="Create voucher" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </div>
 
         <div className="vf-section">
           <h2>Bulk generate</h2>
-          <form action={bulkGenerateVouchers} className="vf-form">
+          <ActionStateForm action={bulkGenerateVouchers} className="vf-form" errorTestId="bulk-voucher-error">
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Prefix
@@ -124,7 +125,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
               <input name="maxUses" type="number" min="1" defaultValue="1" />
             </label>
             <Button label="Generate codes" type="submit" />
-          </form>
+          </ActionStateForm>
         </div>
       </section>
 

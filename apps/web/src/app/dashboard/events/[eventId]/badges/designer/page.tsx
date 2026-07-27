@@ -1,4 +1,5 @@
 import { saveBadgeTemplate } from "@/actions/phase5-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { BadgeDesigner } from "@/app/dashboard/events/[eventId]/badges/designer/badge-designer";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,12 @@ export default async function BadgeDesignerPage({ params }: { params: Promise<{ 
         </div>
       </header>
 
-      <form id="badge-template-form" action={saveBadgeTemplate} className="vf-section">
+      <ActionStateForm
+        id="badge-template-form"
+        action={saveBadgeTemplate}
+        className="vf-section"
+        errorTestId="badge-template-error"
+      >
         <input type="hidden" name="eventId" value={event.id} />
         <div className="vf-form-grid">
           {event.registrationTypes.map((type) => (
@@ -84,7 +90,7 @@ export default async function BadgeDesignerPage({ params }: { params: Promise<{ 
           ))}
         </div>
         <Button label="Save template" type="submit" variant="primary" />
-      </form>
+      </ActionStateForm>
 
       <BadgeDesigner
         initialLayout={parseLayout(activeTemplate?.layout)}

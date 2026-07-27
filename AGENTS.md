@@ -30,6 +30,7 @@ Read `PROGRESS.md` before doing anything. It says which phase and unit is active
 5. **Commit after each logical unit** with conventional messages; `git log` is the second source of truth.
 6. **Run the gates in `docs/plan/verification.md`** for the session type; never record a pass claim from a focused run.
 7. **Error-handling patterns are fixed:** expected user conditions return structured form state or redirect-with-code — never bare `throw`. Tenant-isolation and payment-safety throws in the audit's "Do not change" list stay as throws.
+   Organizer/platform forms use `runActionWithState`; its centralized `unstable_rethrow` guard must remain ahead of expected-error mapping so Next redirects and framework control-flow are never swallowed.
 8. **Split runtime is frozen** (`apps/platform-manager`, `apps/tenant-web`): no new split work, no cutover, until Phase 1 completes and a decision is recorded. Keep `npm run test:split-topology` green.
 
 ## Environment files

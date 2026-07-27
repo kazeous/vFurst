@@ -1,4 +1,5 @@
 import { createProduct, deleteProduct, updateProduct } from "@/actions/store-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions, parseProductSurcharges } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
@@ -58,7 +59,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
       <section className="vf-two-column">
         <div className="vf-section">
           <h2>Create product</h2>
-          <form action={createProduct} className="vf-form">
+          <ActionStateForm action={createProduct} className="vf-form" errorTestId="create-product-error">
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Name
@@ -112,7 +113,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
               </label>
             </div>
             <Button label="Create product" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </div>
 
         <div className="vf-section">
@@ -162,7 +163,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                   ))}
                 </div>
               ) : null}
-              <form action={updateProduct} className="vf-form">
+              <ActionStateForm action={updateProduct} className="vf-form">
                 <input type="hidden" name="productId" value={product.id} />
                 <label>
                   Name
@@ -229,7 +230,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                   <small className="vf-muted">PNG, JPEG, or WebP · up to 5 MB</small>
                 </label>
                 <Button label="Save product" type="submit" />
-              </form>
+              </ActionStateForm>
             </div>
           );
         })}

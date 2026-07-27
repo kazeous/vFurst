@@ -1,5 +1,5 @@
-export function getPortalRootFromPathname(pathname: string, subdomain: string) {
-  const centralRoot = `/${subdomain}`;
+export function getPortalRootFromPathname(pathname: string, slug: string) {
+  const centralRoot = `/${slug}`;
 
   if (pathname === centralRoot || pathname.startsWith(`${centralRoot}/`)) {
     return centralRoot;
@@ -8,6 +8,6 @@ export function getPortalRootFromPathname(pathname: string, subdomain: string) {
   return "";
 }
 
-export function getPortalHref(pathname: string, subdomain: string, suffix = "") {
-  return `${getPortalRootFromPathname(pathname, subdomain)}${suffix}` || "/";
+export function getPortalHref(pathname: string, slug: string, suffix = "") {
+  return `${getPortalRootFromPathname(pathname, slug)}${suffix}` || "/";
 }

@@ -1,4 +1,5 @@
 import { updateEventSettings } from "@/actions/event-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requireEventPageAccess } from "@/lib/dashboard-access";
@@ -50,7 +51,7 @@ export default async function EventSettingsPage({
       {saved === "1" ? <div className="vf-banner vf-banner-success">Event settings saved.</div> : null}
 
       <Card>
-        <form action={updateEventSettings} className="vf-form">
+        <ActionStateForm action={updateEventSettings} className="vf-form" errorTestId="event-settings-error">
           <input type="hidden" name="eventId" value={event.id} />
           <h2>Event details</h2>
           <label>
@@ -107,7 +108,7 @@ export default async function EventSettingsPage({
           </label>
 
           <Button label="Save event settings" type="submit" variant="primary" />
-        </form>
+        </ActionStateForm>
       </Card>
     </div>
   );

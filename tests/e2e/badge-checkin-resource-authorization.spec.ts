@@ -281,6 +281,27 @@ async function submitTamperedAction(
   await responsePromise;
 }
 
+test("badge image validation renders inline and keeps the template form usable", async ({ page }) => {
+  await loginAsOwnerA(page);
+  const designerPath = `/dashboard/events/${eventAId}/badges/designer`;
+  await page.goto(designerPath);
+
+  await page.getByRole("button", { name: "Image", exact: true }).click();
+  await page.locator('input[name^="badgeImage:"]').setInputFiles({
+    name: "badge.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+  });
+  await page.getByRole("button", { name: "Save template" }).click();
+
+  await expect(page.getByTestId("badge-template-error")).toContainText(
+    "Badge images must be PNG or JPEG files."
+  );
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Badge Template A");
+  await expect(page.getByRole("button", { name: "Save template" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+});
+
 test("check-in derives tenant and event from the stored registration", async ({ page }) => {
   await loginAsOwnerA(page);
   const pathname = `/dashboard/events/${eventAId}/check-in`;

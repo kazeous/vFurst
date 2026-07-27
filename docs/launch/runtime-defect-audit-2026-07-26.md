@@ -503,7 +503,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 | 2 — Public flows | ERR-03 (public), ERR-04 | **Complete** | 2026-07-27 | See "Batch 2 outcome" below |
 | 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | **Complete** | 2026-07-27 | See "Batch 3 outcome" below |
 | 4 — Data and tests | DAT-01, TST-01, TST-03 | **Complete** | 2026-07-27 | See "Batch 4 outcome" below |
-| 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | Not started | | |
+| 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | **Complete** | 2026-07-27 | See "Batch 5 outcome" below |
 | 6 — Split runtime | SPL-02…SPL-11 | Not started | | SPL-01 closed in Batch 0 |
 
 ---
@@ -678,3 +678,45 @@ and `global-error.tsx` covers client-side render crashes.
 - The focused organization-deletion regression passed; the refreshed accessibility visual smoke then passed normally without update mode.
 - Repository gates passed: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (DB **52/52**, web **160/160**, auth **67/67**), build **10/10** packages, and split-topology **5/5**. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
 - Full production-mode E2E (`E2E_PRODUCTION=1 npm run test:e2e`) completed with **114 passed, 0 failed, 0 did not run**. This is the first clean full-suite result since TST-01 was introduced and satisfies Batch 4's no-failure/no-skipped exit criterion.
+
+---
+
+# Batch 5 outcome — 2026-07-27
+
+**ERR-03 (remainder), ERR-05, RTE-03, RTE-05, RTE-08, RTE-09, and RTE-10 are closed.** Batch 6 was not started: no split-runtime implementation, cutover work, or `test:e2e:split` work was performed.
+
+## Structured organizer, platform, and residual actions
+
+- Added the client-safe `ActionFormState`, shared `ActionStateForm`, `ExpectedActionError`, and `runActionWithState`. The helper calls `unstable_rethrow` before mapping known expected conditions, so redirects keep working and unexpected/auth/security/system failures still reach the route boundary and Sentry. `AGENTS.md` now requires this helper for organizer/platform forms.
+- `ActionStateForm` constructs `FormData` from the live form before dispatch, retains uncontrolled values after an error, exposes an accessible alert/status, and disables the whole fieldset while pending.
+- Converted event creation/wizard/settings, voucher create/bulk, hotel-block create/update, store-product create/update and image validation, badge-template uploads, member invitations, organization provisioning/settings/custom-domain requests, organization lifecycle/resend-owner actions, DNS verify/activate, payout recording, raffle draw, event/platform email replay, and the deferred public `payVendorBooth` action.
+- Expected races now stay inline: duplicate voucher codes, already-member invitations, replay already queued, DNS not yet visible, raffle prize/draw exhaustion, payout amount above the selected ledger balance, and vendor approval changing before booth payment. Tenant/resource mismatches, payment concurrency, and configuration failures remain hard failures.
+- Badge image layers are selected immediately when created, so the upload field is usable without first finding and clicking the new canvas layer. Public cart option validation now uses the existing public structured-error mapper.
+
+## Routing hygiene
+
+- Development-only platform aliases now include `::1`, `0.0.0.0`, private IPv4 ranges, and the machine hostname; production deliberately rejects that shortcut so LAN/custom hosts cannot silently become platform hosts.
+- Central portal paths use the organization `slug`, while hosted subdomain/custom-domain links stay root-relative; `slug !== subdomain` is covered end to end.
+- The tenant rewrite bypass now recognizes only known file extensions on the last path segment. Dotted application routes still rewrite.
+- Only `apps/web/src/middleware.ts` remains. The duplicate root middleware implementation was removed and tests import the file Next resolves.
+- Organization provisioning rejects the shared reserved labels (`api`, `app`, `console`, `manager`, `www`) before persistence.
+
+## Residual `throw new Error` review
+
+The final action-layer sweep contains **72** bare throws. None is an unreviewed Batch-5 P1/P2 site:
+
+| Group | Files | Why it remains a hard failure in this unit |
+|---|---|---|
+| Binding do-not-change list | `cart-actions`, `checkout-actions`, `event-actions`, `hotel-actions`, `phase5-actions`, `registration-actions`, `staff-actions`, `stripe-actions`, `vendor-actions`, `voucher-actions` | Tenant/resource mismatches, Stripe configuration/permission, and optimistic payment concurrency are the audit's explicit security/payment invariants. |
+| Authorization and state-transition integrity | `invitation-actions`, `org-actions`, `payment-actions`, `phase5-actions`, `registration-actions`, `registration-transfer-actions`, `saas-actions`, `staff-actions`, `store-actions`, `vendor-actions` | Stored-resource authorization, irreversible lifecycle/refund/print/check-in/transfer transitions, and cross-record ownership checks must not be softened or exposed as trusted client state. |
+| Payment/provider availability | `checkout-actions`, `payment-actions`, `store-actions`, `vendor-actions` | Provider-disabled, refund-eligibility, and ledger/order ownership failures fail closed to protect money movement; only the audited payout arithmetic and vendor pre-payment race became inline. |
+| Outside the Batch-5 P1/P2 defect register | `auth-actions`, `branding-actions`, the registration-type/add-on maintenance sites in `event-actions`, and admin CRUD validation in `org-actions`, `phase5-actions`, `registration-actions`, `registration-transfer-actions`, `saas-actions`, `staff-actions`, `store-actions`, and `vendor-actions` | These lower-priority identity/organizer maintenance validations were reviewed but are not among ERR-03's Batch-5 remainder. They retain the readable Batch-1 route boundary; this outcome does not claim inline UX for them or expand the unit beyond the recorded register. |
+
+## Evidence
+
+- Focused unit coverage for middleware, platform hosts, slug/subdomain portal roots, action mappings, and upload policy passed **61/61** before the full web gate; the final web unit gate is **179/179**.
+- Batch-5 focused E2E covered event wizard validation, hotel/voucher/store/badge uploads, existing-member invitation, raffle exhaustion, DNS visibility, payout arithmetic, email replay races, slug/subdomain links, LAN-host environment policy, and vendor booth-payment races. The final staff/vendor focused run passed **6/6**.
+- Plain start host probe returned `localhost` **200**, `www` **200**, `console` **200**, `app` **200**, malformed underscore host **400**. Route/action bootstrap passed with Docker services running and `prestart` reporting the schema already in sync.
+- Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (web **179/179**, DB **52/52**, auth **67/67**), build **10/10** packages. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
+- Split-topology canary passed **5/5** without changing either split runtime.
+- Full production-mode E2E on the final build (`E2E_PRODUCTION=1 npm run test:e2e -- --workers=1`) completed with **118 passed, 0 failed, 0 did not run**. A prior four-worker run reproduced the documented registration-policy contention timeout; that file passed **3/3** in isolation and again inside the clean full run.

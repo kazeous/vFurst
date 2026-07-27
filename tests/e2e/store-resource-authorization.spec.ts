@@ -396,6 +396,12 @@ test("product upload action rejects unsupported and forged image files", async (
     buffer: Buffer.from("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")
   });
   await submitAction(page, storePath, createForm, "Create product");
+  await expect(page.getByTestId("create-product-error")).toContainText(
+    "Product images must be PNG, JPEG, or WebP files."
+  );
+  await expect(createForm.getByLabel("Name")).toHaveValue(invalidTypeName);
+  await expect(createForm.getByRole("button", { name: "Create product" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.storeProduct.count({ where: { name: invalidTypeName } })).toBe(0);
 
   await navigateAfterRejectedAction(page, storePath);
@@ -409,5 +415,10 @@ test("product upload action rejects unsupported and forged image files", async (
     buffer: Buffer.from("this is not a png")
   });
   await submitAction(page, storePath, createForm, "Create product");
+  await expect(page.getByTestId("create-product-error")).toContainText(
+    "Product image contents do not match the declared file type."
+  );
+  await expect(createForm.getByLabel("Name")).toHaveValue(invalidContentsName);
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.storeProduct.count({ where: { name: invalidContentsName } })).toBe(0);
 });

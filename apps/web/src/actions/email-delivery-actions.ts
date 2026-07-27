@@ -1,7 +1,10 @@
 "use server";
 
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requirePlatformAdmin } from "@/lib/dashboard-access";
 import { enqueueEmailDelivery } from "@/lib/email-queue";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import { Prisma, prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -22,10 +25,10 @@ async function createReplay(
       });
 
       if (!delivery || (expectedEventId && delivery.eventId !== expectedEventId)) {
-        throw new Error("Email delivery not found.");
+        throw new ExpectedActionError("Email delivery not found.");
       }
       if (delivery.status !== "DEAD_LETTERED") {
-        throw new Error("Only a dead-lettered email delivery can be replayed.");
+        throw new ExpectedActionError("Only a dead-lettered email delivery can be replayed.");
       }
       if (
         !delivery.replayable ||
@@ -33,7 +36,7 @@ async function createReplay(
         !delivery.payloadIv ||
         !delivery.payloadAuthTag
       ) {
-        throw new Error("This email contains an expired or single-use link and cannot be replayed.");
+        throw new ExpectedActionError("This email contains an expired or single-use link and cannot be replayed.");
       }
 
       const activeReplay = await tx.emailDelivery.findFirst({
@@ -44,7 +47,7 @@ async function createReplay(
         select: { id: true }
       });
       if (activeReplay) {
-        throw new Error("A replay of this email is already queued.");
+        throw new ExpectedActionError("A replay of this email is already queued.");
       }
 
       return tx.emailDelivery.create({
@@ -86,10 +89,17 @@ async function createReplay(
   return replay;
 }
 
-export async function replayEventEmailDelivery(formData: FormData) {
+export async function replayEventEmailDelivery(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => replayEventEmailDeliveryInner(formData), "Email replay queued.");
+}
+
+async function replayEventEmailDeliveryInner(formData: FormData) {
   const parsed = deliverySchema.safeParse({ deliveryId: formData.get("deliveryId") });
   if (!parsed.success) {
-    throw new Error("Invalid email delivery.");
+    throw new ExpectedActionError("Invalid email delivery.");
   }
 
   const delivery = await prisma.emailDelivery.findUnique({
@@ -97,7 +107,7 @@ export async function replayEventEmailDelivery(formData: FormData) {
     select: { eventId: true }
   });
   if (!delivery?.eventId) {
-    throw new Error("Email delivery not found.");
+    throw new ExpectedActionError("Email delivery not found.");
   }
 
   const access = await requireEventAccess(delivery.eventId);
@@ -105,11 +115,18 @@ export async function replayEventEmailDelivery(formData: FormData) {
   revalidatePath(`/dashboard/events/${delivery.eventId}/settings/emails`);
 }
 
-export async function replayPlatformEmailDelivery(formData: FormData) {
+export async function replayPlatformEmailDelivery(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => replayPlatformEmailDeliveryInner(formData), "Email replay queued.");
+}
+
+async function replayPlatformEmailDeliveryInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = deliverySchema.safeParse({ deliveryId: formData.get("deliveryId") });
   if (!parsed.success) {
-    throw new Error("Invalid email delivery.");
+    throw new ExpectedActionError("Invalid email delivery.");
   }
 
   const replay = await createReplay(parsed.data.deliveryId, platformAdmin.id);

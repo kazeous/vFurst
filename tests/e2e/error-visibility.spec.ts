@@ -131,7 +131,11 @@ test("an invalid voucher renders inline, keeps entered values, and allows retry"
   await expect(page.getByRole("button", { name: "Complete registration" })).toBeEnabled();
 });
 
-test("an unconverted organizer action still lands on the readable route error boundary", async ({ page }) => {
+test("inviting an existing member renders inline, keeps the email, and does not create an invitation", async ({ page }) => {
+  const serverErrors: number[] = [];
+  page.on("response", (response) => {
+    if (response.status() >= 500) serverErrors.push(response.status());
+  });
   await login(page, "/dashboard");
 
   await page.goto(`/dashboard/organizations/${boundaryOrgId}/members`);
@@ -139,8 +143,12 @@ test("an unconverted organizer action still lands on the readable route error bo
   await inviteForm.locator('input[name="email"]').fill(memberEmail);
   await inviteForm.getByRole("button").first().click();
 
-  const boundary = page.getByTestId("route-error");
-  await expect(boundary).toBeVisible();
-  await expect(boundary.getByRole("button", { name: "Try again" })).toBeVisible();
-  await expect(page.getByText("Application error: a client-side exception has occurred")).toHaveCount(0);
+  await expect(page.getByTestId("invite-member-error")).toContainText(
+    "This email already belongs to an organization member."
+  );
+  await expect(inviteForm.locator('input[name="email"]')).toHaveValue(memberEmail);
+  await expect(inviteForm.getByRole("button", { name: "Send invitation" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  await expect.poll(() => prisma.orgInvitation.count({ where: { orgId: boundaryOrgId, email: memberEmail } })).toBe(0);
+  expect(serverErrors).toEqual([]);
 });

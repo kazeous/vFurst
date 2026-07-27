@@ -385,6 +385,18 @@ test("voucher creation and bulk generation reject foreign event and tier resourc
   expect(validVoucher.orgId).toBe(orgAId);
   expect(validVoucher.discountValue).toBe(50_000);
   expect((validVoucher.restrictions as { tierIds?: string[] }).tierIds).toEqual([tierAId]);
+
+  await page.reload();
+  form = page.getByRole("button", { name: "Create voucher" }).locator("xpath=ancestor::form");
+  await form.getByLabel("Code").fill(validVoucherCode);
+  await form.getByRole("button", { name: "Create voucher" }).click();
+  await expect(page.getByTestId("create-voucher-error")).toContainText(
+    "A voucher with this code already exists for the event."
+  );
+  await expect(form.getByLabel("Code")).toHaveValue(validVoucherCode);
+  await expect(form.getByRole("button", { name: "Create voucher" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.voucher.count({ where: { eventId: eventAId, code: validVoucherCode } })).toBe(1);
 });
 
 test("public voucher application derives event from the user-owned cart", async ({ page }) => {

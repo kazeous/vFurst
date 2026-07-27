@@ -1,4 +1,5 @@
 import { createEvent, archiveEvent, deleteEvent, publishEvent } from "@/actions/event-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { getConventionUrl } from "@/lib/subdomain";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -94,7 +95,7 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
         </div>
         <div className="vf-section">
           <h2>Create event</h2>
-          <form action={createEvent} className="vf-form">
+          <ActionStateForm action={createEvent} className="vf-form" errorTestId="create-event-error">
             <input type="hidden" name="orgId" value={org.id} />
             <label>
               Name
@@ -117,7 +118,7 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
               <input name="endDate" type="date" required />
             </label>
             <Button label="Create event" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </div>
       </section>
     </div>

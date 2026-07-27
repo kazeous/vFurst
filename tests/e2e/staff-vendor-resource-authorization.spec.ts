@@ -429,6 +429,39 @@ test("public volunteer and vendor forms bind submissions and success lookups to 
   await expect(vendorForm.locator('input[name="orgId"], input[name="eventId"]')).toHaveCount(0);
 });
 
+test("a vendor booth payment race renders inline and keeps the payment action usable", async ({ page }) => {
+  await prisma.vendorApplication.update({
+    where: { id: vendorApplicationAId },
+    data: { status: "APPROVED", boothAssignment: "A-01" }
+  });
+
+  try {
+    await loginAs(page, vendorAEmail);
+    await page.goto(`/${orgASlug}/vendor-apply?success=${vendorApplicationAId}`);
+    await expect(page.getByRole("button", { name: "Pay booth invoice" })).toBeVisible();
+
+    await prisma.vendorApplication.update({
+      where: { id: vendorApplicationAId },
+      data: { status: "WAITLISTED" }
+    });
+    await page.getByRole("button", { name: "Pay booth invoice" }).click();
+
+    await expect(page.getByTestId("vendor-booth-payment-error")).toContainText(
+      "This vendor application is not approved for payment yet."
+    );
+    await expect(page.getByRole("button", { name: "Pay booth invoice" })).toBeEnabled();
+    await expect(page.getByTestId("route-error")).toHaveCount(0);
+    expect(
+      (await prisma.vendorApplication.findUniqueOrThrow({ where: { id: vendorApplicationAId } })).paymentOrderId
+    ).toBeNull();
+  } finally {
+    await prisma.vendorApplication.update({
+      where: { id: vendorApplicationAId },
+      data: { status: "APPROVED", boothAssignment: null }
+    });
+  }
+});
+
 test("department, role, application, and assignment mutations reject foreign resources", async ({ page }) => {
   await loginAsOwnerA(page);
 

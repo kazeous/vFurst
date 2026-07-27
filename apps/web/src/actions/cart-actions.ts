@@ -63,7 +63,7 @@ function selectedOptionsFromForm(formData: FormData, options: ReturnType<typeof 
       const value = String(formData.get(`option-${option.name}`) ?? "");
 
       if (!option.values.includes(value)) {
-        throw new Error(`Choose a valid ${option.name}.`);
+        throw new PublicActionError(`Choose a valid ${option.name}.`);
       }
 
       return [option.name, value];

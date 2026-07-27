@@ -38,4 +38,27 @@ describe("isPlatformHostname", () => {
     expect(isPlatformHostname("sample-con.localhost")).toBe(false);
     expect(isPlatformHostname("sample-con.vfurst.reyuugames.com")).toBe(false);
   });
+
+  it.each(["::1", "0.0.0.0", "10.0.0.8", "172.16.4.20", "172.31.255.254", "192.168.1.20"])(
+    "recognizes the development host %s outside production",
+    (hostname) => {
+      vi.stubEnv("NODE_ENV", "development");
+      expect(isPlatformHostname(hostname)).toBe(true);
+    }
+  );
+
+  it("recognizes the current machine hostname outside production", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("COMPUTERNAME", "VFURST-DEVBOX");
+    expect(isPlatformHostname("vfurst-devbox")).toBe(true);
+  });
+
+  it.each(["10.0.0.8", "172.20.1.2", "192.168.1.20", "vfurst-devbox"])(
+    "does not classify development alias %s as a platform host in production",
+    (hostname) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("COMPUTERNAME", "VFURST-DEVBOX");
+      expect(isPlatformHostname(hostname)).toBe(false);
+    }
+  );
 });

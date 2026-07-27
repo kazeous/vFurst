@@ -1,6 +1,8 @@
 "use server";
 
 import { normalizeCustomDomain } from "@/lib/custom-domain";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { auth } from "@/lib/auth";
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
 import { deliverOrganizationInvitation } from "@/lib/organization-invitation-email";
@@ -11,6 +13,8 @@ import {
   revokeOrganizationInvitation
 } from "@/lib/organization-invitations";
 import { isPlatformDomain } from "@/lib/platform-hosts";
+import { ExpectedActionError } from "@/lib/public-action-error";
+import { isReservedPlatformSubdomain } from "@/lib/tenant-host-policy";
 import { Prisma, prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -22,7 +26,8 @@ const slugSchema = z
   .toLowerCase()
   .min(3)
   .max(48)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens.");
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens.")
+  .refine((value) => !isReservedPlatformSubdomain(value), "This slug is reserved by the platform.");
 
 const organizationDetailsSchema = z.object({
   name: z.string().trim().min(2),
@@ -104,7 +109,14 @@ async function requireOrgRole(
   };
 }
 
-export async function createOrganization(formData: FormData) {
+export async function createOrganization(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createOrganizationInner(formData));
+}
+
+async function createOrganizationInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = createOrganizationSchema.safeParse({
     name: formData.get("name"),
@@ -115,41 +127,49 @@ export async function createOrganization(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization details.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid organization details.");
   }
 
   const now = new Date();
-  const provisioned = await prisma.$transaction(
-    async (tx) => {
-      const org = await tx.organization.create({
-        data: {
-          name: parsed.data.name,
-          slug: parsed.data.slug,
-          subdomain: parsed.data.slug,
-          status: "PROVISIONING",
-          statusUpdatedById: platformAdmin.id,
-          statusUpdatedAt: now,
-          contactEmail: parsed.data.contactEmail.toLowerCase(),
-          logo: parsed.data.logo || null
-        }
-      });
-      const invitation = await createOrganizationInvitationRecord(tx, {
-        orgId: org.id,
-        email: parsed.data.ownerEmail,
-        role: "OWNER",
-        invitedById: platformAdmin.id,
-        now
-      });
+  let provisioned;
+  try {
+    provisioned = await prisma.$transaction(
+      async (tx) => {
+        const org = await tx.organization.create({
+          data: {
+            name: parsed.data.name,
+            slug: parsed.data.slug,
+            subdomain: parsed.data.slug,
+            status: "PROVISIONING",
+            statusUpdatedById: platformAdmin.id,
+            statusUpdatedAt: now,
+            contactEmail: parsed.data.contactEmail.toLowerCase(),
+            logo: parsed.data.logo || null
+          }
+        });
+        const invitation = await createOrganizationInvitationRecord(tx, {
+          orgId: org.id,
+          email: parsed.data.ownerEmail,
+          role: "OWNER",
+          invitedById: platformAdmin.id,
+          now
+        });
 
-      return {
-        org,
-        ...invitation
-      };
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+        return {
+          org,
+          ...invitation
+        };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      }
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new ExpectedActionError("That organization slug is already in use.");
     }
-  );
+    throw error;
+  }
 
   try {
     await deliverOrganizationInvitation({
@@ -169,7 +189,7 @@ export async function createOrganization(formData: FormData) {
       organizationId: provisioned.org.id,
       errorName: error instanceof Error ? error.name : "UnknownError"
     });
-    throw new Error("The organization was provisioned, but its owner invitation could not be delivered.");
+    throw new ExpectedActionError("The organization was provisioned, but its owner invitation could not be delivered.");
   }
 
   revalidatePath("/platform");
@@ -177,7 +197,14 @@ export async function createOrganization(formData: FormData) {
   redirect(`/platform/organizations/${provisioned.org.id}`);
 }
 
-export async function updateOrganization(formData: FormData) {
+export async function updateOrganization(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => updateOrganizationInner(formData), "Organization settings saved.");
+}
+
+async function updateOrganizationInner(formData: FormData) {
   const parsed = updateOrganizationSchema.safeParse({
     orgId: formData.get("orgId"),
     name: formData.get("name"),
@@ -195,7 +222,7 @@ export async function updateOrganization(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization settings.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid organization settings.");
   }
 
   await requireOrgRole(parsed.data.orgId);
@@ -233,14 +260,21 @@ export async function updateOrganization(formData: FormData) {
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/settings`);
 }
 
-export async function updateCustomDomain(formData: FormData) {
+export async function updateCustomDomain(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => updateCustomDomainInner(formData), "Custom-domain request saved.");
+}
+
+async function updateCustomDomainInner(formData: FormData) {
   const parsed = customDomainSchema.safeParse({
     orgId: formData.get("orgId"),
     customDomain: formData.get("customDomain")
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid custom domain.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid custom domain.");
   }
 
   await requireOrgRole(parsed.data.orgId);
@@ -248,7 +282,7 @@ export async function updateCustomDomain(formData: FormData) {
   const domain = normalizeCustomDomain(parsed.data.customDomain ?? "");
 
   if (domain && (!domain.includes(".") || isPlatformDomain(domain))) {
-    throw new Error("Use a fully qualified custom domain that is not a vFurst platform domain.");
+    throw new ExpectedActionError("Use a fully qualified custom domain that is not a vFurst platform domain.");
   }
 
   const org = await prisma.organization.findUnique({
@@ -280,7 +314,14 @@ export async function updateCustomDomain(formData: FormData) {
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/settings`);
 }
 
-export async function inviteMember(formData: FormData) {
+export async function inviteMember(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => inviteMemberInner(formData), "Invitation sent.");
+}
+
+async function inviteMemberInner(formData: FormData) {
   const parsed = inviteMemberSchema.safeParse({
     orgId: formData.get("orgId"),
     email: formData.get("email"),
@@ -288,12 +329,12 @@ export async function inviteMember(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid member details.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid member details.");
   }
 
   const { userId, membership } = await requireOrgRole(parsed.data.orgId);
   if (membership.role === "ADMIN" && parsed.data.role === "OWNER") {
-    throw new Error("Only an organization owner can invite another owner.");
+    throw new ExpectedActionError("Only an organization owner can invite another owner.");
   }
 
   const org = await prisma.organization.findUnique({
@@ -332,7 +373,7 @@ export async function inviteMember(formData: FormData) {
       invitationId: issued.invitation.id,
       errorName: error instanceof Error ? error.name : "UnknownError"
     });
-    throw new Error("The invitation could not be delivered. No membership was granted.");
+    throw new ExpectedActionError("The invitation could not be delivered. No membership was granted.");
   }
 
   revalidatePath(`/dashboard/organizations/${parsed.data.orgId}/members`);

@@ -27,6 +27,7 @@ const getConventionShellData = unstable_cache(
         customDomain: org.customDomain,
         logo: org.logo,
         name: org.name,
+        slug: org.slug,
         subdomain: org.subdomain
       }
     };

@@ -1,6 +1,8 @@
 "use server";
 
 import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requireVendorApplicationAccess } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
@@ -18,6 +20,7 @@ import {
   validateVendorDocumentUrl
 } from "@/lib/vendor/document-upload-policy";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import { ExpectedActionError } from "@/lib/expected-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
 import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
@@ -485,7 +488,14 @@ export async function addAssistant(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/vendors`);
 }
 
-export async function payVendorBooth(formData: FormData) {
+export async function payVendorBooth(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => payVendorBoothInner(formData));
+}
+
+async function payVendorBoothInner(formData: FormData) {
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const orgSlug = z.string().trim().min(1).parse(formData.get("orgSlug"));
   await assertActionRateLimit("payment:vendor-booth", applicationId);
@@ -493,7 +503,7 @@ export async function payVendorBooth(formData: FormData) {
   const org = await getConventionOrg(orgSlug);
 
   if (!org) {
-    throw new Error("Organization not found.");
+    throw new ExpectedActionError("Organization not found.");
   }
 
   const account = await requirePublicAccount(`/${org.subdomain}/vendor-apply`);
@@ -519,11 +529,11 @@ export async function payVendorBooth(formData: FormData) {
   });
 
   if (application.status !== "APPROVED") {
-    throw new Error("This vendor application is not approved for payment yet.");
+    throw new ExpectedActionError("This vendor application is not approved for payment yet.");
   }
 
   if (!application.boothAssignment) {
-    throw new Error("A booth must be assigned before payment.");
+    throw new ExpectedActionError("A booth must be assigned before payment.");
   }
 
   const portalRoot = await getConventionPortalRootForRequest(application.event.org);

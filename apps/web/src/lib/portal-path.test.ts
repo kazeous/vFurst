@@ -3,8 +3,8 @@ import { getPortalHref, getPortalRootFromPathname } from "./portal-path";
 
 describe("portal paths", () => {
   it("keeps the organization prefix on the central platform host", () => {
-    expect(getPortalRootFromPathname("/sample-con/register", "sample-con")).toBe("/sample-con");
-    expect(getPortalHref("/sample-con/register", "sample-con", "/hotel")).toBe("/sample-con/hotel");
+    expect(getPortalRootFromPathname("/sample-convention/register", "sample-convention")).toBe("/sample-convention");
+    expect(getPortalHref("/sample-convention/register", "sample-convention", "/hotel")).toBe("/sample-convention/hotel");
   });
 
   it("uses host-root paths on a rewritten tenant host", () => {
@@ -13,7 +13,13 @@ describe("portal paths", () => {
   });
 
   it("does not confuse a lookalike central path with the tenant prefix", () => {
-    expect(getPortalRootFromPathname("/sample-convention/register", "sample-con")).toBe("");
+    expect(getPortalRootFromPathname("/sample-convention-extra/register", "sample-convention")).toBe("");
+  });
+
+  it("uses the server-resolved slug instead of a different subdomain", () => {
+    expect(getPortalHref("/sample-convention/register", "sample-convention", "/store")).toBe(
+      "/sample-convention/store"
+    );
   });
 
   it("returns a usable root link for tenant-host pages", () => {

@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0 (env), 1 (error visibility), 2 (public flows), 3 (routing/checkout safety), and 4 (data/test integrity) are complete. **Next session: unit 1.5 = audit Batch 5** — ERR-03 remainder, ERR-05, and RTE-03/05/08/09/10 only. Batch 5 was not started in the Batch 4 session; read its audit rows before changing organizer, platform, or residual actions.
+Audit Batches 0–5 are complete. **Next session: unit 1.6 = TST-02 only** — add the CI smoke that boots the app without injected environment and proves the boot assertion fires. Audit Batch 6 (split-runtime hardening) remains explicitly deferred/frozen and was not started in unit 1.5.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batches 0–4 done (2026-07-27); Batches 5–6 open; split runtime frozen |
+| 1 — Stabilize | In progress | Audit Batches 0–5 done (2026-07-27); unit 1.6/TST-02 open; audit Batch 6 deferred and split runtime frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,17 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-27 — Phase 1 unit 1.5: organizer/platform residual actions and routing hygiene (audit Batch 5)
+
+- Closed ERR-03 remainder, ERR-05, and RTE-03/05/08/09/10. Organizer/platform residual forms now share structured action state with a centralized `unstable_rethrow` guard: expected validation/race conditions render inline, retain values, disable while pending, and never become a masked production 500.
+- Converted the audited event, voucher, hotel-block, store-product, badge-upload, member-invitation, organization/domain/lifecycle, raffle-draw, payout, email-replay, and vendor booth-payment flows. Unique/race paths (voucher duplicate, already-member, replay queued, DNS pending, draw exhausted, payout arithmetic, vendor approval race) are covered; tenant/payment invariants still throw.
+- Routing now treats LAN/private/machine hosts as platform only outside production, uses `slug` rather than `subdomain` for central portal roots, rewrites dotted application paths unless the last segment has a known asset extension, keeps one middleware implementation, and rejects reserved organization slugs.
+- Final bare-throw sweep: **72** action-layer sites, all classified in the audit outcome as binding security/payment invariants, authorization/state-transition guards, or lower-priority sites outside the exact Batch-5 P1/P2 register. No unreviewed ERR/RTE P1/P2 site remains.
+- Plain host probe: **200/200/200/200/400**. Focused unit coverage **61/61**; staff/vendor residual E2E **6/6**; split-topology canary **5/5**. Docker/prestart passed with the schema already in sync.
+- Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (web **179/179**, DB **52/52**, auth **67/67**), build **10/10** packages; only the known BullMQ warning remains.
+- Full production E2E on the final build: **118 passed / 0 failed / 0 did not run**. The documented registration-policy contention timeout reproduced once under four workers, then passed 3/3 in isolation and in the clean one-worker full run.
+- **Next session must perform only unit 1.6 / TST-02.** Audit Batch 6 and all split-runtime hardening/cutover work remain untouched and frozen.
 
 ### 2026-07-27 — Phase 1 unit 1.4: data model and test integrity (audit Batch 4)
 

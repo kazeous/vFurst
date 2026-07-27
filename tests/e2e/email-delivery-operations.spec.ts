@@ -156,3 +156,34 @@ test("event organizers see tenant-scoped delivery history and can replay the ret
     });
   }, { timeout: 30_000 }).toBe(1);
 });
+
+test("a replay race renders inline instead of throwing an operations page error", async ({ page }) => {
+  await loginAs(page, platformEmail, "/platform/operations/email");
+  const originalRow = page
+    .locator(".vf-table-row")
+    .filter({ hasText: "staff-message" })
+    .filter({ has: page.getByRole("button", { name: "Replay" }) });
+
+  const activeReplay = await prisma.emailDelivery.create({
+    data: {
+      orgId,
+      eventId,
+      recipient: recipientEmail,
+      template: "staff-message",
+      status: "PROCESSING",
+      replayable: true,
+      replayedFromId: originalDeliveryId,
+      replayedAt: new Date()
+    }
+  });
+  await originalRow.getByRole("button", { name: "Replay" }).click();
+
+  await expect(page.getByTestId("platform-email-replay-error")).toContainText(
+    "A replay of this email is already queued."
+  );
+  await expect(originalRow.getByRole("button", { name: "Replay" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.emailDelivery.count({ where: { replayedFromId: originalDeliveryId } })).toBeGreaterThanOrEqual(3);
+
+  await prisma.emailDelivery.delete({ where: { id: activeReplay.id } });
+});

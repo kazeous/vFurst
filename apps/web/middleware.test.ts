@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { middleware } from "./middleware";
+import { isKnownStaticAssetPath, middleware } from "./src/middleware";
 
-function requestWithHost(host: string, internalHost = "forged.customer.example") {
-  return new NextRequest("http://localhost:3000/", {
+function requestWithHost(host: string, internalHost = "forged.customer.example", pathname = "/") {
+  return new NextRequest(`http://localhost:3000${pathname}`, {
     headers: {
       host,
       "x-vfurst-org-host": internalHost,
@@ -45,4 +45,21 @@ describe("legacy web middleware host safety", () => {
     expect(response.headers.get("x-vfurst-domain-mode")).toBeNull();
     expect(response.headers.get("x-middleware-request-x-vfurst-org-host")).toBe("tenant-a.vfurst.reyuugames.com");
   });
+
+  it.each(["/schedule.v2", "/people/sam.smith", "/events/2027.08/register"])(
+    "rewrites route paths containing a non-asset dot: %s",
+    (pathname) => {
+      const response = middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
+      expect(response.headers.get("x-middleware-rewrite")).toContain(`/tenant-a${pathname}`);
+    }
+  );
+
+  it.each(["/logo.png", "/assets/app.css", "/exports/attendees.csv"])(
+    "passes through known static asset extensions: %s",
+    (pathname) => {
+      expect(isKnownStaticAssetPath(pathname)).toBe(true);
+      const response = middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    }
+  );
 });

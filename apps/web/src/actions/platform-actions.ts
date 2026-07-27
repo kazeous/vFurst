@@ -1,11 +1,14 @@
 "use server";
 
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { isCustomDomainVerified, normalizeCustomDomain } from "@/lib/custom-domain";
 import { deliverOrganizationInvitation } from "@/lib/organization-invitation-email";
 import { assertOrganizationTransition } from "@/lib/organization-lifecycle";
 import { issueOrganizationInvitation, revokeOrganizationInvitation } from "@/lib/organization-invitations";
 import { isPlatformDomain } from "@/lib/platform-hosts";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import type { ControlPlaneEvent } from "@vfurst/contracts";
 import { enqueueTenantControlPlaneEvent, Prisma, prisma } from "@vfurst/db";
 import { randomUUID } from "node:crypto";
@@ -31,7 +34,14 @@ const customDomainOrganizationSchema = z.object({
   orgId: z.string().uuid()
 });
 
-export async function changeOrganizationStatus(formData: FormData) {
+export async function changeOrganizationStatus(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => changeOrganizationStatusInner(formData), "Organization status updated.");
+}
+
+async function changeOrganizationStatusInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = lifecycleSchema.safeParse({
     orgId: formData.get("orgId"),
@@ -39,7 +49,7 @@ export async function changeOrganizationStatus(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid lifecycle transition.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid lifecycle transition.");
   }
 
   const eventId = randomUUID();
@@ -65,7 +75,7 @@ export async function changeOrganizationStatus(formData: FormData) {
       });
 
       if (!org) {
-        throw new Error("Organization not found.");
+        throw new ExpectedActionError("Organization not found.");
       }
 
       assertOrganizationTransition({
@@ -87,7 +97,7 @@ export async function changeOrganizationStatus(formData: FormData) {
       });
 
       if (update.count !== 1) {
-        throw new Error("Organization status changed while this request was being processed. Please try again.");
+        throw new ExpectedActionError("Organization status changed while this request was being processed. Please try again.");
       }
 
       const data = {
@@ -120,7 +130,14 @@ export async function changeOrganizationStatus(formData: FormData) {
   revalidatePath(`/${changed.slug}`, "layout");
 }
 
-export async function resendInitialOwnerInvitation(formData: FormData) {
+export async function resendInitialOwnerInvitation(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => resendInitialOwnerInvitationInner(formData), "Owner invitation sent.");
+}
+
+async function resendInitialOwnerInvitationInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = initialOwnerInvitationSchema.safeParse({
     orgId: formData.get("orgId"),
@@ -128,7 +145,7 @@ export async function resendInitialOwnerInvitation(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid owner email.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid owner email.");
   }
 
   const org = await prisma.organization.findUnique({
@@ -136,7 +153,7 @@ export async function resendInitialOwnerInvitation(formData: FormData) {
   });
 
   if (!org || org.status !== "PROVISIONING") {
-    throw new Error("Initial owner invitations are available only while an organization is provisioning.");
+    throw new ExpectedActionError("Initial owner invitations are available only while an organization is provisioning.");
   }
 
   const issued = await issueOrganizationInvitation({
@@ -165,20 +182,27 @@ export async function resendInitialOwnerInvitation(formData: FormData) {
       invitationId: issued.invitation.id,
       errorName: error instanceof Error ? error.name : "UnknownError"
     });
-    throw new Error("The invitation could not be delivered.");
+    throw new ExpectedActionError("The invitation could not be delivered.");
   }
 
   revalidatePath(`/platform/organizations/${org.id}`);
 }
 
-export async function verifyOrganizationCustomDomain(formData: FormData) {
+export async function verifyOrganizationCustomDomain(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => verifyOrganizationCustomDomainInner(formData), "DNS ownership verified.");
+}
+
+async function verifyOrganizationCustomDomainInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = customDomainOrganizationSchema.safeParse({
     orgId: formData.get("orgId")
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid organization.");
   }
 
   const org = await prisma.organization.findUnique({
@@ -192,16 +216,16 @@ export async function verifyOrganizationCustomDomain(formData: FormData) {
   const domain = normalizeCustomDomain(org?.requestedCustomDomain ?? "");
 
   if (!org || !domain) {
-    throw new Error("This organization has not requested a custom domain.");
+    throw new ExpectedActionError("This organization has not requested a custom domain.");
   }
   if (org.customDomainStatus !== "PENDING_VERIFICATION") {
-    throw new Error("Only a pending domain request can be verified.");
+    throw new ExpectedActionError("Only a pending domain request can be verified.");
   }
   if (!domain.includes(".") || isPlatformDomain(domain)) {
-    throw new Error("The requested hostname is not an eligible custom domain.");
+    throw new ExpectedActionError("The requested hostname is not an eligible custom domain.");
   }
   if (!(await isCustomDomainVerified(org.id, domain))) {
-    throw new Error("The required DNS ownership record is not visible yet.");
+    throw new ExpectedActionError("The required DNS ownership record is not visible yet.");
   }
 
   const result = await prisma.organization.updateMany({
@@ -218,7 +242,7 @@ export async function verifyOrganizationCustomDomain(formData: FormData) {
   });
 
   if (result.count !== 1) {
-    throw new Error("The domain request changed while it was being verified. Please review the latest request.");
+    throw new ExpectedActionError("The domain request changed while it was being verified. Please review the latest request.");
   }
 
   revalidatePath("/platform/domains");
@@ -226,14 +250,21 @@ export async function verifyOrganizationCustomDomain(formData: FormData) {
   revalidatePath(`/dashboard/organizations/${org.id}/settings`);
 }
 
-export async function activateOrganizationCustomDomain(formData: FormData) {
+export async function activateOrganizationCustomDomain(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => activateOrganizationCustomDomainInner(formData), "Custom domain activated.");
+}
+
+async function activateOrganizationCustomDomainInner(formData: FormData) {
   const platformAdmin = await requirePlatformAdmin();
   const parsed = customDomainOrganizationSchema.safeParse({
     orgId: formData.get("orgId")
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid organization.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid organization.");
   }
 
   const eventId = randomUUID();
@@ -259,16 +290,16 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
         const domain = normalizeCustomDomain(org?.requestedCustomDomain ?? "");
 
         if (!org || !domain) {
-          throw new Error("This organization has not requested a custom domain.");
+          throw new ExpectedActionError("This organization has not requested a custom domain.");
         }
         if (org.status !== "ACTIVE") {
-          throw new Error("Only an active organization can receive custom-domain routing.");
+          throw new ExpectedActionError("Only an active organization can receive custom-domain routing.");
         }
         if (org.customDomainStatus !== "VERIFIED" || !org.customDomainVerifiedAt || !org.customDomainVerifiedById) {
-          throw new Error("The platform must verify the current DNS request before activation.");
+          throw new ExpectedActionError("The platform must verify the current DNS request before activation.");
         }
         if (!domain.includes(".") || isPlatformDomain(domain)) {
-          throw new Error("The requested hostname is not an eligible custom domain.");
+          throw new ExpectedActionError("The requested hostname is not an eligible custom domain.");
         }
 
         const conflictingOrganization = await tx.organization.findFirst({
@@ -279,7 +310,7 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
           select: { id: true }
         });
         if (conflictingOrganization) {
-          throw new Error("That custom domain is already active for another organization.");
+          throw new ExpectedActionError("That custom domain is already active for another organization.");
         }
 
         const update = await tx.organization.updateMany({
@@ -298,7 +329,7 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
         });
 
         if (update.count !== 1) {
-          throw new Error("The organization or domain request changed during activation. Please try again.");
+          throw new ExpectedActionError("The organization or domain request changed during activation. Please try again.");
         }
 
         const data = {
@@ -334,7 +365,7 @@ export async function activateOrganizationCustomDomain(formData: FormData) {
     revalidatePath(`/${activated.domain}`, "layout");
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new Error("That custom domain is already active for another organization.");
+      throw new ExpectedActionError("That custom domain is already active for another organization.");
     }
     throw error;
   }

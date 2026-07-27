@@ -197,6 +197,18 @@ test("acceptance creates one membership transactionally and cannot be replayed",
 test("platform provisioning creates a provisioning tenant and an owner invitation without implicit membership", async ({ page }) => {
   await loginAs(page, platformEmail, "/platform");
   await page.goto("/platform/organizations/new");
+  await page.getByLabel("Name").fill("Reserved Slug Organization");
+  await page.getByLabel("Subdomain slug").fill("www");
+  await page.getByLabel("Contact email").fill(platformEmail);
+  await page.getByLabel("Initial owner email").fill(provisionedOwnerEmail);
+  await page.getByRole("button", { name: "Provision organization" }).click();
+  await expect(page.getByTestId("create-organization-error")).toContainText("This slug is reserved by the platform.");
+  await expect(page.getByLabel("Name")).toHaveValue("Reserved Slug Organization");
+  await expect(page.getByLabel("Subdomain slug")).toHaveValue("www");
+  await expect(page.getByRole("button", { name: "Provision organization" })).toBeEnabled();
+  await expect(page.getByTestId("route-error")).toHaveCount(0);
+  expect(await prisma.organization.count({ where: { slug: "www" } })).toBe(0);
+
   await page.getByLabel("Name").fill("Provisioned Invitation Organization");
   await page.getByLabel("Subdomain slug").fill(provisionedOrgSlug);
   await page.getByLabel("Contact email").fill(platformEmail);

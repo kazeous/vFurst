@@ -1,5 +1,7 @@
 "use server";
 
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { requirePlatformAdmin } from "@/lib/dashboard-access";
 import {
   getNextControlPlaneAggregateVersion,
@@ -7,6 +9,7 @@ import {
 } from "@/lib/control-plane-transactions";
 import { reverseOrderFulfillment } from "@/lib/fulfillment";
 import { isSePayEnvironmentReady, isSePaySettingsReady, sepaySettingsSchema } from "@/lib/payments/platform";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import { parseMoney } from "@/lib/registration/pricing";
 import type { ControlPlaneEvent } from "@vfurst/contracts";
 import { enqueueControlPlaneEvent, PAYMENT_ATTEMPT_TTL_MS, Prisma, prisma } from "@vfurst/db";
@@ -117,7 +120,14 @@ const payoutSchema = z.object({
   entryIds: z.array(z.string().uuid()).min(1)
 });
 
-export async function recordOrganizerPayout(formData: FormData) {
+export async function recordOrganizerPayout(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => recordOrganizerPayoutInner(formData));
+}
+
+async function recordOrganizerPayoutInner(formData: FormData) {
   const admin = await requirePlatformAdmin();
   const parsed = payoutSchema.parse({
     orgId: formData.get("orgId"),
@@ -138,18 +148,18 @@ export async function recordOrganizerPayout(formData: FormData) {
       }
     });
     if (entries.length !== parsed.entryIds.length) {
-      throw new Error("One or more ledger entries are no longer available.");
+      throw new ExpectedActionError("One or more ledger entries are no longer available.");
     }
     const amount = entries.reduce((sum, entry) => sum + entry.amount, 0);
     const recordedAmount = parseMoney(parsed.amount, parsed.currency);
     if (amount <= 0 || recordedAmount <= 0) {
-      throw new Error("A payout must have a positive selected balance.");
+      throw new ExpectedActionError("A payout must have a positive selected balance.");
     }
     if (recordedAmount > amount) {
-      throw new Error("The payout cannot exceed the selected positive balance.");
+      throw new ExpectedActionError("The payout cannot exceed the selected positive balance.");
     }
     if (recordedAmount !== amount) {
-      throw new Error("Select ledger entries whose balance exactly matches the payout amount.");
+      throw new ExpectedActionError("Select ledger entries whose balance exactly matches the payout amount.");
     }
     const payout = await tx.organizerPayout.create({
       data: {

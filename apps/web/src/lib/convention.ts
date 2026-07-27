@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getRootDomain, normalizeHostname } from "./platform-hosts";
 
 type ConventionHostOrganization = {
+  slug: string;
   subdomain: string;
   customDomain: string | null;
 };
@@ -15,7 +16,7 @@ export function getConventionPortalRoot(hostname: string, org: ConventionHostOrg
     return "";
   }
 
-  return `/${org.subdomain}`;
+  return `/${org.slug}`;
 }
 
 export async function getConventionPortalRootForRequest(org: ConventionHostOrganization) {

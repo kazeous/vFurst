@@ -1,4 +1,5 @@
 import { replayPlatformEmailDelivery } from "@/actions/email-delivery-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,10 +104,10 @@ export default async function PlatformEmailOperationsPage() {
                 </span>
                 <span>
                   {canReplay ? (
-                    <form action={replayPlatformEmailDelivery}>
+                    <ActionStateForm action={replayPlatformEmailDelivery} errorTestId="platform-email-replay-error">
                       <input type="hidden" name="deliveryId" value={delivery.id} />
                       <Button label="Replay" type="submit" size="sm" />
-                    </form>
+                    </ActionStateForm>
                   ) : delivery.status === "DEAD_LETTERED" && !delivery.replayable ? (
                     <small>Single-use content</small>
                   ) : (

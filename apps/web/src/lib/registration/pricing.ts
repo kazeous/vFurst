@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CurrencyCode } from "@vfurst/db";
+import { ExpectedActionError } from "@/lib/expected-action-error";
 
 export const scheduledPriceSchema = z.object({
   startDate: z.string().min(1),
@@ -26,11 +27,11 @@ export function parseMoney(value: FormDataEntryValue | null, currency: CurrencyC
   const amount = typeof value === "string" && value.trim() !== "" ? Number(value) : 0;
 
   if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error("Money amounts must be zero or greater.");
+    throw new ExpectedActionError("Money amounts must be zero or greater.");
   }
 
   if (currency === "VND" && !Number.isInteger(amount)) {
-    throw new Error("VND amounts must use whole dong.");
+    throw new ExpectedActionError("VND amounts must use whole dong.");
   }
 
   return Math.round(amount * (currency === "USD" ? 100 : 1));

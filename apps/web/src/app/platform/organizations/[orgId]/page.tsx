@@ -1,4 +1,5 @@
 import { changeOrganizationStatus, resendInitialOwnerInvitation } from "@/actions/platform-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
           {org.statusUpdatedAt ? <p className="vf-muted">Last changed {formatDate(org.statusUpdatedAt)} by {org.statusUpdatedBy?.name ?? org.statusUpdatedBy?.email ?? "system"}.</p> : null}
           <div className="vf-actions">
             {transitions.map((targetStatus) => (
-              <form action={changeOrganizationStatus} key={targetStatus}>
+              <ActionStateForm action={changeOrganizationStatus} key={targetStatus}>
                 <input type="hidden" name="orgId" value={org.id} />
                 <input type="hidden" name="targetStatus" value={targetStatus} />
                 <Button
@@ -81,7 +82,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
                   variant={targetStatus === "RETIRED" || targetStatus === "SUSPENDED" ? "destructive" : "primary"}
                   isDisabled={targetStatus === "ACTIVE" && org.members.length === 0}
                 />
-              </form>
+              </ActionStateForm>
             ))}
           </div>
           {transitions.includes("ACTIVE") && org.members.length === 0 ? <p className="vf-muted">Activation unlocks after the first owner accepts an invitation.</p> : null}
@@ -95,11 +96,11 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
             <>
               <p className="vf-muted">No owner has accepted yet. Sending again revokes the previous pending invitation.</p>
               {org.status === "PROVISIONING" ? (
-                <form action={resendInitialOwnerInvitation} className="vf-form">
+                <ActionStateForm action={resendInitialOwnerInvitation} className="vf-form">
                   <input type="hidden" name="orgId" value={org.id} />
                   <label>Owner email<input name="email" type="email" defaultValue={latestInvitation?.email ?? org.contactEmail} required /></label>
                   <Button label="Send owner invitation" type="submit" />
-                </form>
+                </ActionStateForm>
               ) : null}
             </>
           )}

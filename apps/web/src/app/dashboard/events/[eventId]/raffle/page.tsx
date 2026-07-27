@@ -1,4 +1,5 @@
 import { addRaffleEntry, autoEnterConfirmedRegistrations, createRaffle, drawRaffleWinner } from "@/actions/phase5-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
                   </label>
                   <Button label="Add entry" type="submit" />
                 </form>
-                <form action={drawRaffleWinner} className="vf-inline-form">
+                <ActionStateForm action={drawRaffleWinner} className="vf-inline-form" errorTestId="raffle-draw-error">
                   <input type="hidden" name="raffleId" value={raffle.id} />
                   <label>
                     Prize
@@ -204,7 +205,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
                     </select>
                   </label>
                   <Button label="Draw winner" type="submit" variant="primary" />
-                </form>
+                </ActionStateForm>
               </article>
             );
           })}

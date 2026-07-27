@@ -1,4 +1,5 @@
 import { cancelBooking, createHotelBlock, updateHotelBlock } from "@/actions/hotel-actions";
+import { ActionStateForm } from "@/components/action-state-form";
 import { formatCurrency, formatMoneyInput, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
       <section className="vf-two-column">
         <div className="vf-section">
           <h2>Create hotel block</h2>
-          <form action={createHotelBlock} className="vf-form">
+          <ActionStateForm action={createHotelBlock} className="vf-form" errorTestId="create-hotel-block-error">
             <input type="hidden" name="eventId" value={event.id} />
             <label>
               Hotel name
@@ -73,7 +74,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
               </div>
             ))}
             <Button label="Create block" type="submit" variant="primary" />
-          </form>
+          </ActionStateForm>
         </div>
         <div className="vf-section">
           <h2>Summary</h2>
@@ -101,7 +102,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
           return (
             <div key={block.id} className="vf-section">
               <h2>{block.hotelName}</h2>
-              <form action={updateHotelBlock} className="vf-form">
+              <ActionStateForm action={updateHotelBlock} className="vf-form">
                 <input type="hidden" name="blockId" value={block.id} />
                 <div className="vf-subform-row">
                   <label>
@@ -142,7 +143,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                   );
                 })}
                 <Button label="Save block" type="submit" />
-              </form>
+              </ActionStateForm>
               <h3>Bookings</h3>
               <div className="vf-list">
                 {block.bookings.map((booking) => (

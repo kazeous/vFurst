@@ -5,6 +5,7 @@ import {
   savePlatformPaymentSettings
 } from "@/actions/payment-actions";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getProviderStates, getSePaySettings, isSePayEnvironmentReady } from "@/lib/payments/platform";
@@ -121,7 +122,7 @@ export default async function PlatformPaymentsPage({
         {payoutSaved === "1" ? <div className="vf-banner vf-banner-success">Organizer payout recorded.</div> : null}
         {ledgerGroups.map((group) => (
           <Card key={`${group.org.id}:${group.currency}`}>
-            <form action={recordOrganizerPayout} className="vf-form">
+            <ActionStateForm action={recordOrganizerPayout} className="vf-form" errorTestId="organizer-payout-error">
               <input type="hidden" name="orgId" value={group.org.id} />
               <input type="hidden" name="currency" value={group.currency} />
               <h3>{group.org.name} — {group.currency}</h3>
@@ -152,7 +153,7 @@ export default async function PlatformPaymentsPage({
                 <label>Paid date<input name="paidAt" type="date" defaultValue={today} required /></label>
               </div>
               <Button label="Record payout" type="submit" variant="primary" />
-            </form>
+            </ActionStateForm>
           </Card>
         ))}
         {ledgerGroups.length === 0 ? <p className="vf-empty">No open organizer balances.</p> : null}

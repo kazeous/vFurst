@@ -1,12 +1,13 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess as requireStoredEventAccess } from "@/lib/dashboard-access";
 import { parseMoney } from "@/lib/registration/pricing";
-import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
+import { ExpectedActionError, PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
-import type { CurrencyCode } from "@vfurst/db";
-import { prisma } from "@vfurst/db";
+import { Prisma, prisma, type CurrencyCode } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
@@ -52,8 +53,8 @@ function voucherPayloadFromForm(formData: FormData, currency: CurrencyCode) {
   const expiresDate = expiresValue ? z.string().date().parse(expiresValue) : null;
   const expiresAt = expiresDate ? new Date(`${expiresDate}T23:59:59.999Z`) : null;
 
-  if (discountValue <= 0) throw new Error("Discount value must be greater than zero.");
-  if (expiresAt && expiresAt < new Date()) throw new Error("Voucher expiry must be today or later.");
+  if (discountValue <= 0) throw new ExpectedActionError("Discount value must be greater than zero.");
+  if (expiresAt && expiresAt < new Date()) throw new ExpectedActionError("Voucher expiry must be today or later.");
 
   return {
     tierIds,
@@ -100,7 +101,14 @@ function getVoucherRestrictions(value: unknown) {
   };
 }
 
-export async function createVoucher(formData: FormData) {
+export async function createVoucher(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => createVoucherInner(formData), "Voucher created.");
+}
+
+async function createVoucherInner(formData: FormData) {
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -112,7 +120,7 @@ export async function createVoucher(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid voucher.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid voucher.");
   }
 
   const normalizedCode = normalizeCode(parsed.data.code);
@@ -121,19 +129,33 @@ export async function createVoucher(formData: FormData) {
   const { payload, tierIds } = voucherPayloadFromForm(formData, event.currency);
   await assertVoucherTiersBelongToEvent(event.id, event.orgId, tierIds);
 
-  await prisma.voucher.create({
-    data: {
-      orgId: event.orgId,
-      eventId: event.id,
-      code: normalizedCode,
-      ...payload
+  try {
+    await prisma.voucher.create({
+      data: {
+        orgId: event.orgId,
+        eventId: event.id,
+        code: normalizedCode,
+        ...payload
+      }
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new ExpectedActionError("A voucher with this code already exists for the event.");
     }
-  });
+    throw error;
+  }
 
   revalidatePath(`/dashboard/events/${event.id}/vouchers`);
 }
 
-export async function bulkGenerateVouchers(formData: FormData) {
+export async function bulkGenerateVouchers(
+  _previousState: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  return runActionWithState(() => bulkGenerateVouchersInner(formData), "Voucher codes generated.");
+}
+
+async function bulkGenerateVouchersInner(formData: FormData) {
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -147,7 +169,7 @@ export async function bulkGenerateVouchers(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid bulk voucher request.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid bulk voucher request.");
   }
 
   const normalizedPrefix = normalizeCode(parsed.data.prefix);
