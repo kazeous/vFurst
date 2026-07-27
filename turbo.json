@@ -33,6 +33,30 @@
         "^build",
         "^test"
       ]
+    },
+    "@vfurst/web#test": {
+      "dependsOn": [
+        "^build",
+        "^test"
+      ]
+    },
+    "@vfurst/worker#test": {
+      "dependsOn": [
+        "^build",
+        "^test"
+      ]
+    },
+    "@vfurst/platform-manager#test": {
+      "dependsOn": [
+        "^build",
+        "^test"
+      ]
+    },
+    "@vfurst/tenant-web#test": {
+      "dependsOn": [
+        "^build",
+        "^test"
+      ]
     }
   }
 }
