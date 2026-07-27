@@ -29,13 +29,13 @@ jobs:
         run: npm run db:validate
 
       - name: Type-check
-        run: npm run type-check
+        run: npx turbo run type-check --concurrency=1
 
       - name: Lint
-        run: npm run lint
+        run: npx turbo run lint --concurrency=1
 
       - name: Test
-        run: npm run test
+        run: npx turbo run test --concurrency=1
 
       - name: Smoke developer boot without injected app env
         run: npm run test:boot-config

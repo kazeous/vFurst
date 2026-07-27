@@ -10,7 +10,7 @@
     "prestart": "node ../../scripts/check-app-env.mjs web && npm run prepare:payment-attempt-locks --workspace @vfurst/db && npm run push --workspace @vfurst/db && npm run backfill:managed-tenancy --workspace @vfurst/db && npm run backfill:payment-attempt-locks --workspace @vfurst/db",
     "start": "next start",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
+    "type-check": "npm run build --workspace @vfurst/contracts && tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
