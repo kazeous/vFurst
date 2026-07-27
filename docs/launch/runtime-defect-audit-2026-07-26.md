@@ -504,6 +504,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 | 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | **Complete** | 2026-07-27 | See "Batch 3 outcome" below |
 | 4 — Data and tests | DAT-01, TST-01, TST-03 | **Complete** | 2026-07-27 | See "Batch 4 outcome" below |
 | 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | **Complete** | 2026-07-27 | See "Batch 5 outcome" below |
+| 1.6 — Developer boot smoke | TST-02 | **Complete** | 2026-07-27 | See "Unit 1.6 outcome" below |
 | 6 — Split runtime | SPL-02…SPL-11 | Not started | | SPL-01 closed in Batch 0 |
 
 ---
@@ -720,3 +721,25 @@ The final action-layer sweep contains **72** bare throws. None is an unreviewed 
 - Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (web **179/179**, DB **52/52**, auth **67/67**), build **10/10** packages. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
 - Split-topology canary passed **5/5** without changing either split runtime.
 - Full production-mode E2E on the final build (`E2E_PRODUCTION=1 npm run test:e2e -- --workers=1`) completed with **118 passed, 0 failed, 0 did not run**. A prior four-worker run reproduced the documented registration-policy contention timeout; that file passed **3/3** in isolation and again inside the clean full run.
+
+---
+
+# Unit 1.6 outcome — 2026-07-27
+
+**TST-02 is closed.** Batch 6 was not started: no split-runtime implementation, cutover work, or `test:e2e:split` work was performed.
+
+## What changed
+
+- `scripts/smoke-web-boot.mjs` removes every application key declared by `apps/web/.env.example` from the boot process environment. The `predev` lifecycle must derive the per-app env files from the tracked repository-root `.env.local`, and the smoke requires the exact `[check-app-env] @vfurst/web configuration is complete.` assertion before accepting the boot.
+- On the Linux CI runner, the smoke starts the exact `npm run dev --workspace @vfurst/web` command and requires Next's ready signal. The Windows path runs the same npm `predev` lifecycle and then prepares/listens with the Next development server API so the harness can shut down without leaving a detached `next dev` child tree.
+- The smoke snapshots and restores `apps/web/.env.local` and `apps/worker/.env`, including removing files that did not exist before the run. It therefore cannot leak generated local configuration into the subsequent CI build.
+- Root `test:boot-config` exposes the check. CI runs it after tests and before `build`, so the production build always replaces the dev `.next` output noted after Batch 1.
+
+## Evidence and Phase 1 closeout state
+
+- `npm run test:boot-config` passed on Windows: the env sync ran, the ENV-01 boot assertion fired, and Next listened on loopback without injected application configuration. `node --check scripts/smoke-web-boot.mjs` and `git diff --check` passed.
+- Repository gates passed: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (web **179/179**, DB **52/52**, auth **67/67**), build **10/10** packages, and split-topology **5/5**. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
+- Full production-mode E2E on the final application build completed with **118 passed, 0 failed, 0 did not run** under one worker. The preceding four-worker run had four concurrency/server-instability failures and was not recorded as a pass.
+- `npm run check:launch` ran and reported the ten still-open deployment/external gates owned by Phase 6 (Stripe, Sentry, beta evidence, physical screen-reader evidence, and a live launch URL).
+- `npm audit --audit-level=moderate` is **red** with **33 vulnerabilities (31 high, 2 critical)**, including Auth.js and Next.js advisories that currently report no fix. No dependency update was attempted in this tightly scoped unit.
+- Phase 1 therefore remains **In progress** even though TST-02 itself is complete: the repository-wide dependency audit is not green, and the complete plain-`npm run dev` manual walkthrough was not closed in this session. The next session must be Phase 1 verification/security closeout only; it must not start Batch 6 or Phase 2.

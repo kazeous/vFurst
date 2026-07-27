@@ -37,5 +37,8 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Smoke developer boot without injected app env
+        run: npm run test:boot-config
+
       - name: Build
         run: npm run build

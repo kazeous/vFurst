@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0–5 are complete. **Next session: unit 1.6 = TST-02 only** — add the CI smoke that boots the app without injected environment and proves the boot assertion fires. Audit Batch 6 (split-runtime hardening) remains explicitly deferred/frozen and was not started in unit 1.5.
+Audit Batches 0–5 and unit 1.6/TST-02 are complete. Phase 1 remains in progress because `npm audit --audit-level=moderate` reports 33 high/critical dependency vulnerabilities and the complete plain-dev manual walkthrough is not yet recorded. **Next session: Phase 1 verification/security closeout only** — triage the dependency advisories and complete the walkthrough; do not start Phase 2 or Audit Batch 6. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batches 0–5 done (2026-07-27); unit 1.6/TST-02 open; audit Batch 6 deferred and split runtime frozen |
+| 1 — Stabilize | In progress | Units 1.1–1.6 done (2026-07-27); closeout blocked by dependency audit + complete plain-dev walkthrough; audit Batch 6 deferred/frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-27 — Phase 1 unit 1.6: developer boot configuration smoke (TST-02)
+
+- Closed TST-02 with `scripts/smoke-web-boot.mjs` and root `test:boot-config`. The smoke removes all app-contract keys from the process environment, requires the real `predev` env sync and ENV-01 startup assertion, boots a development Next server, and restores the generated web/worker env files exactly.
+- CI now runs the smoke after unit tests and before `build`. Linux CI exercises the exact workspace `npm run dev` lifecycle; the controlled Windows path exercises the same `predev` assertion and Next development boot without leaving a detached process tree.
+- Focused smoke passed without injected app env. Repository gates passed: type-check **9/9**, lint **9/9**, test **14/14** (web **179/179**, DB **52/52**, auth **67/67**), build **10/10**, split-topology **5/5**; only the known BullMQ warning remains.
+- Full production E2E on the final application build passed **118/118, 0 failed, 0 did not run** with one worker. An earlier four-worker attempt had four concurrency/server-instability failures and is not claimed as green.
+- `npm run check:launch` ran and remains red only on ten Phase-6 deployment/external checks (Stripe/Sentry configuration, beta and screen-reader evidence, live URL). `npm audit --audit-level=moderate` failed with **33 vulnerabilities: 31 high, 2 critical**; several Auth.js/Next.js advisories report no fix. No dependency change was made because it is outside TST-02.
+- TST-02 is complete, but Phase 1 is **not** marked complete: the dependency audit is red and the full plain-`npm run dev` walkthrough is not yet recorded. **Next session must perform Phase 1 verification/security closeout only; it must not start Phase 2, Batch 6, split hardening, or cutover work.**
 
 ### 2026-07-27 — Phase 1 unit 1.5: organizer/platform residual actions and routing hygiene (audit Batch 5)
 
