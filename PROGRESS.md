@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0 (env), 1 (error visibility), 2 (public flows), and 3 (routing/checkout safety) are complete. **Next session: unit 1.4 = audit Batch 4** — DAT-01, TST-01, and TST-03 only. Batch 4 was not started in the Batch 3 session; read its audit rows before making any schema, assertion, or fixture-cleanup change.
+Audit Batches 0 (env), 1 (error visibility), 2 (public flows), 3 (routing/checkout safety), and 4 (data/test integrity) are complete. **Next session: unit 1.5 = audit Batch 5** — ERR-03 remainder, ERR-05, and RTE-03/05/08/09/10 only. Batch 5 was not started in the Batch 4 session; read its audit rows before changing organizer, platform, or residual actions.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batches 0–3 done (2026-07-27); Batches 4–6 open; split runtime frozen |
+| 1 — Stabilize | In progress | Audit Batches 0–4 done (2026-07-27); Batches 5–6 open; split runtime frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-27 — Phase 1 unit 1.4: data model and test integrity (audit Batch 4)
+
+- Closed DAT-01, TST-01, and TST-03. The control-plane outbox FK now uses `ON DELETE SET NULL`; an organization with a lifecycle event can be deleted while its event survives with `organizationId = null`, and event receipts remain correctly owned by the surviving event.
+- Updated the two stale hero accessible-name assertions and four stale visual baselines discovered by the full accessibility smoke: marketing reflects the earlier removal of “Live”, while registrations reflects the existing approval-column/“Approve selected” UI.
+- Added a guarded fixture-prefix cleanup utility with dry-run/apply entry points and **19/19** unit tests. The load-proof runner invokes it before building/seeding. The local purge matched **0 organizations / 0 users / 0 outbox events** because the plan rebuild had already reset accumulated fixtures; post-suite DB checks still show zero matching fixture organizations/users.
+- `prestart` passed twice consecutively (first synchronized the FK, second reported the schema already in sync). The DAT deletion regression passed, and the actual PostgreSQL constraint was confirmed as `ON DELETE SET NULL`.
+- Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (DB **52/52**, web **160/160**, auth **67/67**), build **10/10** packages, split-topology **5/5**. The only build warning is the known BullMQ dynamic-dependency warning.
+- Full production E2E: **114 passed / 0 failed / 0 did not run**. Batch 5 was deliberately untouched.
 
 ### 2026-07-27 — Phase 1 unit 1.3: routing and checkout safety (audit Batch 3)
 

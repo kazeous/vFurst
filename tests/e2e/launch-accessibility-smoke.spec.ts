@@ -203,7 +203,7 @@ test("marketing pages expose landmarks, alt text, keyboard order, and calculator
   await expect(page.getByRole("heading", { name: "Run the whole convention from one calm workspace." })).toBeVisible();
   await expect(
     page.getByRole("img", {
-      name: "Live convention operations dashboard showing registration, check-in, and volunteer staffing"
+      name: "Convention operations dashboard showing registration, check-in, and volunteer staffing"
     })
   ).toBeVisible();
 

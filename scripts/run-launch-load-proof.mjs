@@ -421,6 +421,22 @@ async function seedLoadData() {
   return eventMatch[1];
 }
 
+async function cleanupTestFixtures() {
+  const result = await run(
+    process.execPath,
+    [join(root, "packages", "db", "scripts", "cleanup-test-fixtures.mjs"), "--apply"],
+    {
+      env: process.env,
+      stdio: ["ignore", "pipe", "inherit"],
+      echoStdout: true
+    }
+  );
+
+  if (result.code !== 0) {
+    throw new Error(`Fixture cleanup failed with exit code ${result.code}.`);
+  }
+}
+
 async function main() {
   await loadDotEnv(".env");
   await loadDotEnv(".env.local");
@@ -428,6 +444,7 @@ async function main() {
   process.env.NODE_ENV = "production";
   const databasePolicy = applyDatabaseConnectionLimit();
   await inspectDatabaseCapacity(databasePolicy);
+  await cleanupTestFixtures();
 
   if (!config.skipBuild) {
     const build = await run(process.execPath, [nextBin, "build"], { cwd: webRoot });

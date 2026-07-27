@@ -7,7 +7,7 @@ test("renders the launch marketing home page", async ({ page }) => {
   await expect(page.getByText("Manage registration, hotels, stores, vendors")).toBeVisible();
   await expect(
     page.getByRole("img", {
-      name: "Live convention operations dashboard showing registration, check-in, and volunteer staffing"
+      name: "Convention operations dashboard showing registration, check-in, and volunteer staffing"
     })
   ).toBeVisible();
   await expect(page.locator(".vf-home-hero-copy").getByRole("link", { name: "Request managed access" })).toBeVisible();

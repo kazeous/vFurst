@@ -391,7 +391,7 @@ model ControlPlaneOutboxEvent {
   lastError        String?                    @db.Text
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
-  organization     Organization?              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization     Organization?              @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   receipts         ControlPlaneEventReceipt[]
 
   @@unique([aggregateType, aggregateId, aggregateVersion])

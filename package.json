@@ -26,6 +26,8 @@
     "test:load:launch": "node scripts/run-launch-load-proof.mjs",
     "test:load:smoke": "node scripts/run-load-test.mjs -e VFURST_LOAD_PROFILE=smoke",
     "seed:load": "node scripts/seed-load-test.mjs",
+    "fixtures:cleanup": "npm run cleanup:test-fixtures --workspace @vfurst/db",
+    "fixtures:cleanup:dry-run": "node packages/db/scripts/cleanup-test-fixtures.mjs",
     "check:launch": "node scripts/check-launch-readiness.mjs",
     "platform-admin": "node scripts/manage-platform-admin.mjs",
     "db:validate": "npm run validate --workspace @vfurst/db"

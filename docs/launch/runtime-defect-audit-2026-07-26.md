@@ -502,7 +502,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 | 1 — Error visibility | ERR-01, ERR-02 | **Complete** | 2026-07-26 | See "Batch 1 outcome" below |
 | 2 — Public flows | ERR-03 (public), ERR-04 | **Complete** | 2026-07-27 | See "Batch 2 outcome" below |
 | 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | **Complete** | 2026-07-27 | See "Batch 3 outcome" below |
-| 4 — Data and tests | DAT-01, TST-01, TST-03 | Not started | | |
+| 4 — Data and tests | DAT-01, TST-01, TST-03 | **Complete** | 2026-07-27 | See "Batch 4 outcome" below |
 | 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | Not started | | |
 | 6 — Split runtime | SPL-02…SPL-11 | Not started | | SPL-01 closed in Batch 0 |
 
@@ -655,3 +655,26 @@ and `global-error.tsx` covers client-side render crashes.
 - Route/action bootstrap gates passed: `docker compose up -d`; `npm run prestart --workspace @vfurst/web` with the schema already in sync.
 - Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks, build **10/10** packages. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
 - The full E2E suite was intentionally not rerun and no green claim is recorded: the known DAT-01/TST-01/TST-03 failures remain owned by Batch 4.
+
+---
+
+# Batch 4 outcome — 2026-07-27
+
+**DAT-01, TST-01, and TST-03 are closed.** Batch 5 was not started; organizer, platform, and residual action handling remains exactly where Batch 3 left it.
+
+## What changed
+
+- `ControlPlaneOutboxEvent.organization` now uses `onDelete: SetNull`. The nullable foreign key no longer pins an organization, while the event payload and aggregate fields preserve the durable audit identity. `ControlPlaneEventReceipt` remains a child of the event with `onDelete: Cascade`, so it needed no organization-FK change.
+- The home and accessibility-smoke specs assert the current hero accessible name. The marketing home visual baselines were refreshed to the already-shipped “Event day”/“Recent arrivals” copy. Once that stale first failure was removed, the same smoke exposed older registrations baselines; those were refreshed to the already-shipped approval column and “Approve selected” action from the registration-policy work.
+- `packages/db/scripts/cleanup-test-fixtures.mjs` provides dry-run-by-default and explicit `--apply` cleanup for `load-*`, `phase*-smoke-*`, `*-org-a-*`, and `*-org-b-*` organizations plus their synthetic users. It refuses non-local database hosts, deletes in a transaction, proves captured outbox rows detach before removing local fixture event history, and has **19/19** focused unit tests including transaction ordering and retention assertions.
+- Root `fixtures:cleanup` / `fixtures:cleanup:dry-run` commands and the DB workspace command expose the utility. `scripts/run-launch-load-proof.mjs` now applies cleanup before the proof builds or seeds, preventing unrelated fixture residue from skewing measurements.
+- `tests/e2e/control-plane-outbox-retention.spec.ts` creates an organization with an outbox event, deletes the organization, and verifies that the event survives with `organizationId = null` and its aggregate/payload identity intact.
+
+## Evidence
+
+- Prisma schema validation passed. The cleanup utility's focused tests passed **19/19**.
+- Cleanup dry-run and apply each matched **0 organizations / 0 users / 0 outbox events**: the 2026-07-26 plan rebuild had already purged the historical residue. After the full suite, PostgreSQL still contains only the two local baseline organizations/users and **0** rows matching the specified fixture prefixes/load-user patterns.
+- `npm run prestart --workspace @vfurst/web` passed twice consecutively: the first run synchronized the FK and the second reported the schema already in sync. Direct PostgreSQL inspection reports `control_plane_outbox_events_organizationId_fkey ... ON DELETE SET NULL`.
+- The focused organization-deletion regression passed; the refreshed accessibility visual smoke then passed normally without update mode.
+- Repository gates passed: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (DB **52/52**, web **160/160**, auth **67/67**), build **10/10** packages, and split-topology **5/5**. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
+- Full production-mode E2E (`E2E_PRODUCTION=1 npm run test:e2e`) completed with **114 passed, 0 failed, 0 did not run**. This is the first clean full-suite result since TST-01 was introduced and satisfies Batch 4's no-failure/no-skipped exit criterion.
