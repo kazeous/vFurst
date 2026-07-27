@@ -26,7 +26,11 @@ jobs:
     name: Build, push, and trigger Coolify
     if: >-
       (github.event_name == 'workflow_dispatch') ||
-      (github.event.workflow_run.conclusion == 'success')
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'staging' &&
+        github.event.workflow_run.event == 'push'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,7 +56,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute IMAGE_TAG
         id: compute
@@ -106,8 +110,6 @@ jobs:
           done
           echo "Coolify web webhook failed after 3 attempts." >&2
           exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trigger Coolify worker deploy
         if: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER != '' }}
@@ -129,8 +131,6 @@ jobs:
           done
           echo "Coolify worker webhook failed after 3 attempts." >&2
           exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summarise
         if: always()
