@@ -39,6 +39,8 @@ jobs:
       REGISTRY: ghcr.io
       IMAGE_NAMESPACE: kazeous/vfurst
       IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && (inputs.image_tag || github.sha) || github.event.workflow_run.head_sha }}
+      COOLIFY_WEBHOOK_URL_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
+      COOLIFY_WEBHOOK_URL_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,7 +93,7 @@ jobs:
           cache-to: type=gha,scope=worker,mode=max
 
       - name: Trigger Coolify web deploy
-        if: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB != '' }}
+        if: env.COOLIFY_WEBHOOK_URL_WEB != ''
         run: |
           set -euo pipefail
           body=$(jq -n \
@@ -99,7 +101,7 @@ jobs:
             '{ref: "refs/heads/staging", image_tag: $tag, image: "web"}')
           for i in 1 2 3; do
             if curl --fail --silent --show-error --max-time 30 \
-                 -X POST "${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}" \
+                 -X POST "${COOLIFY_WEBHOOK_URL_WEB}" \
                  -H 'Content-Type: application/json' \
                  --data "$body"; then
               echo "Coolify web webhook delivered (attempt $i)."
@@ -112,7 +114,7 @@ jobs:
           exit 1
 
       - name: Trigger Coolify worker deploy
-        if: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER != '' }}
+        if: env.COOLIFY_WEBHOOK_URL_WORKER != ''
         run: |
           set -euo pipefail
           body=$(jq -n \
@@ -120,7 +122,7 @@ jobs:
             '{ref: "refs/heads/staging", image_tag: $tag, image: "worker"}')
           for i in 1 2 3; do
             if curl --fail --silent --show-error --max-time 30 \
-                 -X POST "${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}" \
+                 -X POST "${COOLIFY_WEBHOOK_URL_WORKER}" \
                  -H 'Content-Type: application/json' \
                  --data "$body"; then
               echo "Coolify worker webhook delivered (attempt $i)."
@@ -134,6 +136,9 @@ jobs:
 
       - name: Summarise
         if: always()
+        env:
+          WEBHOOK_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
+          WEBHOOK_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
         run: |
           {
             echo "## Staging deploy summary"
@@ -141,6 +146,6 @@ jobs:
             echo "- image_tag: \`${{ steps.compute.outputs.image_tag }}\`"
             echo "- web image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${{ steps.compute.outputs.image_tag }}\`"
             echo "- worker image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:${{ steps.compute.outputs.image_tag }}\`"
-            echo "- web webhook: \`${{ secrets.COOLIFY_WEBHOOK_URL_WEB != '' && 'configured' || 'missing – set COOLIFY_WEBHOOK_URL_WEB' }}\`"
-            echo "- worker webhook: \`${{ secrets.COOLIFY_WEBHOOK_URL_WORKER != '' && 'configured' || 'missing – set COOLIFY_WEBHOOK_URL_WORKER' }}\`"
+            echo "- web webhook: \`${WEBHOOK_WEB:+configured}${WEBHOOK_WEB:-missing – set COOLIFY_WEBHOOK_URL_WEB}\`"
+            echo "- worker webhook: \`${WEBHOOK_WORKER:+configured}${WEBHOOK_WORKER:-missing – set COOLIFY_WEBHOOK_URL_WORKER}\`"
           } >> "$GITHUB_STEP_SUMMARY"
