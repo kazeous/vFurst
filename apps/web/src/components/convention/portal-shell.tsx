@@ -36,7 +36,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
           </PortalLink>
           <div className="vf-actions">
             <Link className="vf-portal-powered" href={getCentralAppUrl("/account")}>Account</Link>
-            <Link className="vf-portal-powered" href="/">Powered by <strong>vFurst</strong></Link>
+            <Link className="vf-portal-powered" href={getCentralAppUrl("/")}>Powered by <strong>vFurst</strong></Link>
           </div>
         </div>
         <PortalNav subdomain={org.subdomain} />
@@ -59,7 +59,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
 
       <footer className="vf-portal-footer">
         <span>{event?.name ?? org.name}</span>
-        <div><PortalLink subdomain={org.subdomain} suffix="/register">Tickets</PortalLink><PortalLink subdomain={org.subdomain} suffix="/volunteer">Volunteer</PortalLink><Link href="/privacy">Privacy</Link></div>
+        <div><PortalLink subdomain={org.subdomain} suffix="/register">Tickets</PortalLink><PortalLink subdomain={org.subdomain} suffix="/volunteer">Volunteer</PortalLink><Link href={getCentralAppUrl("/privacy")}>Privacy</Link></div>
         <small>Secure registration and payments by vFurst.</small>
       </footer>
     </div>

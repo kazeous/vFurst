@@ -140,13 +140,15 @@ export function DashboardAppShell({
   userName,
   userEmail,
   isPlatformAdmin,
-  workspace
+  workspace,
+  logoutAction
 }: Readonly<{
   children: ReactNode;
   userName?: string | null;
   userEmail?: string | null;
   isPlatformAdmin: boolean;
   workspace: DashboardWorkspaceData;
+  logoutAction: () => Promise<void>;
 }>) {
   const pathname = usePathname();
   const router = useRouter();
@@ -290,7 +292,9 @@ export function DashboardAppShell({
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start">
               <DropdownMenuItem asChild><Link href="/dashboard/settings"><Settings size={16} />Account settings</Link></DropdownMenuItem>
-              <DropdownMenuItem asChild><Link href="/api/auth/signout"><LogOut size={16} />Log out</Link></DropdownMenuItem>
+              <form action={logoutAction}>
+                <button className="vf-dropdown-item" type="submit"><LogOut size={16} />Log out</button>
+              </form>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

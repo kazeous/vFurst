@@ -125,13 +125,27 @@ export function isSafeLocalReturnPath(value: string | undefined) {
     return false;
   }
 
-  if (value.includes("\\")) {
+  let decoded = value;
+
+  try {
+    for (let pass = 0; pass < 2; pass += 1) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
+  } catch {
     return false;
   }
 
-  return !Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 31 || codePoint === 127;
+  return [value, decoded].every((candidate) => {
+    if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("\\")) {
+      return false;
+    }
+
+    return !Array.from(candidate).some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 31 || codePoint === 127;
+    });
   });
 }
 

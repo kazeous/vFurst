@@ -1,4 +1,5 @@
 import { requireCheckoutOrder } from "@/lib/payments/checkout";
+import { safeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request, { params }: { params: Promise<{ orderId: string }> }) {
@@ -20,7 +21,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
               : activeAttempt?.expiresAt && activeAttempt.expiresAt <= new Date()
                 ? "EXPIRED"
                 : activeAttempt?.status ?? order.status,
-        successPath: order.status === "PAID" ? order.checkoutSuccessPath : undefined
+        successPath:
+          order.status === "PAID" ? safeCheckoutReturnPath(order.checkoutSuccessPath) : undefined
       },
       {
         headers: {

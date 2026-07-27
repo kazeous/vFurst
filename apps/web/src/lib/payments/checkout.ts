@@ -1,15 +1,8 @@
 import { createCheckoutToken, verifyCheckoutToken } from "@/lib/payments/checkout-token";
+import { requireSafeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { prisma } from "@vfurst/db";
 
 export const CHECKOUT_TTL_MS = 30 * 60 * 1000;
-
-function safePath(path: string) {
-  if (!path.startsWith("/") || path.startsWith("//")) {
-    throw new Error("Checkout return paths must be local application paths.");
-  }
-
-  return path;
-}
 
 export async function prepareOrderCheckout(orderId: string, successPath: string, cancelPath: string) {
   const { token, hash } = createCheckoutToken();
@@ -21,8 +14,8 @@ export async function prepareOrderCheckout(orderId: string, successPath: string,
     },
     data: {
       checkoutTokenHash: hash,
-      checkoutSuccessPath: safePath(successPath),
-      checkoutCancelPath: safePath(cancelPath),
+      checkoutSuccessPath: requireSafeCheckoutReturnPath(successPath),
+      checkoutCancelPath: requireSafeCheckoutReturnPath(cancelPath),
       checkoutExpiresAt: expiresAt
     }
   });

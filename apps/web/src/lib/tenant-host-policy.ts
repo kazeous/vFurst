@@ -1,6 +1,7 @@
 import { createHostPolicy, normalizeHostname } from "@vfurst/tenant-context";
 
-const FALLBACK_ROOT_DOMAIN = "vfurst.reyuugames.com";
+export const CANONICAL_ROOT_DOMAIN = "vfurst.reyuugames.com";
+const RESERVED_PLATFORM_SUBDOMAINS = ["api", "app", "console", "manager", "www"] as const;
 
 function hostnameFromUrlOrHost(value: string | undefined) {
   const trimmed = value?.trim();
@@ -15,25 +16,33 @@ function hostnameFromUrlOrHost(value: string | undefined) {
 }
 
 export function getConfiguredRootDomain() {
-  return hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_ROOT_DOMAIN) || FALLBACK_ROOT_DOMAIN;
+  return hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_ROOT_DOMAIN) || CANONICAL_ROOT_DOMAIN;
 }
 
-export function getTenantHostPolicy() {
-  const rootDomain = getConfiguredRootDomain();
+function createConfiguredHostPolicy(rootDomain: string, useEnvironment: boolean) {
   const managerHostname =
-    hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_MANAGER_URL) ||
-    hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_APP_URL) ||
-    hostnameFromUrlOrHost(process.env.AUTH_URL) ||
+    (useEnvironment && hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_MANAGER_URL)) ||
+    (useEnvironment && hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_APP_URL)) ||
+    (useEnvironment && hostnameFromUrlOrHost(process.env.AUTH_URL)) ||
     rootDomain;
   const consoleHostname =
-    hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_CONSOLE_URL) || `app.${rootDomain}`;
-  const apiHostname = hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_API_URL) || `api.${rootDomain}`;
+    (useEnvironment && hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_CONSOLE_URL)) || `app.${rootDomain}`;
+  const apiHostname =
+    (useEnvironment && hostnameFromUrlOrHost(process.env.NEXT_PUBLIC_API_URL)) || `api.${rootDomain}`;
 
   return createHostPolicy({
     rootDomain,
     managerHostname,
     consoleHostname,
     apiHostname,
-    reservedSubdomains: ["api", "app", "console", "manager", "www"]
+    reservedSubdomains: RESERVED_PLATFORM_SUBDOMAINS
   });
+}
+
+export function getTenantHostPolicy() {
+  return createConfiguredHostPolicy(getConfiguredRootDomain(), true);
+}
+
+export function getCanonicalTenantHostPolicy() {
+  return createConfiguredHostPolicy(CANONICAL_ROOT_DOMAIN, false);
 }

@@ -235,6 +235,7 @@ export default async function PublicStorePage({
     }
   });
   const storePath = `${portalRoot}/store`;
+  const centralStorePath = getCentralPortalPath(org.subdomain, "/store");
   const successOrder =
     event && query.success
       ? await resolveSuccessOrder({
@@ -365,8 +366,8 @@ export default async function PublicStorePage({
               cart={cart}
               currency={event.currency}
               returnPath={storePath}
-              successPath={storePath}
-              cancelPath={storePath}
+              successPath={centralStorePath}
+              cancelPath={centralStorePath}
             />
           ) : null}
         </div>

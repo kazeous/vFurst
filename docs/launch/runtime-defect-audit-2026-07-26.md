@@ -501,7 +501,7 @@ Update this table at the end of each session and mirror the summary into `PROGRE
 | 0 — Configuration | ENV-01, ENV-02, SPL-01 | **Complete** | 2026-07-26 | See "Batch 0 outcome" below |
 | 1 — Error visibility | ERR-01, ERR-02 | **Complete** | 2026-07-26 | See "Batch 1 outcome" below |
 | 2 — Public flows | ERR-03 (public), ERR-04 | **Complete** | 2026-07-27 | See "Batch 2 outcome" below |
-| 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | Not started | | |
+| 3 — Routing and checkout | RTE-01/02/04/06/07, CHK-01, CHK-02 | **Complete** | 2026-07-27 | See "Batch 3 outcome" below |
 | 4 — Data and tests | DAT-01, TST-01, TST-03 | Not started | | |
 | 5 — Residual actions | ERR-03 (remainder), ERR-05, RTE-03/05/08/09/10 | Not started | | |
 | 6 — Split runtime | SPL-02…SPL-11 | Not started | | SPL-01 closed in Batch 0 |
@@ -630,3 +630,28 @@ and `global-error.tsx` covers client-side render crashes.
 - Both specs pass in dev mode (9/9) and production mode (9/9).
 - Touched-flow regressions: `registration-policy` 3/3, `hotel-resource-authorization` 3/3, `registration-transfer` + `store-resource-authorization` + `staff-vendor-resource-authorization` 13/13, `account-registration` 1/1. Two failures under a six-file four-worker run reproduced the **documented contention flakes** (`registration-policy.spec.ts:121` Postgres deadlock; hotel spec 120 s test-timeout) and pass 3/3 each in isolation — same behavior as recorded before this batch.
 - Repository gates: `turbo run type-check lint test build` 37/37.
+
+---
+
+# Batch 3 outcome — 2026-07-27
+
+**RTE-01, RTE-02, RTE-04, RTE-06, RTE-07, CHK-01, and CHK-02 are closed.** Batch 4 was not started: there is no schema/FK change, stale hero assertion change, fixture-cleanup utility, or accumulated-fixture purge in this unit.
+
+## What changed
+
+- The legacy middleware now recognizes the configured platform hosts and the canonical production root/reserved hosts through the shared tenant-host classifier. Invalid `Host` values fail closed with a no-store structured 400 instead of reaching a 500.
+- Middleware removes every caller-supplied `x-vfurst-*` request header before platform pass-through or tenant rewrite. Tenant metadata is rebuilt from the validated host for the internal request only and is no longer copied to public response headers.
+- Tenant-store checkout sends the user to the central `/checkout/[orderId]` surface and persists central-path confirmation/cancellation targets. The shared return-path guard rejects backslashes, protocol-relative paths, encoded separators, and encoded control characters at write time; both the status API and paid checkout page replace unsafe legacy values with `/account/orders` at read time.
+- Portal “Powered by vFurst” and Privacy links now resolve on the central host. Dashboard logout is a real Auth.js server action and redirects to `/` after clearing the session.
+- `isSafeLocalReturnPath` now validates both the raw and decoded representation, covering the CHK-02 encoded-path variants for every caller of the shared auth helper.
+
+## Evidence
+
+- Plain `npm run dev` host probe: `localhost:3000` **200**, `www.vfurst.reyuugames.com` **200**, `console.vfurst.reyuugames.com` **200**, `app.vfurst.reyuugames.com` **200**, `foo_bar.localhost:3000` **400**.
+- New focused unit coverage: middleware host/header safety, platform-host classification, checkout return-path write/read policy, and shared auth return-path cases — **27/27**. The full web unit gate is **160/160** and the auth package gate is **67/67**.
+- New `tests/e2e/routing-checkout-safety.spec.ts` — **5/5**: exact host matrix; central portal links plus forged-header isolation/no response echo; dashboard logout; tenant-host checkout remaining on the central checkout surface and returning to its central-path receipt; malicious submitted and persisted success paths rejected/fallbacked at both read surfaces.
+- Existing `store-resource-authorization.spec.ts` regression — **4/4**. Split-topology canary — **5/5**.
+- Plain-dev browser walkthrough confirmed tenant footer links resolve to `http://localhost:3000/` and `/privacy`, and dashboard logout clears the session and returns to the marketing root. The temporary organization, user, and provider fixture created for this walkthrough were removed by exact identifier after verification.
+- Route/action bootstrap gates passed: `docker compose up -d`; `npm run prestart --workspace @vfurst/web` with the schema already in sync.
+- Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks, build **10/10** packages. The only build warning is the pre-existing BullMQ dynamic-dependency warning.
+- The full E2E suite was intentionally not rerun and no green claim is recorded: the known DAT-01/TST-01/TST-03 failures remain owned by Batch 4.

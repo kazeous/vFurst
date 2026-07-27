@@ -3,7 +3,9 @@
 import { auth } from "@/lib/auth";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
+import { requireSafeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
+import { getBaseUrl } from "@/lib/payments/stripe";
 import { reserveOrderInventory } from "@/lib/payments/reservations";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
@@ -265,8 +267,8 @@ export async function convertCartToOrder(formData: FormData) {
   const userId = await requireUserId();
   const cartId = z.string().uuid().parse(formData.get("cartId"));
   const returnPath = String(formData.get("returnPath") ?? "/store");
-  const successPath = String(formData.get("successPath") ?? returnPath);
-  const cancelPath = String(formData.get("cancelPath") ?? returnPath);
+  const successPath = requireSafeCheckoutReturnPath(String(formData.get("successPath") ?? returnPath));
+  const cancelPath = requireSafeCheckoutReturnPath(String(formData.get("cancelPath") ?? returnPath));
   await assertActionRateLimit("payment:cart-checkout", `${userId}:${cartId}`);
 
   const cart = await prisma.cart.findFirstOrThrow({
@@ -361,7 +363,7 @@ export async function convertCartToOrder(formData: FormData) {
   }
 
   const checkout = await prepareOrderCheckout(order.id, `${successPath}?success=${order.id}`, `${cancelPath}?cancelled=1`);
-  redirect(checkout.checkoutPath);
+  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
 }
 
 function getRegistrationId(metadata: unknown) {

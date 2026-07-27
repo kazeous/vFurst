@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0 (env), 1 (error visibility), and 2 (public flows) are complete. **Next session: unit 1.3 = audit Batch 3** — routing/redirect/checkout safety: RTE-01/02/04/06/07, CHK-01, and the CHK-02 open-redirect security fix (must not slip). Read the audit's Batch 3 section and defect entries first; verify with the host probe table plus a tenant-host store checkout walkthrough.
+Audit Batches 0 (env), 1 (error visibility), 2 (public flows), and 3 (routing/checkout safety) are complete. **Next session: unit 1.4 = audit Batch 4** — DAT-01, TST-01, and TST-03 only. Batch 4 was not started in the Batch 3 session; read its audit rows before making any schema, assertion, or fixture-cleanup change.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Audit Batches 0–2 done (2026-07-27); Batches 3–6 open; split runtime frozen |
+| 1 — Stabilize | In progress | Audit Batches 0–3 done (2026-07-27); Batches 4–6 open; split runtime frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-27 — Phase 1 unit 1.3: routing and checkout safety (audit Batch 3)
+
+- Closed RTE-01/02/04/06/07 and CHK-01/02. Canonical/configured platform hosts are classified consistently; malformed hosts return a no-store 400; forged `x-vfurst-*` input is scrubbed and internal tenant metadata is no longer echoed in public response headers.
+- Tenant-host store checkout now moves to the central checkout surface and returns to a central-path portal receipt. Checkout return paths use the strengthened shared local-path policy at write time and safe fallback at both read surfaces, including encoded slash/backslash/control-character variants.
+- Portal “Powered by vFurst” and Privacy links resolve to the central host. Dashboard logout is an Auth.js server action that clears the session and returns to `/`.
+- Exact plain-dev host probe: **200/200/200/200/400**. New focused E2E **5/5**; existing store authorization regression **4/4**; split-topology **5/5**. Plain-dev browser walkthrough confirmed central footer links and logout behavior.
+- Repository gates: type-check **9/9** packages, lint **9/9**, test **14/14** tasks (web **160/160**, auth **67/67**), build **10/10** packages; only the known BullMQ warning remains.
+- Batch 4 was deliberately untouched. Full E2E was not rerun and no green claim was made; DAT-01/TST-01/TST-03 remain the next unit.
 
 ### 2026-07-27 — Phase 1 unit 1.2: public-flow structured errors (audit Batch 2)
 

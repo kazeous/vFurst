@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { getEffectiveEventBranding } from "@/lib/event-branding";
 import { formatDate } from "@/lib/i18n";
 import { requireCheckoutOrder } from "@/lib/payments/checkout";
+import { safeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { getEligiblePaymentProviders, getSePaySettings } from "@/lib/payments/platform";
 import { getSePayMemo, getSePayQrUrl } from "@/lib/payments/sepay";
 import { formatCurrency } from "@/lib/registration/pricing";
@@ -37,6 +38,8 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   const confirmingStripePayment = returned === "stripe" && activeAttempt?.provider === "STRIPE" && activeAttempt.status === "PENDING";
 
   if (order.status === "PAID" && order.checkoutSuccessPath) {
+    const successPath = safeCheckoutReturnPath(order.checkoutSuccessPath);
+
     return (
       <main className="vf-checkout-shell vf-checkout-complete" style={style}>
         <section className="vf-checkout-complete-card">
@@ -44,7 +47,7 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
           <p className="vf-label">Payment confirmed</p>
           <h1>You are all set</h1>
           <p>Your order for {order.event.name} is paid and ready.</p>
-          <Button label="Continue to confirmation" href={order.checkoutSuccessPath} variant="primary" />
+          <Button label="Continue to confirmation" href={successPath} variant="primary" />
         </section>
       </main>
     );

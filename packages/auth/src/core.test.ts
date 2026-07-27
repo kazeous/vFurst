@@ -118,7 +118,10 @@ describe("local auth return paths", () => {
     "https://attacker.example/path",
     "//attacker.example/path",
     "/\\attacker.example/path",
+    "/%5cattacker.example/path",
+    "/%2fattacker.example/path",
     "/path\nheader",
+    "/path%0d%0aheader",
     `/path${String.fromCodePoint(127)}`,
     `/${"a".repeat(MAX_LOCAL_RETURN_PATH_LENGTH)}`
   ])("rejects an unsafe return target: %s", (candidate) => {
