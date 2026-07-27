@@ -1,0 +1,146 @@
+name: Staging deploy
+
+# Builds and publishes ghcr.io/kazeous/vfurst/{web,worker}:<sha> images
+# after CI passes on the protected `staging` branch, then triggers the
+# Coolify deployments via webhooks.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - staging
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional override for image tag (default GIT_SHA)"
+        required: false
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build, push, and trigger Coolify
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'staging' &&
+        github.event.workflow_run.event == 'push'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAMESPACE: kazeous/vfurst
+      IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && (inputs.image_tag || github.sha) || github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute IMAGE_TAG
+        id: compute
+        run: echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${{ steps.compute.outputs.image_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:staging-latest
+          build-args: |
+            GIT_SHA=${{ steps.compute.outputs.image_tag }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/worker.Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:${{ steps.compute.outputs.image_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:staging-latest
+          build-args: |
+            GIT_SHA=${{ steps.compute.outputs.image_tag }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+      - name: Trigger Coolify web deploy
+        if: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB != '' }}
+        run: |
+          set -euo pipefail
+          body=$(jq -n \
+            --arg tag "${{ steps.compute.outputs.image_tag }}" \
+            '{ref: "refs/heads/staging", image_tag: $tag, image: "web"}')
+          for i in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 \
+                 -X POST "${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}" \
+                 -H 'Content-Type: application/json' \
+                 --data "$body"; then
+              echo "Coolify web webhook delivered (attempt $i)."
+              exit 0
+            fi
+            echo "Coolify web webhook attempt $i failed; retrying in 5s."
+            sleep 5
+          done
+          echo "Coolify web webhook failed after 3 attempts." >&2
+          exit 1
+
+      - name: Trigger Coolify worker deploy
+        if: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER != '' }}
+        run: |
+          set -euo pipefail
+          body=$(jq -n \
+            --arg tag "${{ steps.compute.outputs.image_tag }}" \
+            '{ref: "refs/heads/staging", image_tag: $tag, image: "worker"}')
+          for i in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 \
+                 -X POST "${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}" \
+                 -H 'Content-Type: application/json' \
+                 --data "$body"; then
+              echo "Coolify worker webhook delivered (attempt $i)."
+              exit 0
+            fi
+            echo "Coolify worker webhook attempt $i failed; retrying in 5s."
+            sleep 5
+          done
+          echo "Coolify worker webhook failed after 3 attempts." >&2
+          exit 1
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "## Staging deploy summary"
+            echo
+            echo "- image_tag: \`${{ steps.compute.outputs.image_tag }}\`"
+            echo "- web image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${{ steps.compute.outputs.image_tag }}\`"
+            echo "- worker image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:${{ steps.compute.outputs.image_tag }}\`"
+            echo "- web webhook: \`${{ secrets.COOLIFY_WEBHOOK_URL_WEB != '' && 'configured' || 'missing – set COOLIFY_WEBHOOK_URL_WEB' }}\`"
+            echo "- worker webhook: \`${{ secrets.COOLIFY_WEBHOOK_URL_WORKER != '' && 'configured' || 'missing – set COOLIFY_WEBHOOK_URL_WORKER' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
