@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -p 3201",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
+    "type-check": "npm run build --workspace @vfurst/contracts && tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

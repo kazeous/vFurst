@@ -11,8 +11,8 @@
     "build": "npm run build --workspace @vfurst/contracts && npm run build --workspace @vfurst/db && npm run build --workspace @vfurst/email && npm run clean && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
-    "test": "npm run build --workspace @vfurst/contracts && vitest run --passWithNoTests"
+    "type-check": "npm run build --workspace @vfurst/db && tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

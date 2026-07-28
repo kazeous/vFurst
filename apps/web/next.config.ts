@@ -6,6 +6,7 @@ const sentryRelease =
   process.env.SENTRY_RELEASE || process.env.COOLIFY_GIT_COMMIT_SHA || process.env.NIXPACKS_GIT_COMMIT_SHA;
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   eslint: {
     ignoreDuringBuilds: true
   },

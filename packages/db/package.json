@@ -15,8 +15,9 @@
     "cleanup:test-fixtures": "node scripts/cleanup-test-fixtures.mjs --apply",
     "prepare:payment-attempt-locks": "node scripts/prepare-payment-attempt-locks.mjs",
     "push": "prisma db push --skip-generate",
+    "pretype-check": "prisma generate",
     "type-check": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "prisma generate && vitest run --passWithNoTests",
     "validate": "prisma validate"
   },
   "dependencies": {

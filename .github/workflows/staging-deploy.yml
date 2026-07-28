@@ -1,0 +1,91 @@
+name: Staging deploy
+
+# After CI passes on the protected `staging` branch, this workflow pings the
+# Coolify deploy hooks for the `vfurst-web` and `vfurst-worker` apps. Image
+# building happens inside Coolify itself (native ARM64 on the Oracle Cloud
+# Ampere A1 host), so this workflow is purely a notification bridge.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    name: Trigger Coolify deploy
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'staging' &&
+        github.event.workflow_run.event == 'push'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+    steps:
+      - name: Trigger Coolify web deploy
+        if: env.COOLIFY_WEBHOOK_URL_WEB != ''
+        env:
+          COOLIFY_WEBHOOK_URL_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
+        run: |
+          set -euo pipefail
+          body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
+          for i in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 \
+                 -X POST "${COOLIFY_WEBHOOK_URL_WEB}" \
+                 -H 'Content-Type: application/json' \
+                 --data "$body"; then
+              echo "Coolify web webhook delivered (attempt $i)."
+              exit 0
+            fi
+            echo "Coolify web webhook attempt $i failed; retrying in 5s."
+            sleep 5
+          done
+          echo "Coolify web webhook failed after 3 attempts." >&2
+          exit 1
+
+      - name: Trigger Coolify worker deploy
+        if: env.COOLIFY_WEBHOOK_URL_WORKER != ''
+        env:
+          COOLIFY_WEBHOOK_URL_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
+        run: |
+          set -euo pipefail
+          body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
+          for i in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 \
+                 -X POST "${COOLIFY_WEBHOOK_URL_WORKER}" \
+                 -H 'Content-Type: application/json' \
+                 --data "$body"; then
+              echo "Coolify worker webhook delivered (attempt $i)."
+              exit 0
+            fi
+            echo "Coolify worker webhook attempt $i failed; retrying in 5s."
+            sleep 5
+          done
+          echo "Coolify worker webhook failed after 3 attempts." >&2
+          exit 1
+
+      - name: Summarise
+        if: always()
+        env:
+          WEBHOOK_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
+          WEBHOOK_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
+        run: |
+          {
+            echo "## Staging deploy summary"
+            echo
+            echo "- commit: \`${SHA}\`"
+            echo "- web webhook: \`${WEBHOOK_WEB:+configured}${WEBHOOK_WEB:-missing – set COOLIFY_WEBHOOK_URL_WEB}\`"
+            echo "- worker webhook: \`${WEBHOOK_WORKER:+configured}${WEBHOOK_WORKER:-missing – set COOLIFY_WEBHOOK_URL_WORKER}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

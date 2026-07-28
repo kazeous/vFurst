@@ -48,7 +48,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
+    "type-check": "npm run build --workspace @vfurst/contracts && tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
