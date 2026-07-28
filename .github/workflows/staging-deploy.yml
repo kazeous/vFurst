@@ -70,13 +70,14 @@ jobs:
           context: .
           file: docker/web.Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${{ steps.compute.outputs.image_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:staging-latest
           build-args: |
             GIT_SHA=${{ steps.compute.outputs.image_tag }}
           cache-from: type=gha,scope=web
-          cache-to: type=gha,scope=web,mode=max
+          cache-to: type=gha,scope=web,mode=min
 
       - name: Build and push worker image
         uses: docker/build-push-action@v6
@@ -84,13 +85,14 @@ jobs:
           context: .
           file: docker/worker.Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:${{ steps.compute.outputs.image_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/worker:staging-latest
           build-args: |
             GIT_SHA=${{ steps.compute.outputs.image_tag }}
           cache-from: type=gha,scope=worker
-          cache-to: type=gha,scope=worker,mode=max
+          cache-to: type=gha,scope=worker,mode=min
 
       - name: Trigger Coolify web deploy
         if: env.COOLIFY_WEBHOOK_URL_WEB != ''
