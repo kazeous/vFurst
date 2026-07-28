@@ -10,12 +10,11 @@ build images and GHCR is not part of this deployment path.
 - Revoke any Coolify API token that has appeared in chat, an issue, a log, or a
   screenshot. Treat it as compromised even if it was only visible briefly.
 - Create the replacement token from a user in the **same Coolify team** as both
-  staging resources. It needs the `deploy` ability; add `read` only if it is
-  also used for read-only API diagnostics.
+  staging resources. It needs only the `deploy` and `read` abilities.
 - Store the raw token only. Do not include `Bearer ` in the secret value.
 - Prefer an IP allowlist when the caller has stable egress. GitHub-hosted
   runners do not have one small stable IP, so `Anywhere` may be necessary for
-  this workflow; in that case keep the token deploy-only and rotate it.
+  this workflow; in that case keep the token scoped to read/deploy and rotate it.
 
 ## 1. GitHub secrets
 
@@ -226,7 +225,7 @@ After both applications are healthy:
 # 200 when PostgreSQL and Redis are reachable; never 404.
 curl -fsS https://vfurst.reyuugames.com/api/healthz
 
-# 400 because the public API rate-limit probe has no API key.
+# 401 because the public API endpoint requires an API key.
 curl -i https://vfurst.reyuugames.com/api/v1/events
 
 # 200 with HTML.
