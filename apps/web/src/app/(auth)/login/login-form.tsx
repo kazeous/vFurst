@@ -1,16 +1,28 @@
 "use client";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FormLayout } from "@/components/ui/form-layout";
 import { TextInput } from "@/components/ui/input";
-import { useState } from "react";
+import { useActionState, useState } from "react";
 
-export function LoginForm({ action }: { action: (formData: FormData) => void | Promise<void> }) {
+export type LoginFormState = {
+  error?: string;
+};
+
+const initialState: LoginFormState = {};
+
+export function LoginForm({
+  action
+}: {
+  action: (previousState: LoginFormState, formData: FormData) => Promise<LoginFormState>;
+}) {
+  const [state, formAction, pending] = useActionState(action, initialState);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   return (
-    <form action={action} className="vf-form">
+    <form action={formAction} className="vf-form">
       <FormLayout>
         <TextInput
           label="Email"
@@ -30,7 +42,18 @@ export function LoginForm({ action }: { action: (formData: FormData) => void | P
           isRequired
         />
       </FormLayout>
-      <Button label="Log in" type="submit" variant="primary" />
+      {state.error ? (
+        <Alert id="login-error" data-testid="login-error" variant="error">
+          {state.error}
+        </Alert>
+      ) : null}
+      <Button
+        label={pending ? "Logging in..." : "Log in"}
+        type="submit"
+        variant="primary"
+        disabled={pending}
+        aria-describedby={state.error ? "login-error" : undefined}
+      />
     </form>
   );
 }
