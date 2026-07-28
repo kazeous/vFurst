@@ -100,7 +100,7 @@ test("a wrong password stays on /login with an accessible message and no 500", a
   await page.getByLabel("Password").fill("WrongPassword123!");
   await submitLogin(page);
 
-  await page.waitForURL(/\/login\?error=invalid_credentials&returnTo=%2Faccount$/);
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount$/);
   const alert = page.getByTestId("login-error");
   await expect(alert).toContainText("The email or password was not accepted.");
   await expect(page.getByRole("heading", { name: "Log in to vFurst" })).toBeVisible();

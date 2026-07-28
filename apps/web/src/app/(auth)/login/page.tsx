@@ -4,9 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Divider } from "@/components/ui/separator";
 import { AuthError } from "next-auth";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { safeReturnTo } from "@/lib/return-to";
-import { LoginForm } from "./login-form";
+import { LoginForm, type LoginFormState } from "./login-form";
 import { Alert } from "@/components/ui/alert";
 
 const errorMessages: Record<string, string> = {
@@ -18,7 +18,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const returnTo = safeReturnTo(query.returnTo);
   const errorMessage = query.error ? errorMessages[query.error] : undefined;
 
-  async function loginWithCredentials(formData: FormData) {
+  async function loginWithCredentials(
+    _previousState: LoginFormState,
+    formData: FormData
+  ): Promise<LoginFormState> {
     "use server";
 
     try {
@@ -27,11 +30,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         password: formData.get("password"),
         redirectTo: returnTo
       });
+      return {};
     } catch (error) {
+      unstable_rethrow(error);
+
       if (error instanceof AuthError) {
-        const params = new URLSearchParams({ error: "invalid_credentials", returnTo });
-        redirect(`/login?${params.toString()}`);
+        return { error: errorMessages.invalid_credentials };
       }
+
       throw error;
     }
   }
