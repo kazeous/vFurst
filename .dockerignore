@@ -16,9 +16,9 @@ node_modules
 playwright-report
 test-results
 
-.env
-.env.*
-!.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
 *.log
 *.tsbuildinfo
