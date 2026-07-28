@@ -202,7 +202,11 @@ Each call is `POST <deploy-hook>` with
 `Authorization: Bearer <COOLIFY_API_TOKEN>`. The hook's `uuid` selects the
 resource; Coolify deploys the branch configured on that resource. The workflow
 records the CI SHA as trace evidence but does not claim that the API pins that
-SHA.
+SHA. After Coolify accepts the hook, the workflow reads the returned deployment
+UUID and polls `GET /api/v1/deployments/{uuid}`. A matrix job is green only when
+Coolify reports `finished`; `failed`, `cancelled-by-user`, an unexpected status,
+or a 15-minute timeout fails that job. The API token therefore needs both
+deployment and deployment-read abilities.
 
 Retry behavior is deliberate:
 
@@ -239,6 +243,9 @@ successful `staging` CI SHA before declaring the deploy complete.
 - **Webhook `403`**: the token was accepted but lacks deploy access to the
   resource's team, or the API access policy rejected the runner. Retrying the
   same request will not help.
+- **Status polling `401`/`403`**: the hook can deploy, but the token cannot read
+  `GET /api/v1/deployments/{uuid}`. Add deployment-read ability to the same
+  token; do not store a second token.
 - **Webhook `404`/`422`**: regenerate the Deploy Hook and confirm the resource
   UUID. Do not hand-edit the UUID or use a legacy `token=` hook.
 - **Build has the wrong public URL/domain**: the affected `NEXT_PUBLIC_*` key
