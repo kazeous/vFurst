@@ -4,6 +4,10 @@ name: Staging deploy
 # Coolify deploy hooks for the `vfurst-web` and `vfurst-worker` apps. Image
 # building happens inside Coolify itself (native ARM64 on the Oracle Cloud
 # Ampere A1 host), so this workflow is purely a notification bridge.
+#
+# Coolify's deploy webhooks expect a Bearer token in the Authorization header
+# (the API token issued by Coolify's user settings), so each request also
+# reads `COOLIFY_API_TOKEN` and sends it as such.
 
 on:
   workflow_run:
@@ -38,6 +42,7 @@ jobs:
         if: env.COOLIFY_WEBHOOK_URL_WEB != ''
         env:
           COOLIFY_WEBHOOK_URL_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           set -euo pipefail
           body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
@@ -45,6 +50,7 @@ jobs:
             if curl --fail --silent --show-error --max-time 30 \
                  -X POST "${COOLIFY_WEBHOOK_URL_WEB}" \
                  -H 'Content-Type: application/json' \
+                 -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
                  --data "$body"; then
               echo "Coolify web webhook delivered (attempt $i)."
               exit 0
@@ -59,6 +65,7 @@ jobs:
         if: env.COOLIFY_WEBHOOK_URL_WORKER != ''
         env:
           COOLIFY_WEBHOOK_URL_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           set -euo pipefail
           body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
@@ -66,6 +73,7 @@ jobs:
             if curl --fail --silent --show-error --max-time 30 \
                  -X POST "${COOLIFY_WEBHOOK_URL_WORKER}" \
                  -H 'Content-Type: application/json' \
+                 -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
                  --data "$body"; then
               echo "Coolify worker webhook delivered (attempt $i)."
               exit 0
@@ -81,6 +89,7 @@ jobs:
         env:
           WEBHOOK_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
           WEBHOOK_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
+          API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           {
             echo "## Staging deploy summary"
@@ -88,4 +97,5 @@ jobs:
             echo "- commit: \`${SHA}\`"
             echo "- web webhook: \`${WEBHOOK_WEB:+configured}${WEBHOOK_WEB:-missing – set COOLIFY_WEBHOOK_URL_WEB}\`"
             echo "- worker webhook: \`${WEBHOOK_WORKER:+configured}${WEBHOOK_WORKER:-missing – set COOLIFY_WEBHOOK_URL_WORKER}\`"
+            echo "- api token: \`${API_TOKEN:+configured}${API_TOKEN:-missing – set COOLIFY_API_TOKEN}\`"
           } >> "$GITHUB_STEP_SUMMARY"
