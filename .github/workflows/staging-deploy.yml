@@ -34,6 +34,7 @@ jobs:
         github.event.workflow_run.event == 'push'
       )
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -73,6 +74,11 @@ jobs:
             echo "::error::${WEBHOOK_SECRET_NAME} is not a Coolify /api/v1/deploy hook with a uuid query parameter."
             exit 1
           fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "::error::The GitHub runner does not provide jq, which is required to validate Coolify API responses."
+            exit 1
+          fi
         env:
           COOLIFY_WEBHOOK_URL: ${{ secrets[matrix.webhook_secret_name] }}
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
@@ -103,8 +109,14 @@ jobs:
             response="${response:0:2000}"
 
             if [[ "${curl_exit}" -eq 0 ]]; then
+              deployment_uuid="$(jq -er '.deployments[0].deployment_uuid | select(type == "string" and length > 0)' "${response_file}")" || {
+                echo "::error::Coolify accepted the ${TARGET} hook but did not return a deployment UUID."
+                exit 1
+              }
+
               echo "Coolify ${TARGET} deploy accepted with HTTP ${http_status} (attempt ${attempt})."
               [[ -z "${response}" ]] || echo "Coolify response: ${response}"
+              echo "deployment_uuid=${deployment_uuid}" >> "${GITHUB_OUTPUT}"
               exit 0
             fi
 
@@ -137,6 +149,87 @@ jobs:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           TARGET: ${{ matrix.target }}
 
+      - name: Wait for Coolify deployment
+        id: rollout
+        run: |
+          set -euo pipefail
+
+          deployment_api_base="${COOLIFY_WEBHOOK_URL%%/api/v1/deploy*}"
+          if [[ "${deployment_api_base}" == "${COOLIFY_WEBHOOK_URL}" ]]; then
+            echo "::error::Could not derive the Coolify API base URL from ${WEBHOOK_SECRET_NAME}."
+            exit 1
+          fi
+
+          status_file="$(mktemp)"
+          trap 'rm -f "${status_file}"' EXIT
+
+          for poll in $(seq 1 90); do
+            curl_exit=0
+            : > "${status_file}"
+            http_status="$(curl --fail-with-body --silent --show-error --max-time 30 \
+              --request GET "${deployment_api_base}/api/v1/deployments/${DEPLOYMENT_UUID}" \
+              --header 'Accept: application/json' \
+              --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+              --output "${status_file}" \
+              --write-out '%{http_code}')" || curl_exit=$?
+
+            if [[ "${curl_exit}" -ne 0 ]]; then
+              case "${http_status}" in
+                401|403)
+                  echo "::error::Coolify rejected deployment-status access (HTTP ${http_status}); COOLIFY_API_TOKEN needs read access to deployments."
+                  exit 1
+                  ;;
+                408|425|429|5??|000)
+                  echo "Coolify ${TARGET} status check had a transient HTTP ${http_status} response (poll ${poll}/90)."
+                  sleep 10
+                  continue
+                  ;;
+                *)
+                  echo "::error::Coolify deployment-status API returned non-retryable HTTP ${http_status}."
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            status="$(jq -er '.status | select(type == "string" and length > 0)' "${status_file}")" || {
+              echo "::error::Coolify deployment-status response did not contain a status."
+              exit 1
+            }
+            commit="$(jq -r '.commit // empty' "${status_file}")"
+
+            case "${status}" in
+              finished)
+                echo "Coolify ${TARGET} deployment ${DEPLOYMENT_UUID} finished successfully."
+                echo "status=${status}" >> "${GITHUB_OUTPUT}"
+                echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+                exit 0
+                ;;
+              failed|cancelled-by-user)
+                echo "status=${status}" >> "${GITHUB_OUTPUT}"
+                echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+                echo "::error::Coolify ${TARGET} deployment ${DEPLOYMENT_UUID} ended with status ${status}. Open that deployment in Coolify for its build/runtime log."
+                exit 1
+                ;;
+              queued|in_progress)
+                echo "Coolify ${TARGET} deployment ${DEPLOYMENT_UUID} is ${status} (poll ${poll}/90)."
+                sleep 10
+                ;;
+              *)
+                echo "::error::Coolify deployment ${DEPLOYMENT_UUID} returned unexpected status '${status}'."
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "::error::Timed out waiting 15 minutes for Coolify ${TARGET} deployment ${DEPLOYMENT_UUID}."
+          exit 1
+        env:
+          COOLIFY_WEBHOOK_URL: ${{ secrets[matrix.webhook_secret_name] }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          DEPLOYMENT_UUID: ${{ steps.deploy.outputs.deployment_uuid }}
+          TARGET: ${{ matrix.target }}
+          WEBHOOK_SECRET_NAME: ${{ matrix.webhook_secret_name }}
+
       - name: Summarise
         if: always()
         run: |
@@ -147,10 +240,18 @@ jobs:
             echo "- CI source commit: \`${SHA}\`"
             echo "- webhook secret: \`${WEBHOOK_SECRET_NAME}\`"
             echo "- trigger result: \`${DEPLOY_OUTCOME}\`"
+            echo "- deployment UUID: \`${DEPLOYMENT_UUID}\`"
+            echo "- rollout result: \`${ROLLOUT_OUTCOME}\`"
+            echo "- Coolify status: \`${DEPLOY_STATUS}\`"
+            echo "- Coolify source commit: \`${DEPLOY_COMMIT}\`"
             echo
-            echo "Coolify deploys the branch configured on the application; the source commit above is trace evidence, not an API pin."
+            echo "Coolify deploys the branch configured on the application; the CI source commit above is trace evidence, while the Coolify source commit is reported by the resulting deployment."
           } >> "${GITHUB_STEP_SUMMARY}"
         env:
           TARGET: ${{ matrix.target }}
           WEBHOOK_SECRET_NAME: ${{ matrix.webhook_secret_name }}
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DEPLOYMENT_UUID: ${{ steps.deploy.outputs.deployment_uuid || 'not-returned' }}
+          ROLLOUT_OUTCOME: ${{ steps.rollout.outcome || 'not-run' }}
+          DEPLOY_STATUS: ${{ steps.rollout.outputs.status || 'unknown' }}
+          DEPLOY_COMMIT: ${{ steps.rollout.outputs.commit || 'unknown' }}
