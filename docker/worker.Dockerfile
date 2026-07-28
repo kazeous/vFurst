@@ -4,24 +4,25 @@
 #
 # Build from the repository root:
 #   docker build -f docker/worker.Dockerfile -t vfurst-worker:staging \
-#     --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+#     --build-arg SOURCE_COMMIT=$(git rev-parse HEAD) .
 
 ARG NODE_VERSION=24
 
-FROM node:${NODE_VERSION}-bookworm-slim AS deps
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/*
+
+FROM base AS deps
 WORKDIR /repo
-# .npmrc lives at the repository root and tells npm 11+ to run install
-# scripts for the packages that need them (Prisma, sentry-cli, esbuild).
-# Without this, `npm ci` skips Prisma's client generation and the build
-# breaks downstream.
-COPY .npmrc package.json package-lock.json turbo.json ./
+COPY package.json package-lock.json turbo.json ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/email/package.json packages/email/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci --no-audit --fund=false
 
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
+FROM base AS builder
 WORKDIR /repo
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/packages ./packages
@@ -31,10 +32,11 @@ RUN npm run build --workspace @vfurst/contracts \
  && npm run build --workspace @vfurst/db \
  && npm run build --workspace @vfurst/worker
 
-FROM node:${NODE_VERSION}-bookworm-slim AS runner
-ARG GIT_SHA=unknown
+FROM base AS runner
+ARG SOURCE_COMMIT=unknown
 ENV NODE_ENV=production \
-    COOLIFY_GIT_COMMIT_SHA=${GIT_SHA}
+    WORKER_HEALTH_PORT=3100 \
+    COOLIFY_GIT_COMMIT_SHA=${SOURCE_COMMIT}
 WORKDIR /app
 
 RUN groupadd --system --gid 1001 nodejs \

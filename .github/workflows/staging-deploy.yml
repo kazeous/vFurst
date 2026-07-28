@@ -1,13 +1,12 @@
 name: Staging deploy
 
-# After CI passes on the protected `staging` branch, this workflow pings the
-# Coolify deploy hooks for the `vfurst-web` and `vfurst-worker` apps. Image
-# building happens inside Coolify itself (native ARM64 on the Oracle Cloud
-# Ampere A1 host), so this workflow is purely a notification bridge.
+# After CI passes on `staging`, notify the two Coolify applications. Coolify
+# clones the configured staging branch and builds docker/web.Dockerfile or
+# docker/worker.Dockerfile natively; this workflow does not build or push an
+# image.
 #
-# Coolify's deploy webhooks expect a Bearer token in the Authorization header
-# (the API token issued by Coolify's user settings), so each request also
-# reads `COOLIFY_API_TOKEN` and sends it as such.
+# `workflow_run` only fires when this file exists on the repository's default
+# branch. Keep the default-branch copy in sync with the staging copy.
 
 on:
   workflow_run:
@@ -22,9 +21,11 @@ concurrency:
   group: staging-deploy
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
-  notify:
-    name: Trigger Coolify deploy
+  trigger:
+    name: Trigger Coolify ${{ matrix.target }} deploy
     if: >-
       (github.event_name == 'workflow_dispatch') ||
       (
@@ -33,69 +34,123 @@ jobs:
         github.event.workflow_run.event == 'push'
       )
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: web
+            webhook_secret_name: COOLIFY_WEBHOOK_URL_WEB
+          - target: worker
+            webhook_secret_name: COOLIFY_WEBHOOK_URL_WORKER
     env:
       SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
     steps:
-      - name: Trigger Coolify web deploy
-        if: env.COOLIFY_WEBHOOK_URL_WEB != ''
-        env:
-          COOLIFY_WEBHOOK_URL_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+      - name: Validate deploy configuration
         run: |
           set -euo pipefail
-          body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
-          for i in 1 2 3; do
-            if curl --fail --silent --show-error --max-time 30 \
-                 -X POST "${COOLIFY_WEBHOOK_URL_WEB}" \
-                 -H 'Content-Type: application/json' \
-                 -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
-                 --data "$body"; then
-              echo "Coolify web webhook delivered (attempt $i)."
-              exit 0
-            fi
-            echo "Coolify web webhook attempt $i failed; retrying in 5s."
-            sleep 5
-          done
-          echo "Coolify web webhook failed after 3 attempts." >&2
-          exit 1
 
-      - name: Trigger Coolify worker deploy
-        if: env.COOLIFY_WEBHOOK_URL_WORKER != ''
+          if [[ -z "${COOLIFY_WEBHOOK_URL}" ]]; then
+            echo "::error::Missing GitHub secret ${WEBHOOK_SECRET_NAME}."
+            exit 1
+          fi
+
+          if [[ -z "${COOLIFY_API_TOKEN}" ]]; then
+            echo "::error::Missing GitHub secret COOLIFY_API_TOKEN."
+            exit 1
+          fi
+
+          if [[ "${COOLIFY_API_TOKEN}" == Bearer\ * ]]; then
+            echo "::error::COOLIFY_API_TOKEN must contain the raw token only; remove the 'Bearer ' prefix."
+            exit 1
+          fi
+
+          if [[ "${COOLIFY_WEBHOOK_URL}" == *"token="* ]]; then
+            echo "::error::The deploy hook contains a legacy token query parameter. Generate a current /api/v1/deploy?uuid=... hook instead."
+            exit 1
+          fi
+
+          if [[ "${COOLIFY_WEBHOOK_URL}" != *"/api/v1/deploy?"* || "${COOLIFY_WEBHOOK_URL}" != *"uuid="* ]]; then
+            echo "::error::${WEBHOOK_SECRET_NAME} is not a Coolify /api/v1/deploy hook with a uuid query parameter."
+            exit 1
+          fi
         env:
-          COOLIFY_WEBHOOK_URL_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
+          COOLIFY_WEBHOOK_URL: ${{ secrets[matrix.webhook_secret_name] }}
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          WEBHOOK_SECRET_NAME: ${{ matrix.webhook_secret_name }}
+
+      - name: Trigger Coolify deploy
+        id: deploy
         run: |
           set -euo pipefail
-          body=$(jq -n --arg sha "${SHA}" '{ref: "refs/heads/staging", commit: $sha}')
-          for i in 1 2 3; do
-            if curl --fail --silent --show-error --max-time 30 \
-                 -X POST "${COOLIFY_WEBHOOK_URL_WORKER}" \
-                 -H 'Content-Type: application/json' \
-                 -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
-                 --data "$body"; then
-              echo "Coolify worker webhook delivered (attempt $i)."
+
+          response_file="$(mktemp)"
+          trap 'rm -f "${response_file}"' EXIT
+
+          for attempt in 1 2 3; do
+            curl_exit=0
+            : > "${response_file}"
+            http_status="$(curl --fail-with-body --silent --show-error --max-time 30 \
+              --request POST "${COOLIFY_WEBHOOK_URL}" \
+              --header 'Accept: application/json' \
+              --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+              --output "${response_file}" \
+              --write-out '%{http_code}')" || curl_exit=$?
+
+            # Read the API body separately so a useful Coolify error reaches
+            # the Actions log without ever printing the hook URL or token.
+            response="$(<"${response_file}")"
+            response="${response//$'\n'/ }"
+            response="${response:0:2000}"
+
+            if [[ "${curl_exit}" -eq 0 ]]; then
+              echo "Coolify ${TARGET} deploy accepted with HTTP ${http_status} (attempt ${attempt})."
+              [[ -z "${response}" ]] || echo "Coolify response: ${response}"
               exit 0
             fi
-            echo "Coolify worker webhook attempt $i failed; retrying in 5s."
-            sleep 5
+
+            echo "Coolify ${TARGET} deploy failed with HTTP ${http_status} (attempt ${attempt})." >&2
+            [[ -z "${response}" ]] || echo "Coolify response: ${response}" >&2
+
+            case "${http_status}" in
+              401|403)
+                echo "::error::Coolify rejected authentication or deploy permission (HTTP ${http_status}); retries cannot repair this token/team configuration."
+                exit 1
+                ;;
+              408|425|429|5??|000)
+                if [[ "${attempt}" -lt 3 ]]; then
+                  echo "Transient Coolify failure; retrying in 5 seconds."
+                  sleep 5
+                  continue
+                fi
+                ;;
+              *)
+                echo "::error::Coolify returned a non-retryable HTTP ${http_status}."
+                exit 1
+                ;;
+            esac
           done
-          echo "Coolify worker webhook failed after 3 attempts." >&2
+
+          echo "::error::Coolify ${TARGET} deploy failed after 3 attempts."
           exit 1
+        env:
+          COOLIFY_WEBHOOK_URL: ${{ secrets[matrix.webhook_secret_name] }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          TARGET: ${{ matrix.target }}
 
       - name: Summarise
         if: always()
-        env:
-          WEBHOOK_WEB: ${{ secrets.COOLIFY_WEBHOOK_URL_WEB }}
-          WEBHOOK_WORKER: ${{ secrets.COOLIFY_WEBHOOK_URL_WORKER }}
-          API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           {
             echo "## Staging deploy summary"
             echo
-            echo "- commit: \`${SHA}\`"
-            echo "- web webhook: \`${WEBHOOK_WEB:+configured}${WEBHOOK_WEB:-missing – set COOLIFY_WEBHOOK_URL_WEB}\`"
-            echo "- worker webhook: \`${WEBHOOK_WORKER:+configured}${WEBHOOK_WORKER:-missing – set COOLIFY_WEBHOOK_URL_WORKER}\`"
-            echo "- api token: \`${API_TOKEN:+configured}${API_TOKEN:-missing – set COOLIFY_API_TOKEN}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "- target: \`${TARGET}\`"
+            echo "- CI source commit: \`${SHA}\`"
+            echo "- webhook secret: \`${WEBHOOK_SECRET_NAME}\`"
+            echo "- trigger result: \`${DEPLOY_OUTCOME}\`"
+            echo
+            echo "Coolify deploys the branch configured on the application; the source commit above is trace evidence, not an API pin."
+          } >> "${GITHUB_STEP_SUMMARY}"
+        env:
+          TARGET: ${{ matrix.target }}
+          WEBHOOK_SECRET_NAME: ${{ matrix.webhook_secret_name }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
