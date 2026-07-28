@@ -113,7 +113,7 @@ npm run dev
 
 **Root cause.** `apps/web/src/app/(auth)/login/page.tsx:14-22` defines `loginWithCredentials` with no `try`/`catch`. `authorize()` in `lib/auth.ts` returns `null` for a bad credential, which makes Auth.js v5 `signIn` throw `CredentialsSignin`. Nothing catches it, and `LoginPage` has no `error` search-param handling.
 
-**Fix.** Copy the working implementation from `apps/platform-manager/src/app/login/actions.ts:11-23` — catch `AuthError`, redirect to `/login?error=invalid_credentials&returnTo=...`, and rethrow anything else so real failures still reach Sentry. Render the code through an `errorMessages` record with `role="alert"`, as `apps/platform-manager/src/app/login/page.tsx` already does.
+**Fix.** Handle credentials through client form action state. The server action must call `unstable_rethrow(error)` first so successful Auth.js/Next redirects remain framework control flow, then map expected `AuthError` to the accessible inline credential message and rethrow anything else so real failures still reach Sentry. This supersedes the initial query-redirect implementation, which produced a transient client-router 404 behind the staging proxy even though a hard reload rendered the intended page.
 
 **Verification.** Wrong password stays on `/login`, shows an accessible error, preserves `returnTo`, and the server log records no 500. Correct password still redirects to `returnTo`. Add a Playwright regression alongside the existing auth specs.
 
@@ -578,7 +578,7 @@ and belong to Batch 3.
 | Shared route-level error boundary UI: generic copy (server messages are masked in production), `error.digest` reference code, "Try again" via `reset()`, and a route-appropriate escape hatch | `apps/web/src/components/route-error.tsx` |
 | One `error.tsx` per surface: root (also catches group-layout errors and ungrouped routes), `(auth)` → `/login`, `(marketing)` → `/`, `(convention)/[orgSlug]` → history back (portal roots are host-relative; an absolute link would be wrong on one of the two host forms), `account` → `/account`, `dashboard` → `/dashboard`, `platform` → `/platform`, `checkout` → `/account/orders` | `apps/web/src/app/**/error.tsx` (8 files) |
 | `global-error.tsx` renders real copy (inline-styled — it replaces the root layout, so `globals.css` is unavailable), keeps the Sentry capture, offers retry and a hard `location.assign("/")` escape | `apps/web/src/app/global-error.tsx` |
-| `loginWithCredentials` catches `AuthError`, redirects to `/login?error=invalid_credentials&returnTo=…` (pattern copied from `apps/platform-manager`), rethrows everything else; the page renders the code through an `errorMessages` record via the accessible `Alert` (`role="alert"`) | `apps/web/src/app/(auth)/login/page.tsx` |
+| `loginWithCredentials` calls `unstable_rethrow` before mapping expected `AuthError` to `LoginFormState`; the client `LoginForm` uses `useActionState` to render an accessible inline alert without changing the URL, while successful redirects and unexpected failures keep their framework/Sentry paths | `apps/web/src/app/(auth)/login/page.tsx`, `login/login-form.tsx` |
 | Playwright regression: wrong password stays on `/login` with the alert, zero ≥500 responses, correct password then honors `returnTo`; an invalid voucher during registration renders the boundary (not a blank page) and "Try again" recovers to the flow start | `tests/e2e/error-visibility.spec.ts` |
 
 Route `error.tsx` files intentionally do **not** re-capture to Sentry: server-side
@@ -590,6 +590,7 @@ and `global-error.tsx` covers client-side render crashes.
 - Focused Chromium E2E: `error-visibility.spec.ts` + `account-registration.spec.ts` — 3/3 in dev mode; `error-visibility.spec.ts` 2/2 in production mode (`E2E_PRODUCTION=1`), where server error messages are masked and the generic boundary copy renders.
 - Dev-server log during the run shows `[auth][error] CredentialsSignin` being caught (no 500), and the voucher throw arriving at the boundary with its digest logged.
 - `turbo run type-check lint test` 32/32 tasks; `turbo run build` 10/10 (known BullMQ warning only).
+- Corrective staging verification on 2026-07-28: the original query redirect reproduced a transient Next 404 behind Cloudflare/Coolify; PR #15 moved the error to action state. Focused Playwright passed **1/1** (wrong password inline, then correct-password retry honors `returnTo`), live staging stayed on `/login` with the alert and no 404, and Auth.js session returned 200.
 
 ## Notes for later batches
 

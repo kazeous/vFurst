@@ -1,4 +1,4 @@
-# Phase 7 Performance And Load Test
+# Phase 6 Performance And Load Test
 
 ## Targets
 
@@ -80,7 +80,7 @@ VFURST_SKIP_LOCAL_SERVER=1
 - Log in as a staff user and provide either `VFURST_STAFF_COOKIE` or `VFURST_STAFF_EMAIL` / `VFURST_STAFF_PASSWORD`. The k6 script can authenticate through Auth.js when credentials are provided.
 - Run the app against the same Postgres/Redis/S3/SMTP class expected for launch.
 
-## Query optimization added in Phase 7
+## Query optimization added during launch hardening
 
 - Event lookup by organization, publication status, and start date.
 - Public registration uses filtered tier registration counts instead of loading attendee rows for capacity checks. The query data and the anonymous base page HTML/RSC response use 15-second ISR, so launch bursts do not repeatedly spend server CPU rendering identical public content.
@@ -110,7 +110,7 @@ VFURST_SKIP_LOCAL_SERVER=1
   - p95 `http_req_duration` reported as 0s because most requests failed at connection time
   - 13,007/515,019 checks passed
   - The failure mode was sustained `connect: connection refused` from Docker-backed k6 to the temporary local production server at high VU counts.
-- The current Phase 7 target passed on July 8, 2026 with a 1500-registration seed, `VFURST_REGISTRATION_VUS=500`, `VFURST_CHECKIN_VUS=50`, `VFURST_LOAD_SERVER_REPLICAS=16`, and Docker-backed k6:
+- The current launch target passed on July 8, 2026 with a 1500-registration seed, `VFURST_REGISTRATION_VUS=500`, `VFURST_CHECKIN_VUS=50`, `VFURST_LOAD_SERVER_REPLICAS=16`, and Docker-backed k6:
   - 0.00% `http_req_failed`
   - p95 `http_req_duration` 1.39s under the 1.5s threshold
   - 278,837/278,837 checks passed
@@ -130,7 +130,7 @@ VFURST_SKIP_LOCAL_SERVER=1
   - The connection-exhaustion blocker is closed, but the full launch latency threshold remains failed by 80ms.
 - A supported six-replica/pool-4 baseline on July 14 completed 149,150 requests with 298,297/298,297 checks and 0.00% HTTP failures, but still failed at overall p95 1.79s. Registration p95 was 1.72s and check-in p95 spiked to 9.03s.
 - Short isolated diagnostics identified shared-host rendering contention rather than a slow check-in query path: 500 registration VUs plus one check-in VU produced overall p95 902.44ms, while 50 check-in VUs plus one registration VU produced overall p95 32.16ms. After the anonymous registration route became 15-second ISR, the combined 500/50 smoke produced overall p95 61.61ms with 100% checks and 0.00% failures.
-- The fresh full Phase 7 proof passed on July 14 with the supported topology: 1,500 seeded registrations, 500 registration VUs, 50 check-in VUs, six web replicas, pool limit 4, pool timeout 20 seconds, and Docker-backed k6:
+- The fresh full launch proof passed on July 14 with the supported topology: 1,500 seeded registrations, 500 registration VUs, 50 check-in VUs, six web replicas, pool limit 4, pool timeout 20 seconds, and Docker-backed k6:
   - Postgres capacity preflight: 100 max - 3 reserved = 97 usable; 24 maximum web connections within application budget 80.
   - 198,024 HTTP requests completed with 0.00% failures; no Prisma `P2037` or replica failure occurred.
   - 396,045/396,045 checks passed.
@@ -138,4 +138,4 @@ VFURST_SKIP_LOCAL_SERVER=1
 
 ## Performance gate result
 
-The Phase 7 500-registration/50-check-in performance gate is passed against the current supported six-replica/pool-4 topology. This claim comes from the fresh post-ISR run above, not the historical July 8 baseline: connection growth stayed bounded, correctness and HTTP-error gates passed, and overall p95 remained below 1.5 seconds. Rerun `npm run test:load:launch` after any material public-registration, check-in, authentication, cache, database-pool, or topology change.
+The launch 500-registration/50-check-in performance gate is passed against the current supported six-replica/pool-4 topology. This claim comes from the fresh post-ISR run above, not the historical July 8 baseline: connection growth stayed bounded, correctness and HTTP-error gates passed, and overall p95 remained below 1.5 seconds. Rerun `npm run test:load:launch` after any material public-registration, check-in, authentication, cache, database-pool, or topology change.

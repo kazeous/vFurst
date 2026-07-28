@@ -1,4 +1,4 @@
-# Phase 7 PCI SAQ A Notes
+# Phase 6 PCI SAQ A Notes
 
 ## Payment architecture
 

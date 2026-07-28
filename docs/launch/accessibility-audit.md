@@ -1,4 +1,4 @@
-# Phase 7 Accessibility Audit
+# Phase 6 Accessibility Audit
 
 Date: July 8, 2026
 
@@ -41,4 +41,4 @@ WCAG 2.1 AA for core launch paths:
 
 ## Current state
 
-No blocking accessibility issues are known in the Phase 7 launch paths. A physical screen-reader pass should be performed with a beta organizer before public launch because this environment cannot prove assistive-technology behavior by repository inspection alone.
+No blocking accessibility issues are known in the Phase 6 launch paths. A physical screen-reader pass should be performed with a beta organizer before public launch because this environment cannot prove assistive-technology behavior by repository inspection alone.
