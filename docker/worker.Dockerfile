@@ -10,7 +10,11 @@ ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /repo
-COPY package.json package-lock.json turbo.json ./
+# .npmrc lives at the repository root and tells npm 11+ to run install
+# scripts for the packages that need them (Prisma, sentry-cli, esbuild).
+# Without this, `npm ci` skips Prisma's client generation and the build
+# breaks downstream.
+COPY .npmrc package.json package-lock.json turbo.json ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/email/package.json packages/email/package.json
