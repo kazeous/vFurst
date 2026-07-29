@@ -149,7 +149,7 @@ async function loginAs(page: Page, email: string) {
 
 test("platform admin enters the control plane but not tenant organizer routes without membership", async ({ page }) => {
   await loginAs(page, platformAdminEmail);
-  await page.goto("/platform");
+  await expect(page).toHaveURL(/\/platform$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Platform overview" })).toBeVisible({ timeout: 30_000 });
 
   const navigation = page.getByRole("navigation", { name: "Platform navigation" });
@@ -176,7 +176,7 @@ test("platform admin enters the control plane but not tenant organizer routes wi
 
 test("organization owner sees only their tenant and cannot reach provisioning", async ({ page }) => {
   await loginAs(page, ownerEmail);
-  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 
   const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });

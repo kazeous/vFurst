@@ -29,6 +29,14 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Post-login 404 navigation fix (user-requested)
+
+- Reproduced the production defect from a signed-out browser session: a successful credentials submission wrote the session and changed the URL to `/dashboard`, but the App Router rendered its default black 404 until a manual reload; that reload immediately resolved the same account to `/platform`. Clearing cookies/cache did not address the first-navigation failure.
+- Changed credentials login to let Auth.js finish writing the session cookie without issuing an App Router redirect, then perform one full-document replacement to the already-sanitized return path. This prevents reuse of the pre-login RSC tree, keeps the login page out of browser history, shows an explicit `Opening workspace...` pending state, and leaves Google/OAuth navigation unchanged.
+- Strengthened tenant-containment E2E so platform admins must land directly on `/platform` and organization owners directly on `/dashboard` after the login click; the tests no longer mask a broken first render with a later `page.goto`. Focused containment passed **4/4** in dev and production modes. Production wrong-password coverage passed **1/1**, proving the accessible inline error and successful retry still work.
+- Required session gates passed: type-check **9/9**, lint **9/9**, test **14/14** (web **190/190**), build **10/10**, prestart/schema preparation, and host probe **200/200/200/200/400**. The build retained only the known BullMQ dynamic-dependency warning, Serwist informational output, and Next's deliberate experimental `authInterrupts` banner. One attempted production error-flow run after a dev host probe found no `BUILD_ID`; it ran no tests and was discarded, then the web artifact was rebuilt before the green production runs.
+- This was an out-of-plan authentication UX correction requested by the user; Phase 2 was not started. **Next session remains Phase 2 unit 2.1 only.**
+
 ### 2026-07-29 — Sentry access-interrupt noise fix (user-requested)
 
 - Inspected the newest unresolved production issue, Sentry `VFURST-D` (issue `7639998311`, event `2b7c2f24207645919844d83a614772bd`) on release `ed8ca4f5a6da44b586c91b04fa4940250ddc6108`. It reported `NEXT_HTTP_ERROR_FALLBACK;403` as an unhandled `/dashboard` Server Component exception even though Next.js correctly converted that control-flow interrupt into the intentional access-denied response.
