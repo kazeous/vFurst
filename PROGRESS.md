@@ -29,6 +29,13 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Git branch cleanup (user-requested)
+
+- Audited all local and `origin` branches against `main` and `staging`. Nine historical work-branch tips had trees identical to their merged commits, and `codex/operational-calm-rebuild` was already contained in both retained branches.
+- Preserved the only unmerged work, `d0d073b` (`docs(plan): refresh readiness status`), by fast-forwarding local `staging` before deleting its source branch. Fast-forwarded local `main` to `origin/main`.
+- Deleted 11 obsolete local branches and all 8 obsolete remote branches. Only `main` and `staging` remain locally and on `origin`; the untracked `.claude/` directory was left untouched.
+- This maintenance-only session did not change application behavior or run verification gates. **Next session remains Phase 1 verification/security closeout only**: dependency remediation/acceptance plus the complete plain-`npm run dev` walkthrough.
+
 ### 2026-07-29 — Current-state documentation audit (user-requested)
 
 - Re-ran `npm audit --audit-level=moderate`: **9 vulnerabilities (7 high, 2 critical)** remain across Auth.js (`@auth/core` through `next-auth`/the Prisma adapter), Next.js, `postcss`, `sharp`, `brace-expansion`, and `fast-uri`. The non-forced audit path reports fixes for the Auth.js/transitive utility chains; the Next.js/postcss/sharp chain requires a reviewed Next upgrade outside the currently stated dependency range.
