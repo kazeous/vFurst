@@ -207,26 +207,28 @@ test("organization owner sees only their tenant and cannot reach provisioning", 
 
 test("member role cannot enter owner-admin organization or event-management routes", async ({ page }) => {
   await loginAs(page, memberEmail);
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+  const response = await page.goto("/dashboard");
 
-  await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
-  await expect(page.getByText("No organizer access")).toBeVisible();
-  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
-  expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(404);
-  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
-
-  await page.goto("/dashboard/events");
-  await expect(page.getByText("Containment Event A")).toHaveCount(0);
-  await expect(page.getByText("Containment Event B")).toHaveCount(0);
+  expect(response?.status()).toBe(403);
+  await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
+  await expect(page.getByText(memberEmail)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open my account" })).toHaveAttribute("href", "/account");
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
+  expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(403);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);
 });
 
 test("public account receives no tenant inventory or organizer actions", async ({ page }) => {
   await loginAs(page, publicEmail);
-  expect((await page.request.get("/dashboard")).status()).toBe(404);
+  const response = await page.goto("/dashboard");
+
+  expect(response?.status()).toBe(403);
+  await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
+  await expect(page.getByText(publicEmail)).toBeVisible();
   expect((await page.request.get("/platform")).status()).toBe(404);
-  expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
-  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
-  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+  expect((await page.request.get("/dashboard/organizations")).status()).toBe(403);
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);
 });

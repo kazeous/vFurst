@@ -7,6 +7,9 @@ const sentryRelease =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    authInterrupts: true
+  },
   eslint: {
     ignoreDuringBuilds: true
   },
