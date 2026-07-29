@@ -512,10 +512,12 @@ async function main() {
     ok("Security audit has no recorded blocking finding.");
   }
 
-  if (await fileIncludes("docs/launch/performance-load-test.md", "The Phase 7 target run has not passed yet")) {
-    fail(failures, "Full Phase 7 k6 target run is not documented as passed.");
+  if (
+    !(await fileIncludes("docs/launch/performance-load-test.md", "The launch 500-registration/50-check-in performance gate is passed"))
+  ) {
+    fail(failures, "Full launch k6 target run is not documented as passed.");
   } else {
-    ok("Full Phase 7 k6 target run is documented as passed.");
+    ok("Full launch k6 target run is documented as passed.");
   }
 
   await checkScreenReaderEvidence(failures);

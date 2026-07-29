@@ -8,7 +8,7 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0–5 and unit 1.6/TST-02 are complete. Phase 1 remains in progress because `npm audit --audit-level=moderate` reports 33 high/critical dependency vulnerabilities and the complete plain-dev manual walkthrough is not yet recorded. **Next session: Phase 1 verification/security closeout only** — triage the dependency advisories and complete the walkthrough; do not start Phase 2 or Audit Batch 6. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen.
+Audit Batches 0–5 and unit 1.6/TST-02 are complete. Phase 1 remains in progress because `npm audit --audit-level=moderate` reports 9 vulnerabilities (7 high, 2 critical) and the complete plain-dev manual walkthrough is not yet recorded. **Next session: Phase 1 verification/security closeout only** — remediate or explicitly accept/defer the dependency advisories and complete the walkthrough; do not start Phase 2 or Audit Batch 6. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen.
 
 ## Status by phase
 
@@ -29,6 +29,22 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Git branch cleanup (user-requested)
+
+- Audited all local and `origin` branches against `main` and `staging`. Nine historical work-branch tips had trees identical to their merged commits, and `codex/operational-calm-rebuild` was already contained in both retained branches.
+- Preserved the only unmerged work, `d0d073b` (`docs(plan): refresh readiness status`), by fast-forwarding local `staging` before deleting its source branch. Fast-forwarded local `main` to `origin/main`.
+- Deleted 11 obsolete local branches and all 8 obsolete remote branches. Only `main` and `staging` remain locally and on `origin`; the untracked `.claude/` directory was left untouched.
+- This maintenance-only session did not change application behavior or run verification gates. **Next session remains Phase 1 verification/security closeout only**: dependency remediation/acceptance plus the complete plain-`npm run dev` walkthrough.
+
+### 2026-07-29 — Current-state documentation audit (user-requested)
+
+- Re-ran `npm audit --audit-level=moderate`: **9 vulnerabilities (7 high, 2 critical)** remain across Auth.js (`@auth/core` through `next-auth`/the Prisma adapter), Next.js, `postcss`, `sharp`, `brace-expansion`, and `fast-uri`. The non-forced audit path reports fixes for the Auth.js/transitive utility chains; the Next.js/postcss/sharp chain requires a reviewed Next upgrade outside the currently stated dependency range.
+- Re-ran `npm run check:launch`: **10 automated launch checks fail** — Stripe configuration (2), Sentry configuration (5), two externally verified beta conventions (1), physical screen-reader evidence (1), and `VFURST_LAUNCH_URL` live-route verification (1). Repository artifacts, DB/Redis/email-encryption configuration, connection budget, rate-limit quotas, security-audit status, and the recorded load proof pass the checker.
+- Normalized active launch documentation from retired “Phase 7” naming to plan-v2 Phase 6, made the readiness checker require the current launch-load pass statement, and separated its automated checks from mandatory manual evidence it does not parse (deployed persona/tenant matrix, SePay Sandbox, physical badge output, production transactional email, split-runtime cutover decision, and deployed full-system audit rerun).
+- Updated the runtime defect audit to reflect the deployed credential-login behavior: expected `AuthError` returns inline action state after `unstable_rethrow`, while successful Auth.js/Next redirects remain control flow. The previous query-redirect path is retained only as historical session evidence in this file.
+- No phase status changed. **Next session remains Phase 1 verification/security closeout only**: dependency remediation/acceptance plus the complete plain-`npm run dev` walkthrough. Phase 2 and split-runtime Batch 6 remain blocked/frozen.
+
+
 ### 2026-07-28 — Corrective staging/Coolify deployment hardening (user-requested)
 
 - Reworked `staging-deploy.yml` into independent web/worker matrix jobs (`fail-fast: false`). Both hooks are attempted after green staging CI; missing/malformed secrets fail visibly; `401`/`403` and other permanent `4xx` responses stop immediately with the Coolify response body, while network failures, `408`/`425`/`429`, and `5xx` retry up to three times. Removed the ignored `ref`/`commit` JSON payload and documented that the configured Coolify branch is authoritative.
@@ -48,6 +64,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 - Local verification for the auth fix passed web type-check, lint, **179/179** unit tests, and focused Playwright **1/1** (wrong-password inline alert followed by a successful retry). PR CI #90 and post-merge staging CI #91 both passed; PR #15 merged as `379173b`.
 - Staging deploy #14 finished both matrix jobs on the exact merge commit: web `g97lt1ev29h3o1dgqiz1yaak`, worker `nko27nfy3s9a78aydkunp5im`. Coolify showed both applications Running/healthy; public health and Auth.js session returned 200, health reported PostgreSQL/Redis `ok` at `379173b`, and the live wrong-password probe stayed on `/login`, rendered the accessible alert, and did not render a 404.
 - This was an out-of-plan corrective unit requested by the user; Phase 1 status is unchanged. **Next session must resume Phase 1 verification/security closeout only** (dependency advisory triage plus the plain-dev walkthrough); do not start Phase 2 or Batch 6.
+- Progress [PR #16](https://github.com/kazeous/vFurst/pull/16) merged as `c16a44f`; CI #93 passed and the final docs-only staging deploy #15 finished web `lyep33o6541qlq1at9hsqowf` plus worker `g5x3posjpw2ymw3kjf1o5cun` on that exact commit. Final health/session and wrong-password smoke remained green.
 
 ### 2026-07-27 — Phase 1 unit 1.6: developer boot configuration smoke (TST-02)
 

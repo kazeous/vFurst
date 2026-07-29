@@ -1,4 +1,4 @@
-# Phase 7 Beta Program
+# Phase 6 Beta Program
 
 ## Goal
 
@@ -12,7 +12,7 @@ Onboard 2-3 real conventions before public launch, offer discounted or free usag
 | 2 | TBD | Not externally verified | Signed beta agreement, platform-provisioned org, owner invitation accepted, tenant activated, Stripe Connect test/live readiness checked, first event configured |
 | 3 | TBD | Optional | Signed beta agreement, platform-provisioned org, owner invitation accepted, tenant activated, Stripe Connect test/live readiness checked, first event configured |
 
-Completion rule: slots 1 and 2 must name real conventions and use `Externally verified` status before Phase 7 can be marked complete.
+Completion rule: slots 1 and 2 must name real conventions and use `Externally verified` status before Phase 6 can be marked complete.
 
 ## Onboarding checklist
 
@@ -24,7 +24,7 @@ Completion rule: slots 1 and 2 must name real conventions and use `Externally ve
 - Complete Stripe Connect onboarding in test mode first; switch to production credentials only after deployment.
 - Configure SMTP or SES sender settings.
 - Enable Sentry with `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN`.
-- Run the Phase 7 Playwright suite against the beta event.
+- Run the launch-critical Playwright suite against the beta event.
 - Run the cross-tenant persona matrix with the beta organization and an unrelated test organization before importing or accepting real attendee data.
 - Run the k6 registration and check-in load test with beta-sized seed data.
 - Review feedback weekly and record UX issues in the session log or issue tracker.
