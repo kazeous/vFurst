@@ -28,7 +28,7 @@ export default async function AccountRafflesPage() {
         <h3>Entries</h3>
         <div className="vf-list">
           {entries.map((entry) => {
-            let eligibility = "Configured eligibility";
+            let eligibility: string;
             try {
               eligibility = getCoreRegistrationEligibilityDescription(parseRaffleEligibility(entry.raffle.eligibility));
             } catch {

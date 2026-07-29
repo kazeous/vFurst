@@ -55,6 +55,10 @@ RUN groupadd --system --gid 1001 nodejs \
 
 # Standalone bundle plus the static and public assets that standalone does not copy.
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/standalone ./
+# Next.js standalone tracing includes sharp itself and the platform binding but
+# omits sharp 0.35's separate libvips package. Keep the Linux native packages
+# installed by the builder together so image optimization can load at runtime.
+COPY --from=builder --chown=nextjs:nodejs /repo/node_modules/@img ./node_modules/@img
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/static  ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/public        ./apps/web/public
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/package.json ./apps/web/package.json
