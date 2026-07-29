@@ -4,10 +4,11 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FormLayout } from "@/components/ui/form-layout";
 import { TextInput } from "@/components/ui/input";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 export type LoginFormState = {
   error?: string;
+  redirectTo?: string;
 };
 
 const initialState: LoginFormState = {};
@@ -20,6 +21,15 @@ export function LoginForm({
   const [state, formAction, pending] = useActionState(action, initialState);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const navigating = Boolean(state.redirectTo);
+
+  useEffect(() => {
+    if (state.redirectTo) {
+      // Start a new document request after Auth.js writes the session cookie.
+      // A soft App Router transition can otherwise reuse the pre-login RSC tree.
+      window.location.replace(state.redirectTo);
+    }
+  }, [state.redirectTo]);
 
   return (
     <form action={formAction} className="vf-form">
@@ -48,10 +58,10 @@ export function LoginForm({
         </Alert>
       ) : null}
       <Button
-        label={pending ? "Logging in..." : "Log in"}
+        label={navigating ? "Opening workspace..." : pending ? "Logging in..." : "Log in"}
         type="submit"
         variant="primary"
-        disabled={pending}
+        disabled={pending || navigating}
         aria-describedby={state.error ? "login-error" : undefined}
       />
     </form>

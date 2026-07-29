@@ -28,9 +28,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       await signIn("credentials", {
         email: formData.get("email"),
         password: formData.get("password"),
+        redirect: false,
         redirectTo: returnTo
       });
-      return {};
+      return { redirectTo: returnTo };
     } catch (error) {
       unstable_rethrow(error);
 
