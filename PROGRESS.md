@@ -29,6 +29,14 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Sentry access-interrupt noise fix (user-requested)
+
+- Inspected the newest unresolved production issue, Sentry `VFURST-D` (issue `7639998311`, event `2b7c2f24207645919844d83a614772bd`) on release `ed8ca4f5a6da44b586c91b04fa4940250ddc6108`. It reported `NEXT_HTTP_ERROR_FALLBACK;403` as an unhandled `/dashboard` Server Component exception even though Next.js correctly converted that control-flow interrupt into the intentional access-denied response.
+- Added one shared `beforeSend` filter to the web runtime's server, edge, and browser Sentry initialization. It suppresses only errors carrying an exact Next.js access-fallback `digest` for HTTP 401, 403, or 404; matching message text without that digest, malformed digests, 500s, and unrelated application exceptions remain reportable.
+- Confirmed that the installed Sentry Next.js SDK 10.63.0 and the current upstream helper exclude redirects and 404s but do not yet classify 401/403 access interrupts, so a package-only upgrade would not correct this report. Added 11 focused regression cases covering accepted and rejected values plus event preservation.
+- Required session gates passed: type-check **9/9**, lint **9/9**, test **14/14** (web **190/190**, including the new **11/11** filter cases), and build **10/10**. The build retained only the known BullMQ dynamic-dependency warning, Webpack serialization notices, Serwist informational output, and Next's deliberate experimental `authInterrupts` banner.
+- This was an out-of-plan observability correction requested by the user; it does not change the dashboard's intended 403 behavior. **Next session remains Phase 2 unit 2.1 only.**
+
 ### 2026-07-29 — Organizer access-denied screen (user-requested)
 
 - Replaced the dashboard layout's generic 404 for authenticated accounts without `OWNER`/`ADMIN` membership with Next.js' authenticated `forbidden()` interrupt and a branded 403 screen. The screen carries a large warning mark, the signed-in email, an actionable explanation of how organizer access is granted, and links back to `/account` or the product home.
