@@ -224,8 +224,8 @@ async function loadBadgeImage(element: BadgeElement, orgId: string): Promise<Ras
         Key: key
       })
     );
-  } catch {
-    throw new Error(`Badge image asset ${key} could not be loaded.`);
+  } catch (error) {
+    throw new Error(`Badge image asset ${key} could not be loaded.`, { cause: error });
   }
 
   if (typeof object.ContentLength === "number" && object.ContentLength > MAX_IMAGE_BYTES) {
@@ -255,7 +255,7 @@ async function loadBadgeImage(element: BadgeElement, orgId: string): Promise<Ras
     if (error instanceof Error && error.message.startsWith("Badge image")) {
       throw error;
     }
-    throw new Error(`Badge image asset ${key} is corrupt or unsupported.`);
+    throw new Error(`Badge image asset ${key} is corrupt or unsupported.`, { cause: error });
   }
 }
 

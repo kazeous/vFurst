@@ -2,11 +2,11 @@
 
 Date: July 13, 2026
 
-Last repository remediation update: July 14, 2026
+Last repository remediation update: July 29, 2026
 
 ## Status
 
-**Public launch remains blocked.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, and unbounded Prisma connection growth. The fresh supported-topology 500/50 load proof also passes its correctness, HTTP-error, and p95 latency gates. External launch evidence remains open. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
+**Public launch remains blocked only on Phase 6 external evidence.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, unbounded Prisma connection growth, and the dependency advisories reopened on July 29. The fresh supported-topology 500/50 load proof also passes its correctness, HTTP-error, and p95 latency gates. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
 
 ## Scope
 
@@ -25,12 +25,25 @@ Last repository remediation update: July 14, 2026
 | Injection | No SQL/CSV injection finding in current scope | Database access uses Prisma query builders. Shared CSV serialization neutralizes spreadsheet formulas in user-controlled strings and escapes quoted content. |
 | Insecure design | Remediated against the current payment inventory | Currency-separated reporting, currency-aware editors/cashier collection, and one schema-backed authoritative payment attempt per order are covered by mixed-currency, concurrent-start, provider-lock, stale-callback, exception-review, and replay regressions. |
 | Security misconfiguration | Repository control remediated; external configuration remains | Launch readiness rejects placeholder Stripe signing configuration; requires runtime/direct Postgres URLs, positive pool limits/timeouts, and a replica-aware connection budget; requires a valid shared `REDIS_URL`; and validates every production rate-limit quota as a positive integer. SePay/checkout secrets remain explicit manual go-live gates. |
-| Vulnerable components | Clean | `npm audit --audit-level=moderate` reports 0 vulnerabilities on July 14, 2026. |
+| Vulnerable components | Clean at the July 29 repository closeout | A clean install followed by `npm audit --audit-level=moderate` reports 0 vulnerabilities. The reviewed upgrades, native-image proof, and complete regression evidence are recorded below and in `PROGRESS.md`. |
 | Identification/auth failures | Pass for the current managed-tenant scope | Auth.js credentials validation, organizer authorization, email-bound single-use invitation onboarding, platform-only lifecycle transitions, and suspension/retirement enforcement are covered by persona and lifecycle regressions. |
 | Software/data integrity failures | Pass for current webhook paths | Outbound webhooks use per-endpoint HMAC, stable delivery IDs, tenant-bound endpoint loading, and public-target enforcement. SePay and Stripe inbound callbacks are signed and idempotent. |
 | Logging/monitoring failures | External blocker | Sentry wiring exists, but real production DSN/org/project/token evidence is absent. |
 | SSRF | Remediated for outbound webhook delivery | Endpoint configuration requires public HTTPS DNS targets; delivery rejects private/mixed DNS answers, pins the verified address with TLS hostname checks, refuses redirects, and times out. |
 | Unsafe uploads | Remediated for current upload families | Branding, product-image, and vendor-document paths enforce size/type policy before reading, verify supported content signatures where applicable, and use generated object names. |
+
+## Dependency advisory resolution — July 29, 2026
+
+The Phase 1 closeout resolved the full advisory inventory without `npm audit fix --force` and without accepting or deferring any advisory. The final clean install and independent registry-backed audit report **0 vulnerabilities at every severity**, including the production tree.
+
+| Resolved chain | Resolution and proof |
+|---|---|
+| Auth.js | Upgraded `next-auth` to 5.0.0-beta.32, `@auth/core` to 0.41.3, and the Prisma adapter to 2.11.3 as one compatible set. Auth unit coverage and the complete production E2E suite pass. |
+| Next.js | Pinned the root peer and all three runtimes to 15.5.22, with both matching Next ESLint plugins at 15.5.22. This removes the stale root peer resolution and leaves one hoisted Next version. Repository build, split-topology, boot configuration, and production E2E pass. |
+| PostCSS and sharp | Raised the reviewed overrides to PostCSS 8.5.18 and sharp 0.35.0. Both Linux production images build. A container smoke loads sharp 0.35.0 with libvips 8.18.3 on linux-x64; the web Dockerfile explicitly carries the builder's `@img` native packages because Next standalone tracing omitted the split libvips package. Upload/image validation remains covered by the full E2E suite. |
+| `brace-expansion` and `fast-uri` | Scoped overrides resolve the active chains to 5.0.8 and 3.1.4. ESLint 10.8.0 plus `@eslint/js` 10.0.1 removes the obsolete ESLint 9/minimatch 3/brace 1.x chain; the two newly enforced lint findings were corrected in application code. |
+
+`npm ci` completed without unreviewed install-script warnings, `npm ls` resolved one coherent dependency tree, and the full type-check, lint, unit, build, split-topology, boot-config, and 118-test production E2E gates passed. The temporary isolated E2E database had 0 residual organizations/users/outbox events and was deleted after verification.
 
 ## PCI and payment posture
 
@@ -56,6 +69,6 @@ Card data remains hosted by Stripe Checkout and is not stored by vFurst. The SAQ
 8. **Done:** constrain store/vendor uploads before reading them into memory.
 9. **Done for shared rate limiting:** replace process-local counters with atomic Redis counters, define route-family failure policy, and add multi-instance/TTL regressions.
 10. **Done for connection exhaustion:** one Prisma singleton per process, bounded runtime pools, a direct administrative datasource, replica/budget/capacity readiness checks, and a zero-error 500/50 rerun replace the previous `P2037` failure mode.
-11. **Done for the repository performance gate:** rerun type-check, lint, unit, Prisma, build, dependency, focused tenant/domain E2E, and the approved 500/50 load proof. The full production E2E and readiness results are recorded in `PROGRESS.md` for the same change set.
+11. **Done for vulnerable components:** the July 29 dependency set is remediated to a zero-vulnerability audit; clean install, coherent-tree, full repository gates, production E2E, Linux image builds, and native sharp/libvips smoke evidence are recorded above and in `PROGRESS.md`.
 
 The repository rate-limit finding is closed. Public launch remains blocked until external monitoring and the remaining full launch-proof items are completed and the audit is repeated against the deployed environment.
