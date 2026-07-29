@@ -29,6 +29,12 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Production dashboard access diagnostic (user-requested)
+
+- Used the production browser flow at `https://vfurst.reyuugames.com`: credential authentication succeeded and the session rendered `/account` for the expected user, with no browser console warnings or errors.
+- The post-login default redirect to `/dashboard` rendered the intentional Next.js 404 because this account has no organization membership and is not a platform administrator. This matches `apps/web/src/app/dashboard/layout.tsx`; it is not evidence of a missing production route or deployment crash.
+- Coolify and Sentry were not opened because the authenticated account page and the repository access guard supplied sufficient evidence. No application code or production data was changed. **Next session remains Phase 2 unit 2.1 only.**
+
 ### 2026-07-29 — Phase 1 verification/security closeout (complete)
 
 - Completed the full plain-`npm run dev` walkthrough against the local Docker stack: duplicate signup retained values and rendered inline; wrong-password login stayed inline and the retry succeeded; `/account` rendered all six summary categories; central and tenant-host portals rendered; invalid registration voucher and invalid store discount stayed inline; free registration, central checkout, hotel booking, required volunteer-field validation, and organizer login/logout all behaved as specified. The browser console had no error-level entries and no blank Application Error surfaced.
