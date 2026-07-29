@@ -8,13 +8,13 @@
 
 **Phase 1 — Stabilize** (`docs/plan/phase-1-stabilize.md`)
 
-Audit Batches 0–5 and unit 1.6/TST-02 are complete. Phase 1 remains in progress because `npm audit --audit-level=moderate` reports 9 vulnerabilities (7 high, 2 critical) and the complete plain-dev manual walkthrough is not yet recorded. **Next session: Phase 1 verification/security closeout only** — remediate or explicitly accept/defer the dependency advisories and complete the walkthrough; do not start Phase 2 or Audit Batch 6. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen.
+Audit Batches 0–5 and unit 1.6/TST-02 are complete. The complete plain-dev walkthrough and closeout regression are now recorded. Phase 1 remains in progress only because `npm audit --audit-level=moderate` currently reports **33 vulnerabilities (31 high, 2 critical; 24 in the production tree)** and no remediation or explicit risk acceptance/defer decision has been recorded. **Next session: finish the Phase 1 dependency-security decision only** — determine and test compatible upgrades after registry access is explicitly approved, or record an explicit accept/defer decision; do not start Phase 2 or Audit Batch 6. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | In progress | Units 1.1–1.6 done (2026-07-27); closeout blocked by dependency audit + complete plain-dev walkthrough; audit Batch 6 deferred/frozen |
+| 1 — Stabilize | In progress | Units 1.1–1.6, full plain-dev walkthrough, and closeout regression done; blocked only by the unresolved dependency remediation/acceptance decision; audit Batch 6 deferred/frozen |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1; decisions listed in the phase file |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -28,6 +28,17 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-07-29 — Phase 1 verification/security closeout (partial)
+
+- Completed the full plain-`npm run dev` walkthrough against the local Docker stack: duplicate signup retained values and rendered inline; wrong-password login stayed inline and the retry succeeded; `/account` rendered all six summary categories; central and tenant-host portals rendered; invalid registration voucher and invalid store discount stayed inline; free registration, central checkout, hotel booking, required volunteer-field validation, and organizer login/logout all behaved as specified. The browser console had no error-level entries and no blank Application Error surfaced.
+- The free registration generated exactly the expected confirmation and payment-receipt messages in Mailpit. All temporary attendee, order/cart, registration, hotel, product, department, and application data created for the walkthrough was removed; the final fixture cleanup dry-run found **0 organizations / 0 users / 0 outbox events**.
+- Exact plain-dev host probe passed **200/200/200/200/400** for `localhost`, `www`, `console`, `app`, and malformed `foo_bar.localhost`. The web app and worker stayed running through the walkthrough; the worker's configured local SePay reconciliation credential returned HTTP 401, an environment warning outside the exercised zero-dollar flows.
+- Closeout gates passed: type-check **9/9**, lint **9/9**, test **14/14** (web **179/179**, DB **52/52**, auth **67/67**), build **10/10**, split topology **5/5**, and boot-config smoke. The build retained the known BullMQ dynamic-dependency warning; a cold cache also emitted Webpack serialization-performance notices and Serwist informational output.
+- Production E2E passed **118/118, 0 failed, 0 did not run** with one worker. The preceding four-worker attempt reproduced the documented registration-policy timeout at the approval click; it is not claimed as green.
+- `npm run check:launch` remains red only on the same **10 Phase-6/external checks**: Stripe configuration (2), Sentry configuration (5), externally verified beta conventions (1), physical screen-reader evidence (1), and `VFURST_LAUNCH_URL` live verification (1).
+- The current dependency audit reports **33 vulnerabilities: 31 high, 2 critical**; `--omit=dev` reports **24: 22 high, 2 critical**. Runtime-relevant chains include Auth.js/`next-auth`, Next.js 15.5.20, PostCSS, sharp, Sentry, Serwist, Tailwind PostCSS, and their transitive utilities. Local exposure review found no `getToken()` use, no web custom server or rewrite configuration, and only the frozen tenant handoff routes explicitly use the Node.js runtime; both active Auth.js surfaces use Credentials and Google providers. This narrows exposure but does not constitute risk acceptance.
+- No dependency or application file was changed. Compatible remediation-target resolution with `npm audit fix --dry-run` is paused pending explicit authorization to send the repository dependency graph/package names to `registry.npmjs.org`; Phase 1 therefore remains **in progress**. **Next session must resolve or explicitly accept/defer this dependency set only; Phase 2 and Batch 6 remain blocked/frozen.**
 
 ### 2026-07-29 — Git branch cleanup (user-requested)
 
