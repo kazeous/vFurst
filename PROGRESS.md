@@ -29,6 +29,15 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-29 — Organizer access-denied screen (user-requested)
+
+- Replaced the dashboard layout's generic 404 for authenticated accounts without `OWNER`/`ADMIN` membership with Next.js' authenticated `forbidden()` interrupt and a branded 403 screen. The screen carries a large warning mark, the signed-in email, an actionable explanation of how organizer access is granted, and links back to `/account` or the product home.
+- The guard now treats both public users and `MEMBER`-only users consistently while preserving the existing platform-admin redirect and owner/admin workspace. Cross-tenant owner/admin resource lookups continue to use their page-level 404 guards; the new 403 reveals no tenant inventory.
+- Browser QA against the local production artifact covered 320, 375, 414, and 768 px widths: the warning hierarchy, responsive one/two-column layout, long email wrapping, and single-line action labels rendered without horizontal overflow. The temporary preview user was removed afterward.
+- Focused tenant-containment E2E passed **4/4** in production mode and again **4/4** in dev mode, covering platform admin, owner, member-only, and public-account paths. The local SePay reconciliation credential continued to return the known HTTP 401 warning outside the exercised flow.
+- Required session gates passed: type-check **9/9**, lint **9/9**, test **14/14** (web **179/179**), build **10/10**, prestart/schema preparation, and host probe **200/200/200/200/400**. Build output retained the known BullMQ dynamic-dependency and cold-cache Webpack serialization warnings; Next also reports the deliberately enabled `authInterrupts` API under its experimental “use with caution” banner.
+- This was an out-of-plan UX correction requested by the user; Phase 2 was not started. **Next session remains Phase 2 unit 2.1 only.**
+
 ### 2026-07-29 — Production dashboard access diagnostic (user-requested)
 
 - Used the production browser flow at `https://vfurst.reyuugames.com`: credential authentication succeeded and the session rendered `/account` for the expected user, with no browser console warnings or errors.
