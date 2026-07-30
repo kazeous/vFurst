@@ -29,6 +29,12 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-07-30 — Phase 2 product decisions recorded (user-requested; documentation only)
+
+- The user confirmed the three proposed decisions before Phase 2: reusable attendee profiles with a default cap of four per account and event-configurable cap; recipient-owned, editable attendee data after a transfer so the sender's shared profile is never exposed or mutated; and `next-intl` with Vietnamese and English for portal/account/auth/email surfaces first.
+- DOB is consequently collected on an attendee profile and required only when an event enables age rules. The concrete transfer behavior is recorded so Unit 2.1 can preserve profile ownership and privacy while still making the transferred attendee editable.
+- No application code, database schema, generated artifact, test, or phase unit was started. Phase 2 remains **not started**; **next session must execute only Unit 2.1.**
+
 ### 2026-07-30 — Current-state reconciliation and safe product archive (user-requested)
 
 - Reconciled the ConCat-oriented `saas-functions.md` inventory with the repository instead of treating that inventory as a statement of implemented vFurst behavior. `01-current-state.md` now reflects the Phase 1 closeout and the current runtime; the parity matrix records the actual partials and omissions, including constrained email templates, volunteer interest/lead workflow, organizer people profiles, event-site content/publishing, and the intentionally narrow read-only v1 API.

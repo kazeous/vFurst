@@ -4,15 +4,16 @@
 >
 > **Precondition:** Phase 1 complete. Every new form in this phase uses the structured-state/redirect-code patterns established there — no bare `throw` for expected input.
 
-## Decisions to record before the affected unit starts
+## Decisions recorded before the affected unit starts
 
 | Decision | Recommendation | Affects |
 |---|---|---|
-| Attendee-profile model | Add an `AttendeeProfile` (name, badge name, DOB, contact) owned by a `User`; `Registration` gains `attendeeProfileId` while keeping `userId` as the owning account. Default cap 4 per account, event-configurable (`maxRegistrationsPerUser` becomes the per-account attendee cap). Transfers/badges/check-in read the profile, ownership stays with the account. | REG-P1, EVD-P2 |
-| Date of birth | Collect DOB on the attendee profile (required when the event enables age rules). Unlocks ConCat parity for age-gated products, underage/guardian warnings. | REG-P1, STO-P1, EVD-P2 |
+| Attendee-profile model | **Confirmed 2026-07-30.** Add an `AttendeeProfile` (name, badge name, DOB, contact) owned by a `User`; `Registration` gains `attendeeProfileId` while keeping `userId` as the owning account. Default cap 4 per account, event-configurable (`maxRegistrationsPerUser` becomes the per-account attendee cap). | REG-P1, EVD-P2 |
+| Transfer/profile behavior | **Confirmed 2026-07-30.** A profile remains owned by its account. A transfer must give the recipient an editable, recipient-owned attendee profile for that registration rather than exposing or mutating the sender's shared profile. Badges and check-in read the profile associated with the registration. | REG-P1, EVD-P2 |
+| Date of birth | **Confirmed 2026-07-30.** Collect DOB on the attendee profile; require it only when the event enables age rules. This unlocks age-gated products and underage/guardian warnings. | REG-P1, STO-P1, EVD-P2 |
 | Deferral/rollover | Defer (backlog) unless a beta convention needs it; refunds already exist. | REG-P8 |
 | 2FA | TOTP via Auth.js; passkeys later (schema `Authenticator` already exists). Optional per user. | REG-P9 |
-| i18n | `next-intl`, `vi` + `en`, portal + account + emails first; dashboard later. Decide before building new UI copy in this phase so strings land in message files once. | REG-P10 |
+| i18n | **Confirmed 2026-07-30.** Use `next-intl`, with `vi` + `en` for portal, account, auth, and emails first; dashboard later. New Phase 2 UI copy belongs in message files. | REG-P10 |
 
 ## Units (one per session unless trivially small)
 
