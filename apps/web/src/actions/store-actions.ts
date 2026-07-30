@@ -183,13 +183,42 @@ async function updateProductInner(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
-export async function deleteProduct(formData: FormData) {
+export async function archiveProduct(formData: FormData) {
   const productId = z.string().uuid().parse(formData.get("productId"));
   const { storeProduct, event } = await requireStoreProductAccess(productId);
 
-  await prisma.storeProduct.delete({
+  await prisma.$transaction(async (tx) => {
+    await tx.storeProduct.update({
+      where: {
+        id: storeProduct.id
+      },
+      data: {
+        archivedAt: new Date()
+      }
+    });
+
+    // A cart is not a purchase commitment. Provider-backed orders are retained
+    // so their payment amount and paid-order history cannot be rewritten.
+    await tx.cartItem.deleteMany({
+      where: {
+        storeProductId: storeProduct.id
+      }
+    });
+  });
+
+  revalidatePath(`/dashboard/events/${event.id}/store`);
+}
+
+export async function restoreProduct(formData: FormData) {
+  const productId = z.string().uuid().parse(formData.get("productId"));
+  const { storeProduct, event } = await requireStoreProductAccess(productId);
+
+  await prisma.storeProduct.update({
     where: {
       id: storeProduct.id
+    },
+    data: {
+      archivedAt: null
     }
   });
 

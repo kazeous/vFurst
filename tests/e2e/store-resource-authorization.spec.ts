@@ -226,7 +226,7 @@ async function loginAsOwnerA(page: Page) {
     page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
     page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
   ]);
-  await page.goto("/dashboard");
+  await navigateAfterRejectedAction(page, "/dashboard");
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -296,10 +296,12 @@ async function expectOriginalProducts() {
   ]);
   expect(productA.name).toBe(productAName);
   expect(productA.orgId).not.toBe(productB.orgId);
+  expect(productA.archivedAt).toBeNull();
   expect(productB.name).toBe(productBName);
+  expect(productB.archivedAt).toBeNull();
 }
 
-test("product CRUD derives tenant and currency from the stored event or product", async ({ page }) => {
+test("product catalog actions derive tenant and currency from the stored event or product", async ({ page }) => {
   await loginAsOwnerA(page);
   const storePath = `/dashboard/events/${eventAId}/store`;
   await page.goto(storePath);
@@ -324,12 +326,12 @@ test("product CRUD derives tenant and currency from the stored event or product"
   await expectOriginalProducts();
 
   await navigateAfterRejectedAction(page, storePath);
-  const deleteForm = page
+  const archiveForm = page
     .getByRole("heading", { name: productAName })
     .locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' vf-section ')][1]")
-    .getByRole("button", { name: "Delete", exact: true })
+    .getByRole("button", { name: "Archive", exact: true })
     .locator("xpath=ancestor::form");
-  await submitTamperedAction(page, storePath, deleteForm, "Delete", "productId", productBId);
+  await submitTamperedAction(page, storePath, archiveForm, "Archive", "productId", productBId);
   await expectOriginalProducts();
 
   await navigateAfterRejectedAction(page, storePath);
@@ -341,6 +343,17 @@ test("product CRUD derives tenant and currency from the stored event or product"
   const created = await prisma.storeProduct.findFirstOrThrow({ where: { eventId: eventAId, name: validCreateName } });
   expect(created.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
   expect(created.price).toBe(150_000);
+
+  await page.goto(storePath);
+  const createdSection = page
+    .getByRole("heading", { name: validCreateName })
+    .locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' vf-section ')][1]");
+  const archiveCreatedForm = createdSection.getByRole("button", { name: "Archive", exact: true }).locator("xpath=ancestor::form");
+  await submitAction(page, storePath, archiveCreatedForm, "Archive");
+
+  await expect.poll(async () => (await prisma.storeProduct.findUniqueOrThrow({ where: { id: created.id } })).archivedAt).not.toBeNull();
+  await page.goto(`/${orgASlug}/store`);
+  await expect(page.getByRole("heading", { name: validCreateName })).toHaveCount(0);
 });
 
 test("full and partial refunds reject an order from another tenant", async ({ page }) => {

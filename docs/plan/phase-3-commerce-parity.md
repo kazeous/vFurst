@@ -4,6 +4,8 @@
 >
 > **Preconditions:** Phase 1 complete. STO-P1 age rules and EVD warning parity depend on the Phase 2 DOB decision; if Phase 2 hasn't landed DOB yet, build STO-P1 with the age fields dormant behind the event setting.
 
+> **Current baseline (2026-07-30):** products have a reversible `archivedAt` state rather than hard deletion. Archive hides a product from the public catalog/API and raffle-product selector and removes it from active carts; historical and provider-backed orders are deliberately retained so an in-flight payment is never silently rewritten. This is a safety correction, not completion of Unit 3.1.
+
 ## Decisions to record before the affected unit starts
 
 | Decision | Recommendation | Affects |
@@ -16,7 +18,7 @@
 
 | Unit | Backlog | Scope |
 |---|---|---|
-| 3.1 | STO-P1 | Product policy fields: display name, public-visibility toggle (default hidden like ConCat), available-from/until, min/max purchase age (dormant until DOB exists), restrict-to-roles, restrict-to-grants, archive-not-delete semantics (archived products drop from unpaid orders only). Enforce in one shared purchasability boundary used by portal, cart, and cashier. |
+| 3.1 | STO-P1 | Product policy fields: display name, public-visibility toggle (default hidden like ConCat), available-from/until, min/max purchase age (dormant until DOB exists), restrict-to-roles, restrict-to-grants, and complete archive policy. Extend the existing soft archive to an explicit unpaid-order edit/cancel policy without mutating any provider-authoritative payment amount; paid orders remain immutable. Enforce in one shared purchasability boundary used by portal, cart, and cashier. |
 | 3.2 | STO-P2, STO-P3 | Reusable option library (single/multi select, freetext min/max, number min/max, currency-add) with required flag; shared surcharge library (fixed, percent, tax-rate) assignable per product. Order items snapshot option values and surcharge math; disassociation never mutates existing orders. Migrate current JSON. |
 | 3.3 | STO-P4 | Universal addons: any product attachable to any product (and to registration tiers through the existing add-on path), complimentary auto-added at checkout, upsell step shown after add-to-cart. Dedupe with the current `AddOnDefinition` so there is one addon concept, not two. |
 | 3.4 | STO-P6, STO-P7 | Order operations: fulfillment state for fulfillable items (everything outside registration/vendor categories unless claim-ticketed), per-item "mark fulfilled", organizer "pending fulfillment" queue; staff editing of unpaid orders (add/remove items, apply voucher, manual mark-paid with recorded external method, cancel) with audit fields. |

@@ -1,6 +1,6 @@
-# Phase 4 — Event-day & operations parity
+# Phase 4 — Event-day, operations & integration parity
 
-> **Goal:** the cashier station reaches ConCat's operational depth (station policy, warning engine, delivery/claim handling, badge variants), user notes become a real operations tool (categories, bans, restrictions), and dealers get assistants, seating, areas, and den entry tickets. Backlog rows: `EVD-P1`…`EVD-P11` in `02-concat-parity.md`.
+> **Goal:** the cashier station reaches ConCat's operational depth (station policy, warning engine, delivery/claim handling, badge variants), user notes become a real operations tool (categories, bans, restrictions), dealers get assistants, seating, areas, and den entry tickets, and organizer/API operations fill the remaining SaaS inventory gaps. Backlog rows: `EVD-P1`…`EVD-P13` and `API-P1` in `02-concat-parity.md`.
 >
 > **Preconditions:** Phase 1 complete. EVD-P2 age warnings need Phase 2 DOB; EVD-P3 needs Phase 3 fulfillment (STO-P6); claim-label printing at check-in arrives with STO-P5.
 
@@ -22,6 +22,9 @@
 | 4.4 | EVD-P7, EVD-P8, EVD-P9 | Dealers: assistants (approved dealer invites by email/username → assistant flag on their registration/badge), seating preferences (share vendor ID, request adjacency, organizer sees the graph on the booth board), multiple dealer areas with per-area table-type products and amenity products auto-added to the cart on approval. |
 | 4.5 | EVD-P10 | Den entry tickets: per-day timed slots with capacity, attendees claim a QR slot from the portal/account, volunteers scan from the check-in surface (valid at slot start and later, single consume), organizer slot dashboard. |
 | 4.6 | EVD-P11 | CCCD QR parsing per the decision, feeding cashier search + the mismatch warning. |
+| 4.7 | EVD-P12 | Volunteer workflow: structured Interested/Experience/Avoid department matrix, department-lead scoped review/request queues, and mass email authority limited to the lead's permitted people. |
+| 4.8 | EVD-P13 | Organizer people directory: tenant-contained attendee search and a single profile view for registrations, orders, volunteer/vendor records, and notes; authorization stays derived from every stored record. |
+| 4.9 | API-P1 | Expand the scoped v1 API with user/role/volunteer/department/current-user operations where the resource model permits it; document pagination, scopes, access/business error codes, and two-tenant regression coverage. Do not revive an unversioned legacy API. |
 
 ## Exit criteria
 
@@ -30,4 +33,6 @@
 3. Check-in for an underage profile with cashier notes and an undelivered product shows all three warnings/panels in one view; handover marking updates fulfillment.
 4. A dealer with one assistant and a seating preference prints both badges with dealer status; the organizer booth board shows the adjacency request; a second dealer area offers different table types; amenities land in the cart on approval.
 5. A den ticket QR admits once at its slot, rejects double-scan and early entry.
-6. Full E2E green; parity statuses updated.
+6. A department lead can act only on its permitted department; an unrelated organizer cannot enumerate the people directory or profile records.
+7. Every new v1 API operation returns documented, stable business/access errors and rejects cross-tenant reads and writes.
+8. Full E2E green; parity statuses updated.

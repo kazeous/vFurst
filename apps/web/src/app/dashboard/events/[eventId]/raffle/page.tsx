@@ -39,7 +39,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
         include: { addOns: true },
         orderBy: { sortOrder: "asc" }
       },
-      storeProducts: { orderBy: { name: "asc" } },
+      storeProducts: { where: { archivedAt: null }, orderBy: { name: "asc" } },
       registrations: {
         where: {
           status: {

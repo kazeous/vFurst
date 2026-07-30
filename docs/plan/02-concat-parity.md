@@ -21,7 +21,7 @@ Status legend: ✅ parity or better · 🟡 partial · ❌ missing · 🔷 delib
 
 | Area | ConCat behavior | vFurst status |
 |---|---|---|
-| Product basics | Categories, display name, stock toggle, public-visibility default-off | 🟡 name/price/stock/category exist; display name + visibility toggle → **STO-P1** |
+| Product basics | Categories, display name, stock toggle, public-visibility default-off | 🟡 name/price/stock/category exist; products now archive/recover instead of hard-delete (hidden from catalog/API and removed from active carts); display name + visibility toggle + full inactive-order policy → **STO-P1** |
 | Purchase policy | Available-from/until windows, min/max purchase age, restrict-to-roles, restrict-to-grants | ❌ none (no DOB collected anywhere) → **STO-P1** |
 | Platform fee pass-through | Per-product "pass platform fee to customer" | ❌ decision → **STO-P8** |
 | Archive semantics | Archive (not delete); removed from unpaid orders, paid orders untouched | 🟡 verify + align during **STO-P1** |
@@ -49,10 +49,20 @@ Status legend: ✅ parity or better · 🟡 partial · ❌ missing · 🔷 delib
 |---|---|---|
 | Orders | Unpaid/paid, staff add/remove products on unpaid orders, manual mark-paid, cancel | 🟡 orders/refunds/cashier payment exist; free staff editing + manual mark-paid → **STO-P7** |
 | Fulfillment | Paid orders with fulfillable products show "Pending Fulfillment"; per-item fulfill | ❌ → **STO-P6** |
-| Email templates | Override per template at organization **and** convention level (Convention > Org > Default), Handlebars, disable option, protected `register` template | 🟡 event-level overrides for 5 families work end-to-end; org-level chain + disable + broader catalogue → **REG-P11** (nice-to-have) |
-| Volunteers | Dept interest matrix (Interested/Experience/Avoid), dept leads review/request, `hr` role, lead mass email | ✅ core + shifts (exceeds docs) · 🟡 lead-scoped workflow → **EVD-P12** (nice-to-have) |
+| Email templates | Override per template at organization **and** convention level (Convention > Org > Default), Handlebars, disable option, protected `register` template | 🟡 event-level overrides for 5 families work end-to-end with an allowlisted `{{token}}` renderer (not full Handlebars); org-level chain + disable + broader catalogue → **REG-P11** |
+| Volunteers | Dept interest matrix (Interested/Experience/Avoid), dept leads review/request, `hr` role, lead mass email | 🟡 applications, departments/leads, shifts, assignments, and mail to assigned staff exist; structured interest matrix + lead-scoped review/request workflow → **EVD-P12** |
 | User notes | Categories (Cashier/Ban/Restriction special), cashier notes at check-in, bans with/without account, ban-attempt review queue, shadow restrictions, permission-gated categories | 🟡 `AttendeeNote` exists → categories + ban/restriction system **EVD-P5/P6** |
 | Custom domains | CNAME per convention; custom **email** domain with guided DNS records + verify | ✅ portal domains with DNS-ownership verification · ❌ email-domain DNS flow → **REG-P12** (nice-to-have) |
+
+## SaaS inventory additions (audit 2026-07-30)
+
+| Area | Inventory expectation | vFurst status |
+|---|---|---|
+| Event website | Organizer-managed public event content beyond visual branding | 🟡 branding and event settings exist; no content/page publish workflow → **REG-P13** |
+| Organizer people operations | Search users and open one tenant-contained view of profile, orders, volunteer data, registrations, and notes | 🟡 API attendee search exists; no organizer directory/profile surface → **EVD-P13** |
+| Cashier operations | ID parsing, station policy, warning engine, fulfillment/claim handover, badge-printer routing | 🟡 basic check-in, QR camera kiosk, walk-in cashier, and direct print exist; the operational controls remain **EVD-P1…P4, P11** |
+| Notes and moderation | Categories, cashier alerts, account/name bans, restrictions, review queue | 🟡 free-text registration notes only → **EVD-P5/P6** |
+| Public API compatibility | User/role/volunteer/department/current-user coverage plus documented business-error codes | 🟡 scoped read-only v1 events/attendees/registrations/vendors/store/badges exists; the remainder → **API-P1** |
 | Convention checklist | Docs guide, not a feature | ✅ N/A — vFurst has go-live checklist + onboarding docs |
 
 ## Observed in production UI (screenshots), not in docs
@@ -94,8 +104,9 @@ SePay VietQR + organizer ledger + recorded payouts + reconciliation; platform co
 | REG-P8 | Deferral/rollover + sponsor-donation policy (product decision first) | 2 |
 | REG-P9 | Two-factor authentication (decision: TOTP/passkeys) | 2 |
 | REG-P10 | i18n vi + en (decision: scope + library) | 2 |
-| REG-P11 | Org-level email override chain + disable + wider catalogue | backlog |
-| REG-P12 | Custom email-domain DNS verification flow | backlog |
+| REG-P11 | Org-level email override chain + disable + wider catalogue | 2 |
+| REG-P12 | Custom email-domain DNS verification flow | 2 |
+| REG-P13 | Tenant-contained public event-site content and publish workflow beyond branding | 2 |
 | STO-P1 | Product policy fields: display name, visibility, availability windows, age limits (needs DOB decision), role/grant restrictions, archive semantics | 3 |
 | STO-P2 | Reusable option library, 5 types, required flag, order-value retention | 3 |
 | STO-P3 | Shared surcharge library incl. tax-rate type | 3 |
@@ -115,5 +126,7 @@ SePay VietQR + organizer ledger + recorded payouts + reconciliation; platform co
 | EVD-P9 | Multiple dealer areas + amenity-product cart flow | 4 |
 | EVD-P10 | Dealers' den timed-entry tickets (QR slots, volunteer scanning) | 4 |
 | EVD-P11 | ID scanning at cashier (decision: VN CCCD QR vs PDF417; hardware scope) | 4 |
-| EVD-P12 | Department-lead scoped review/request + lead mass email | backlog |
+| EVD-P12 | Structured department-interest matrix + lead-scoped review/request + mass email | 4 |
+| EVD-P13 | Organizer attendee directory and tenant-contained person profile | 4 |
+| API-P1 | Expand scoped v1 API for user/role/volunteer/department/current-user operations and publish a stable business-error catalogue | 4 |
 | RAF-P1 | Registration lottery (ConCat semantics) alongside prize raffle | 5 |

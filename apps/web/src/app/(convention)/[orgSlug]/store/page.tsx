@@ -226,6 +226,7 @@ export default async function PublicStorePage({
     include: {
       storeProducts: {
         where: {
+          archivedAt: null,
           stock: {
             gt: 0
           }

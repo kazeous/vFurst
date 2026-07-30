@@ -1,4 +1,4 @@
-import { createProduct, deleteProduct, updateProduct } from "@/actions/store-actions";
+import { archiveProduct, createProduct, restoreProduct, updateProduct } from "@/actions/store-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions, parseProductSurcharges } from "@/lib/store/pricing";
@@ -30,7 +30,9 @@ export default async function StoreManagementPage({ params }: { params: Promise<
     notFound();
   }
 
-  const lowStockProducts = event.storeProducts.filter((product) => product.stock <= 5);
+  const activeProducts = event.storeProducts.filter((product) => !product.archivedAt);
+  const archivedProducts = event.storeProducts.filter((product) => product.archivedAt);
+  const lowStockProducts = activeProducts.filter((product) => product.stock <= 5);
 
   return (
     <div className="vf-page">
@@ -121,12 +123,12 @@ export default async function StoreManagementPage({ params }: { params: Promise<
           <div className="vf-stat-grid">
             <div className="vf-stat-card">
               <p className="vf-label">Products</p>
-              <strong>{event.storeProducts.length}</strong>
+              <strong>{activeProducts.length}</strong>
               <span>Catalog items</span>
             </div>
             <div className="vf-stat-card">
               <p className="vf-label">Stock</p>
-              <strong>{event.storeProducts.reduce((sum, product) => sum + product.stock, 0)}</strong>
+              <strong>{activeProducts.reduce((sum, product) => sum + product.stock, 0)}</strong>
               <span>Units available</span>
             </div>
           </div>
@@ -134,7 +136,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
       </section>
 
       <section className="vf-stack">
-        {event.storeProducts.map((product) => {
+        {activeProducts.map((product) => {
           const surcharges = parseProductSurcharges(product.surcharges);
           const options = parseProductOptions(product.options);
           const images = imageUrls(product.images);
@@ -149,9 +151,9 @@ export default async function StoreManagementPage({ params }: { params: Promise<
                     {formatCurrency(product.price, event.currency)} + {formatCurrency(getSurchargeTotal(product.surcharges), event.currency)} surcharges - {product.stock} in stock
                   </p>
                 </div>
-                <form action={deleteProduct}>
+                <form action={archiveProduct}>
                   <input type="hidden" name="productId" value={product.id} />
-                  <Button label="Delete" type="submit" variant="destructive" size="sm" />
+                  <Button label="Archive" type="submit" variant="destructive" size="sm" />
                 </form>
               </div>
               {images.length > 0 ? (
@@ -234,8 +236,29 @@ export default async function StoreManagementPage({ params }: { params: Promise<
             </div>
           );
         })}
-        {event.storeProducts.length === 0 ? <p className="vf-empty">No products yet.</p> : null}
+        {activeProducts.length === 0 ? <p className="vf-empty">No active products yet.</p> : null}
       </section>
+
+      {archivedProducts.length > 0 ? (
+        <section className="vf-section">
+          <h2>Archived products</h2>
+          <p className="vf-muted">Archived products are hidden from the public store and removed from active carts. Existing orders remain as records.</p>
+          <div className="vf-list">
+            {archivedProducts.map((product) => (
+              <div key={product.id} className="vf-list-row">
+                <span>
+                  <strong>{product.name}</strong>
+                  <small>Archived {product.archivedAt?.toLocaleString()}</small>
+                </span>
+                <form action={restoreProduct}>
+                  <input type="hidden" name="productId" value={product.id} />
+                  <Button label="Restore" type="submit" size="sm" />
+                </form>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

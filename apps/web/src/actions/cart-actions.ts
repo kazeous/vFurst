@@ -115,7 +115,7 @@ async function addToCartInner(formData: FormData): Promise<PublicFormState> {
     }
   });
 
-  if (!product || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
+  if (!product || product.archivedAt || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
     return { error: "This product is not available for purchase." };
   }
 
@@ -220,6 +220,10 @@ async function updateQuantityInner(formData: FormData): Promise<PublicFormState>
 
   assertOrganizationActive(item.cart.event.org.status);
 
+  if (item.product?.archivedAt) {
+    return { error: "This product is no longer available." };
+  }
+
   if (item.product && item.product.stock < parsed.data.quantity) {
     return { error: "Not enough inventory is available." };
   }
@@ -308,6 +312,16 @@ export async function convertCartToOrder(formData: FormData) {
       (!item.product || item.product.eventId !== cart.eventId || item.product.orgId !== cart.event.orgId)
     ) {
       throw new Error("A product in this cart does not belong to the cart event.");
+    }
+
+    if (item.product?.archivedAt) {
+      await prisma.cartItem.deleteMany({
+        where: {
+          id: item.id,
+          cartId: cart.id
+        }
+      });
+      throw new PublicActionError(`${item.product.name} is no longer available and was removed from your cart.`);
     }
 
     if (item.product && item.product.stock < item.quantity) {

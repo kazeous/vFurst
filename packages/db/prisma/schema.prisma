@@ -902,6 +902,7 @@ model StoreProduct {
   category    String?
   surcharges  Json         @default("[]")
   options     Json         @default("[]")
+  archivedAt  DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -911,6 +912,7 @@ model StoreProduct {
 
   @@index([orgId])
   @@index([eventId])
+  @@index([eventId, archivedAt])
   @@map("store_products")
 }
 
