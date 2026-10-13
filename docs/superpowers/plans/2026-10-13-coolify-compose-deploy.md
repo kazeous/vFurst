@@ -59,7 +59,7 @@
 
 **Files:** none
 
-- [ ] **Step 1: Confirm the workspace**
+- [x] **Step 1: Confirm the workspace**
 
   Run: `git branch --show-current; git status --short; git log --oneline -4`
   Expected:
@@ -69,12 +69,12 @@
 
   Otherwise **stop**.
 
-- [ ] **Step 2: Install dependencies**
+- [x] **Step 2: Install dependencies**
 
   Run: `npm ci`
   Expected: success. The worktree starts without `node_modules`.
 
-- [ ] **Step 3: Record the baseline**
+- [x] **Step 3: Record the baseline**
 
   Run: `npx turbo run type-check lint test build --concurrency=1; npm run test:boot-config`
   Expected:
@@ -83,7 +83,7 @@
 
   Write down the task counts and per-suite test counts for Task 8. If anything is red, **stop**.
 
-- [ ] **Step 4: Confirm Docker tooling**
+- [x] **Step 4: Confirm Docker tooling**
 
   Run in bash: `docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'; docker compose version; docker buildx version`
   Expected: three version lines. On 2026-10-13 they were `linux/amd64`, Compose v5.5.1 and buildx v0.37.2. If the Docker daemon is not running, **stop** and ask the user to start Docker Desktop.
