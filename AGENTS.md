@@ -53,8 +53,9 @@ owns its own file. Do not assume a value in the root file reaches an app.
 and runs automatically on `npm run dev`. `node scripts/check-app-env.mjs <web|worker>`
 validates the required set and runs from `predev`/`prestart` — never during
 `next build`, so CI (which sets only `DATABASE_URL`) is unaffected. When adding a
-variable, add it to the app's `.env.example` **and** to the root files, or the
-sync will not carry it. `NEXT_PUBLIC_*` values are inlined at **build** time —
+variable, add it to the app's `.env.example`, to the root files, **and** to
+`compose.prod.yaml`, or the sync or the deployment will not carry it;
+`npm run compose:validate` fails until the deployment does. `NEXT_PUBLIC_*` values are inlined at **build** time —
 runtime-only injection does nothing in production builds.
 
 Ports in local development: `apps/web` 3000, split runtimes 3200/3201 behind the
@@ -68,4 +69,7 @@ another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
 - `cd packages/db && npx prisma validate` — validate schema
 - `npm run test` / `npm run test:e2e` — unit/integration + E2E (`E2E_PRODUCTION=1` for production mode)
 - `npm run env:sync` — regenerate per-app env files from `.env.local`
-- `docker compose up -d` + `npm run prestart --workspace @vfurst/web` — local stack + schema sync/backfills
+- `npm run compose:validate` — check `compose.prod.yaml` and its environment contract (needs Docker)
+- `docker compose up -d` (local services from `docker-compose.yml`) + `npm run prestart --workspace @vfurst/web` (runs `npm run sync --workspace @vfurst/db`)
+
+Deployment: the root `Dockerfile` and `compose.prod.yaml` define the single Coolify resource; see `docs/launch/staging-coolify-setup.md`. `docker-compose.yml` is local development only.

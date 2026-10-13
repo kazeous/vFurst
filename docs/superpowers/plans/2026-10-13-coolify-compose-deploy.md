@@ -603,7 +603,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
   - `AGENTS.md`
   - `docs/plan/verification.md`
 
-- [ ] **Step 1: Rewrite `docs/launch/staging-coolify-setup.md`** with these sections, in order:
+- [x] **Step 1: Rewrite `docs/launch/staging-coolify-setup.md`** with these sections, in order:
 
   1. **Intro.** One resource on the Docker Compose build pack, deployed by the Coolify GitHub App from `staging`. The CI gate works through a ruleset. CI builds arm64 to the cache only. No GHCR, no API token, no webhook.
   2. **`## 1. Topology`.** The spec §4.1 table, the §4.2 start-order diagram, and both accepted trade-offs from spec §2 (downtime per deployment; no Coolify-managed backups).
@@ -629,19 +629,19 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
       - a public value not marked Build Variable;
       - Cloudflare `Flexible` SSL redirect loop. Keep this one as a single sentence pointing to `go-live-checklist.md`.
 
-- [ ] **Step 2: Update `docs/launch/go-live-checklist.md`**
+- [x] **Step 2: Update `docs/launch/go-live-checklist.md`**
 
   - Add a bullet to the first checklist list, in that list's style: `Production PostgreSQL backups and a restore drill are in place. The single-resource Compose topology has no Coolify-managed database backups (decided 2026-10-13).`
   - In the paragraph beginning "Production database schema must be synchronized", replace the claim that the web `prestart` hook synchronizes the schema with: the `migrate` service runs `npm run sync --workspace @vfurst/db` (prepare, `prisma db push`, both backfills) before web and worker start, and web and worker do not start if it fails. Keep the code block's three commands, which are what `sync` runs, and the no-`--accept-data-loss` explanation.
   - In the connection-budget paragraph, delete "and that rolling-deploy overlap retains headroom".
 
-- [ ] **Step 3: Update `AGENTS.md`**
+- [x] **Step 3: Update `AGENTS.md`**
 
   - In "Environment files", change the add-a-variable sentence to: "When adding a variable, add it to the app's `.env.example`, to the root files, **and** to `compose.prod.yaml`, or the sync or the deployment will not carry it; `npm run compose:validate` fails until the deployment does."
   - In "Commands", add `- npm run compose:validate — check compose.prod.yaml and its environment contract (needs Docker)`. Change the last bullet to `docker compose up -d` (local services from `docker-compose.yml`) + `npm run prestart --workspace @vfurst/web` (runs `npm run sync --workspace @vfurst/db`).
   - Add after "Commands": `Deployment: the root Dockerfile and compose.prod.yaml define the single Coolify resource; see docs/launch/staging-coolify-setup.md. docker-compose.yml is local development only.`
 
-- [ ] **Step 4: Update `docs/plan/verification.md`**
+- [x] **Step 4: Update `docs/plan/verification.md`**
 
   After the "Every session" block, add a section:
 
@@ -656,7 +656,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
   ```
   ````
 
-- [ ] **Step 5: Sweep for the retired pieces**
+- [x] **Step 5: Sweep for the retired pieces**
 
   The runbook's cutover section names the retired workflow and secrets on purpose, so that the user can delete them (spec §7 steps 1 and 8). The sweep therefore excludes the runbook, and a second check confines the runbook's mentions to that section. This was amended on 2026-10-13, after the executor flagged that the original sweep contradicted Step 1.
 
@@ -667,7 +667,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
   3. Run: `grep -c -E "staging-deploy\.yml" docs/launch/staging-coolify-setup.md; grep -c -E "COOLIFY_API_TOKEN" docs/launch/staging-coolify-setup.md`
      Expected: two numbers, each at least `1`. The cutover steps still tell the user what to delete.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add docs/launch/staging-coolify-setup.md docs/launch/go-live-checklist.md AGENTS.md docs/plan/verification.md
