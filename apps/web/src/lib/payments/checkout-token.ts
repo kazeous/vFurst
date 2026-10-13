@@ -1,13 +1,13 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 function checkoutSecret() {
-  const secret = process.env.CHECKOUT_TOKEN_SECRET ?? process.env.AUTH_SECRET;
+  const secret = process.env.CHECKOUT_TOKEN_SECRET || process.env.AUTH_SECRET;
 
   if (!secret && process.env.NODE_ENV === "production") {
     throw new Error("CHECKOUT_TOKEN_SECRET is not configured.");
   }
 
-  return secret ?? "vfurst-local-checkout-secret";
+  return secret || "vfurst-local-checkout-secret";
 }
 
 export function createCheckoutToken() {

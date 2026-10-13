@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { filterExpectedNextHttpAccessFallback } from "./lib/sentry-event-filter";
 
-const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN ?? process.env.SENTRY_DSN;
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN;
 
 Sentry.init({
   dsn,

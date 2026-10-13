@@ -104,7 +104,7 @@
 - Consumes: `hashCheckoutToken(token: string): string` (existing). It reads the environment on every call.
 - Produces: no new interface.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
   ```ts
   import { createHmac } from "node:crypto";
@@ -146,30 +146,30 @@
   });
   ```
 
-- [ ] **Step 2: Run it and see the first and last tests fail**
+- [x] **Step 2: Run it and see the first and last tests fail**
 
   Run: `cd apps/web && npx vitest run src/lib/payments/checkout-token.test.ts`
   Expected: FAIL.
   - "falls back to AUTH_SECRET…" throws `CHECKOUT_TOKEN_SECRET is not configured.`
   - "uses the local development secret…" hashes with `""`.
 
-- [ ] **Step 3: Change the four reads**
+- [x] **Step 3: Change the four reads**
 
   - **`checkout-token.ts`:** in `checkoutSecret()`, replace both `??` with `||`. The fallback order and the production error stay the same.
   - **`sentry.server.config.ts` and `sentry.edge.config.ts`:** use `const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN;`
   - **`s3.ts`:** use `endpoint: process.env.S3_ENDPOINT || undefined,`. Leave the `forcePathStyle` line unchanged.
 
-- [ ] **Step 4: Run the test and the web gates**
+- [x] **Step 4: Run the test and the web gates**
 
   Run: `cd apps/web && npx vitest run src/lib/payments/checkout-token.test.ts`. Then, from the root, run `npx turbo run type-check lint test --filter=@vfurst/web --concurrency=1`.
   Expected: 4/4 tests pass and the web tasks are green.
 
-- [ ] **Step 5: Confirm no `??` remains on these keys**
+- [x] **Step 5: Confirm no `??` remains on these keys**
 
   Run: `git grep -n -E "process\.env\.(CHECKOUT_TOKEN_SECRET|NEXT_PUBLIC_SENTRY_DSN)[^;]*\?\?" -- apps/web/src`
   Expected: no output.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add apps/web/src/lib/payments/checkout-token.ts apps/web/src/lib/payments/checkout-token.test.ts apps/web/src/sentry.server.config.ts apps/web/src/sentry.edge.config.ts apps/web/src/lib/s3.ts
