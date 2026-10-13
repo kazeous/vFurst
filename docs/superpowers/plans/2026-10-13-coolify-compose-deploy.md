@@ -469,7 +469,7 @@ SMOKE_DIR="${TMPDIR:-/tmp}/vfurst-compose-smoke"
 smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "$SMOKE_DIR/compose.yaml" --env-file "$SMOKE_DIR/smoke.env" "$@"; }
 ```
 
-- [ ] **Step 1: Prepare the scratch directory**
+- [x] **Step 1: Prepare the scratch directory**
 
   1. Create `$SMOKE_DIR`.
   2. Run `node scripts/validate-compose.mjs --print > "$SMOKE_DIR/compose.yaml"`.
@@ -484,7 +484,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   No optional key is set. That is the Review Focus 2 condition.
 
-- [ ] **Step 2: Start the stack**
+- [x] **Step 2: Start the stack**
 
   Run: `smoke up -d --build`, then poll `smoke ps -a --format '{{.Service}} {{.State}} {{.Health}} {{.ExitCode}}'` every 10 s for up to 5 minutes.
   Expected:
@@ -493,7 +493,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   On any other final state, save `smoke logs --no-color <service> | tail -n 80` for the failing service, run Step 7, and **stop**.
 
-- [ ] **Step 3: Check web and worker health**
+- [x] **Step 3: Check web and worker health**
 
   Run:
   - `smoke exec -T web node -e "fetch('http://127.0.0.1:3000/api/healthz').then(async (r) => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1); })"`
@@ -503,17 +503,17 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
   - web prints `200` with a body containing `"commit":"<SOURCE_COMMIT>"`;
   - worker prints `200` with `"ok":true`.
 
-- [ ] **Step 4: Check the schema exists**
+- [x] **Step 4: Check the schema exists**
 
   Run: `smoke exec -T postgres psql -U vfurst -d vfurst -tAc "select to_regclass('public.organizations') is not null and to_regclass('public.payment_attempts') is not null"`
   Expected: `t`.
 
-- [ ] **Step 5: Re-run `migrate` against the synchronized database**
+- [x] **Step 5: Re-run `migrate` against the synchronized database**
 
   Run: `smoke run --rm migrate; echo "exit=$?"`
   Expected: `exit=0`.
 
-- [ ] **Step 6: Make `migrate` fail on purpose**
+- [x] **Step 6: Make `migrate` fail on purpose**
 
   Run:
 
@@ -523,7 +523,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   Expected: an authentication error and `exit=` followed by a non-zero number.
 
-- [ ] **Step 7: Tear down**
+- [x] **Step 7: Tear down**
 
   Run:
   - `smoke down -v --remove-orphans`;
@@ -545,7 +545,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 **Interfaces:**
 - Produces two check names for the user's ruleset: `Lint, type-check, test, and build` and `Production images (linux/arm64)`.
 
-- [ ] **Step 1: Edit `ci.yml`**
+- [x] **Step 1: Edit `ci.yml`**
 
   - Keep `name: CI` and the triggers.
   - Add top-level `permissions: { contents: read }`.
@@ -576,16 +576,16 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
             done
   ```
 
-- [ ] **Step 2: Delete the webhook workflow**
+- [x] **Step 2: Delete the webhook workflow**
 
   Run: `git rm .github/workflows/staging-deploy.yml`
 
-- [ ] **Step 3: Lint the workflows**
+- [x] **Step 3: Lint the workflows**
 
   Run in bash: `MSYS_NO_PATHCONV=1 docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color`
   Expected: no findings, exit 0. If the image cannot be pulled, record "actionlint not run" for Task 8 and continue; the pull request run is then the check.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add .github/workflows/ci.yml
