@@ -373,9 +373,11 @@
 
   Run:
   ```bash
-  git grep -n -I -E "platform-manager|tenant-web|split-topology|dev:split|build:split|test:e2e:split|run-split-e2e|playwright\.split|scripts/split|AuthorizationCode|authorization-codes" -- . ':!package-lock.json' ':!docs/superpowers' ':!PROGRESS.md' ':!docs/launch/runtime-defect-audit-2026-07-26.md' ':!docs/launch/security-audit.md' ':!docs/plan/phase-1-stabilize.md'
+  git grep -n -I -E "platform-manager|tenant-web|split-topology|dev:split|build:split|test:e2e:split|run-split-e2e|playwright\.split|scripts/split|AuthorizationCode|authorization-codes" -- . ':!package-lock.json' ':!docs/superpowers' ':!PROGRESS.md' ':!docs/launch/runtime-defect-audit-2026-07-26.md' ':!docs/launch/security-audit.md' ':!docs/plan/phase-1-stabilize.md' ':!docs/plan/phase-1b-identity.md'
   ```
   Expected: hits only in `packages/db/src/control-plane-outbox.test.ts`, the consumer name `tenant-web:tenant-directory`. Control-plane naming is out of scope per spec §3. Any other hit must be fixed before continuing.
+
+  `docs/plan/phase-1b-identity.md` is excluded on purpose. Task 1 copies decision D7 and the 1B.1 unit row into it verbatim, and those lines record the removal of `apps/platform-manager`, `apps/tenant-web`, and `AuthorizationCode`. This exclusion was added on 2026-10-13, after the first execution stopped at this contradiction.
 
 - [ ] **Step 3: Update `PROGRESS.md`**
 
