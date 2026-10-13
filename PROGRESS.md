@@ -6,18 +6,16 @@
 
 ## Current phase
 
-**Phase 1B — Identity re-platform: Planned, unit 1B.1 ready to execute.** The design is approved and authoritative: `docs/superpowers/specs/2026-10-13-identity-replatform-design.md`. All work happens on branch `feat/identity-replatform`, which is not pushed or merged; it merges into `staging` once, in unit 1B.5.
+**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Unit 1B.1 complete on feat/identity-replatform (not merged). **Next session: unit 1B.2 only** — write its plan from spec §5.2, §7, §8.3, §13 first.
 
 Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
-
-**Next session: execute unit 1B.1 only**, task by task, exactly as written in `docs/superpowers/plans/2026-10-13-phase-1b-unit-1-decisions-and-split-removal.md`. That unit records the decisions in the plan documents, removes the split runtime, and retires `AuthorizationCode`. Do not start Phase 2 or unit 1B.2.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 remains deferred/frozen |
-| 1B — Identity re-platform | Planned — next | Design approved 2026-10-13; unit 1B.1 plan written; 1B.1–1B.5 remain |
+| 1B — Identity re-platform | In progress | 1B.1 complete; 1B.2–1B.5 remain; merge to staging once in 1B.5 |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -31,6 +29,16 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-13 — Phase 1B unit 1B.1: decisions recorded, split runtime removed
+
+- Recorded the approved identity decisions across the reference, Phase 1B and Phase 2 plans, parity notes, verification, AGENTS.md, and defect register. Batch 6 is withdrawn. Current-state, Phase 6 launch, and go-live checklist corrections were pulled forward from 1B.5 to reflect the removed runtime.
+- Removed `apps/platform-manager`, `apps/tenant-web`, split tooling/configuration/scripts/tasks and architecture docs, split-only auth and contracts modules and their tests, and the `AuthorizationCode` schema model, module, tests, and exports. Shared auth/contracts/tenant-context and the control-plane outbox remain.
+- Retention now prunes only long-expired or revoked staff sessions, preserving bounded selection and eligibility rechecking. Task 3 verified RED before implementation, then schema validation and its prescribed filtered **11/11** tasks (DB **44/44**, worker **41/41**). The local authorization-code table held **0** rows; standard non-destructive web prestart passed and removed the table without a data-loss flag.
+- Task 0 baseline: full serial aggregate **37/37** tasks (**9** type-check, **9** lint, **9** test suites, **10** builds); web **190**, auth **67**, contracts **29**, DB **52**, worker **41**, email **18**, tenant-context **50**, split apps **40/54** tests. Historical **14** test tasks included **5** build dependencies; these are not additional separate gate runs. Task 2's post-removal aggregate passed **29/29** tasks with DB **52** before Task 3's removal.
+- Task 4 closeout: `npx turbo run type-check lint test build --concurrency=1` passed **29/29** tasks (**7** type-check, **7** lint, **7** test suites, **8** builds; **13** cached). Suites: web **190/190**, auth **43/43**, contracts **19/19**, DB **44/44**, worker **41/41**, email **18/18**, tenant-context **50/50**. `npm run test:boot-config` passed: predev configuration assertion fired and Next listened on `127.0.0.1:61747` without injected app env. Only known BullMQ, Serwist/experimental Next information, deliberate Redis-recovery stderr, and optional Stripe configuration messages appeared; no new warning was found. Initial Turbo sandbox IO denial ran no gates and was retried with approved escalation.
+- The exact amended post-gate reference sweep passed: only the two `tenant-web:tenant-directory` consumer-name hits in `packages/db/src/control-plane-outbox.test.ts` remain, intentionally protected by spec §3. The earlier execution stopped because required verbatim Phase 1B decision/unit text contradicted the original sweep; the user approved excluding `docs/plan/phase-1b-identity.md`, recorded in amendment `77a3c34`, before this closeout.
+- Concern: the unchanged dependency install reported **20 vulnerabilities (4 moderate, 15 high, 1 critical)**. No dependency remediation or Phase 1B exit claim was made. This branch is not pushed or merged. **Next session: unit 1B.2 only** — write its plan from spec §5.2, §7, §8.3, §13 first; Phase 2 remains blocked.
 
 ### 2026-10-13 — Phase 1B identity re-platform design (user-requested; documentation only)
 
