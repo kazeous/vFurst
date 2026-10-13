@@ -29,6 +29,12 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-13 — Dependency advisory remediation on `staging` (user-requested)
+
+- New advisories since the July closeout: the lockfile went from 0 to 21 findings (1 critical in Next.js). Next moved to 15.5.27, nodemailer to 10.1.0, and the sharp, PostCSS, `brace-expansion`, `fast-uri`, and `deepmerge-ts` overrides and vitest were raised; the remainder came from a non-forced `npm audit fix`.
+- The audit now shows 4 high findings, all one accepted dev-only `braces` chain inside the Next ESLint plugin; no upstream fix exists. Details and proof are in `docs/launch/security-audit.md`.
+- Gates: 37/37 forced serial, boot-config PASS, split-topology 5/5, both Docker images build. Production E2E was not rerun. The Phase 1B branch must take these package changes when it merges in 1B.5.
+
 ### 2026-07-30 — Phase 2 product decisions recorded (user-requested; documentation only)
 
 - The user confirmed the three proposed decisions before Phase 2: reusable attendee profiles with a default cap of four per account and event-configurable cap; recipient-owned, editable attendee data after a transfer so the sender's shared profile is never exposed or mutated; and `next-intl` with Vietnamese and English for portal/account/auth/email surfaces first.
