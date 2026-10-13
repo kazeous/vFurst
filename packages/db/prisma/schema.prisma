@@ -229,7 +229,6 @@ model User {
   registrationTransferRequestsCreated  RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
   registrationTransferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
   emailDeliveriesReplayed              EmailDelivery[]               @relation("EmailDeliveryReplayedBy")
-  authorizationCodes                   AuthorizationCode[]
 
   @@map("users")
 }
@@ -338,36 +337,12 @@ model Session {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  authorizationCodes AuthorizationCode[]
 
   @@index([userId])
   @@index([userId, revokedAt, expires])
   @@map("sessions")
 }
 
-model AuthorizationCode {
-  id                String    @id @default(uuid()) @db.Uuid
-  codeHash          String    @unique @db.Char(64)
-  userId            String    @db.Uuid
-  identitySessionId String    @db.Uuid
-  clientId          String
-  audience          String
-  redirectUri       String    @db.Text
-  codeChallenge     String    @db.VarChar(128)
-  authVersion       Int
-  issuedAt          DateTime
-  expiresAt         DateTime
-  consumedAt        DateTime?
-  createdAt         DateTime  @default(now())
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  identitySession   Session   @relation(fields: [identitySessionId], references: [id], onDelete: Cascade)
-
-  @@index([identitySessionId])
-  @@index([userId])
-  @@index([clientId, audience, expiresAt])
-  @@index([expiresAt])
-  @@map("authorization_codes")
-}
 
 model ControlPlaneOutboxEvent {
   id               String                     @id @default(uuid()) @db.Uuid

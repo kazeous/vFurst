@@ -34,14 +34,12 @@ export async function processCleanupIdentityProtocolRecords(
   }
 
   let batches = 0;
-  let authorizationCodesDeleted = 0;
   let identitySessionsDeleted = 0;
   let hasMore = false;
 
   for (let batch = 0; batch < maxBatches; batch += 1) {
     const result = await cleanupBatch({ now, batchSize });
     batches += 1;
-    authorizationCodesDeleted += result.authorizationCodesDeleted;
     identitySessionsDeleted += result.identitySessionsDeleted;
     hasMore = result.hasMore;
     if (!hasMore) break;
@@ -49,7 +47,6 @@ export async function processCleanupIdentityProtocolRecords(
 
   return Object.freeze({
     batches,
-    authorizationCodesDeleted,
     identitySessionsDeleted,
     batchBudgetExhausted: hasMore
   });
