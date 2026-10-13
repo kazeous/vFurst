@@ -306,6 +306,8 @@ The other two failures are DAT-01.
 
 ## SPL — Split runtime (`apps/platform-manager`, `apps/tenant-web`)
 
+**Withdrawn 2026-10-13.** The split runtime was removed in Phase 1B unit 1B.1 (docs/superpowers/specs/2026-10-13-identity-replatform-design.md §10). SPL-01…SPL-11 no longer apply; the split architecture documents referenced below were deleted and remain in git history.
+
 These do not affect production traffic today — `apps/web` is still the canonical serving app and `npm run dev` does not start the split runtimes. They must be resolved **before** any cutover, and one of them can break the legacy app today.
 
 ### SPL-01 — Port 3000 collision between `apps/web` and `platform-manager` (P1 for anyone running `dev:split`)
@@ -419,6 +421,8 @@ Sequenced so that each batch is independently reviewable, leaves the repository 
 **Exit criteria.** No P1/P2 entry remains in the ERR or RTE sections. A full `grep` for `throw new Error` in `apps/web/src/actions` returns only entries listed under "Do not change" or explicitly justified in review.
 
 ## Batch 6 — Split-runtime hardening (all SPL items)
+
+**Withdrawn 2026-10-13.** The split runtime was removed in Phase 1B unit 1B.1 (docs/superpowers/specs/2026-10-13-identity-replatform-design.md §10). SPL-01…SPL-11 no longer apply; the split architecture documents referenced below were deleted and remain in git history.
 
 **Gate.** Required before any traffic cutover; not required for the current single-runtime product. SPL-01 should be pulled forward into Batch 0 if anyone runs `dev:split` regularly, because it can break legacy `apps/web` login.
 

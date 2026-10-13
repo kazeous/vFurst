@@ -8,7 +8,7 @@
 
 - Phases 1–5 complete (Phase 5 may run concurrently with early beta onboarding if the beta conventions don't need lottery mode — record the exception in `PROGRESS.md`).
 - Full E2E green; `npm run check:launch` failing **only** on external/configuration gates.
-- A cutover decision for the frozen split runtime is recorded: launch on `apps/web` alone (recommended — the split stays frozen), or complete audit Batch 6 + the split verification gates first. Do not launch in between.
+- Phase 1B complete. The split runtime was removed in unit 1B.1, so no cutover decision remains.
 
 ## External evidence to record (each is its own unit)
 

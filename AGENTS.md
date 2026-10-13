@@ -10,10 +10,12 @@ The plan lives in `docs/plan/`, one file per concern so you never read it all at
 - `docs/plan/01-current-state.md` — what is implemented and verified (dated baseline).
 - `docs/plan/02-concat-parity.md` — ConCat parity matrix; the backlog IDs (`REG-P*`, `STO-P*`, `EVD-P*`, `RAF-P1`) that phases 2–5 reference.
 - `docs/plan/phase-1-stabilize.md` … `phase-6-launch.md` — the six phases.
+- `docs/plan/phase-1b-identity.md` — identity re-platform, between phases 1 and 2.
+- `docs/superpowers/specs/2026-10-13-identity-replatform-design.md` — authoritative Phase 1B design.
 - `docs/plan/verification.md` — per-session and per-phase gates.
 - `docs/launch/runtime-defect-audit-2026-07-26.md` — the active defect register consumed by Phase 1.
 
-**Rule: read `PROGRESS.md`, then `00-reference.md`, then only the active phase file. Open `01`/`02`/the audit only at the rows the phase file references. Do not read other phase files except to check a cross-phase dependency.**
+**Rule: read `PROGRESS.md`, then `00-reference.md`, then only the active phase file — in Phase 1B also the spec sections the active unit names. Open `01`/`02`/the audit only at the rows the phase file references. Do not read other phase files except to check a cross-phase dependency.**
 
 The pre-2026-07-26 plan (phases 0–7) and its session history are in git history only. Do not resurrect them.
 
@@ -31,7 +33,6 @@ Read `PROGRESS.md` before doing anything. It says which phase and unit is active
 6. **Run the gates in `docs/plan/verification.md`** for the session type; never record a pass claim from a focused run.
 7. **Error-handling patterns are fixed:** expected user conditions return structured form state or redirect-with-code — never bare `throw`. Tenant-isolation and payment-safety throws in the audit's "Do not change" list stay as throws.
    Organizer/platform forms use `runActionWithState`; its centralized `unstable_rethrow` guard must remain ahead of expected-error mapping so Next redirects and framework control-flow are never swallowed.
-8. **Split runtime is frozen** (`apps/platform-manager`, `apps/tenant-web`): no new split work, no cutover, until Phase 1 completes and a decision is recorded. Keep `npm run test:split-topology` green.
 
 ## Environment files
 
@@ -47,7 +48,6 @@ owns its own file. Do not assume a value in the root file reaches an app.
 | `apps/web/.env.example`, `apps/worker/.env.example` | Yes | Each app's key contract; also the layout template for the generated file. |
 | `apps/web/.env.local`, `apps/worker/.env` | No | **Generated.** Never edit by hand. |
 | `packages/db/.env` | Yes | Prisma CLI default so `prisma validate` works standalone. |
-| `apps/platform-manager/.env.example`, `apps/tenant-web/.env.example` | Yes | Split-runtime contracts; `dev:split` injects values itself. |
 
 `node scripts/sync-app-env.mjs` regenerates the per-app files from `.env.local`
 and runs automatically on `npm run dev`. `node scripts/check-app-env.mjs <web|worker>`
@@ -57,9 +57,7 @@ variable, add it to the app's `.env.example` **and** to the root files, or the
 sync will not carry it. `NEXT_PUBLIC_*` values are inlined at **build** time —
 runtime-only injection does nothing in production builds.
 
-Ports in local development: `apps/web` 3000, split runtimes 3200/3201 behind the
-edge proxy on 3100. Keep those ranges disjoint — `apps/web` silently retries onto
-another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
+Ports in local development: apps/web 3000. apps/web silently retries onto another port when 3000 is taken, while AUTH_URL keeps pointing at 3000.
 
 ## Commands
 

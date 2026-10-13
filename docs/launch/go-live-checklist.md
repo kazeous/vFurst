@@ -23,7 +23,7 @@ record these manually before Phase 6 can close:
 - Physical badge output with event/template/badge identifiers, printer model, browser, direct WebUSB result, legible image/barcode evidence, and tester/timestamp. If direct Zebra output is unavailable, record an explicit successful PDF fallback print before confirming the badge as printed.
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence before SePay is enabled.
 - A production transactional email provider tested through password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
-- The deployed persona/tenant-isolation matrix, a recorded split-runtime launch decision, and the final full-system audit rerun against the deployed environment.
+- The deployed persona/tenant-isolation matrix, and the final full-system audit rerun against the deployed environment.
 
 The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
 
@@ -109,7 +109,7 @@ If Coolify logs show Turbo/Next completing successfully and then fail at Docker 
 
 - Corrective staging is operational on Coolify: the final rollout built commit `c16a44f`, both web and worker reported Running/healthy/finished, public health reported PostgreSQL and Redis `ok`, Auth.js session returned 200, and the live wrong-password path rendered inline without a 404. This is staging evidence only; it does **not** close Phase 6 unit 6.1 while Phases 1–5 and the production evidence below remain incomplete.
 - `npm run check:launch` currently reports **10 automated failures**: Stripe configuration (2), Sentry configuration (5), beta-convention evidence (1), physical screen-reader evidence (1), and live `VFURST_LAUNCH_URL` verification (1).
-- Mandatory evidence not parsed by the checker also remains open: the deployed persona/tenant-isolation matrix, SePay Sandbox simulation set, physical badge proof, production transactional-email proof, the split-runtime launch decision, and the deployed full-system audit rerun.
+- Mandatory evidence not parsed by the checker also remains open: the deployed persona/tenant-isolation matrix, SePay Sandbox simulation set, physical badge proof, production transactional-email proof, and the deployed full-system audit rerun.
 - The supported-topology 500/50 proof from July 14 remains the current performance evidence: 198,024 requests, 0.00% HTTP failures, 396,045/396,045 checks, no Prisma `P2037`, and overall p95 409.88ms against the 1.5-second threshold. Re-run it if the material paths/topology listed in `docs/plan/verification.md` change.
 
 Do not promote staging to a public production launch until the automated failures

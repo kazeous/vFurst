@@ -26,7 +26,7 @@ The canonical `apps/web` runtime, worker, organizer platform, payments, and core
 
 **API/SaaS** — Read-only REST `/api/v1` (events, registrations, attendees, vendors, store, badges) + OpenAPI, scoped hashed API keys, signed outbound webhooks, shared Redis rate limits (fail-closed auth/API/payment, fail-open signed webhooks), Sentry wiring, marketing/legal/docs pages. It does not yet provide the broader legacy/v0 role, volunteer, department, current-user, or stable business-error surface catalogued in `02-concat-parity.md`.
 
-**Split runtime (frozen)** — `apps/platform-manager` (identity issuer: PKCE, Ed25519 assertions, central session revocation) + `apps/tenant-web` + `@vfurst/auth`/`contracts`/`tenant-context` + edge topology on ports 3200/3201/3100. No production traffic; `apps/web` remains canonical. Eleven SPL defects catalogued; do not advance without a recorded cutover decision (phase-1).
+**Split runtime** — removed in Phase 1B unit 1B.1 (2026-10-13); apps/web is the only serving runtime.
 
 ## Evidence snapshot
 
@@ -34,7 +34,6 @@ The canonical `apps/web` runtime, worker, organizer platform, payments, and core
 |---|---|
 | `turbo run type-check`, `lint`, `test` | 9/9, 9/9, 14/14 (web 190/190) on 2026-07-29 |
 | `turbo run build` | 10/10 on 2026-07-29 (known BullMQ dynamic-dependency warning) |
-| `npm run test:split-topology` | 5/5 |
 | Full E2E (`E2E_PRODUCTION=1`) | **118 passed / 0 failed / 0 did not run** on 2026-07-29 (one worker) |
 | Load proof (2026-07-14, 500 reg + 50 check-in VUs, 6 replicas, pool 4) | 198,024 requests, 0.00% failures, 396,045/396,045 checks, overall p95 409.88 ms (gate 1.5 s) |
 | `npm audit --audit-level=moderate` | 0 vulnerabilities (clean install verified 2026-07-29) |
