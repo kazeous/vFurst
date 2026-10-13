@@ -658,8 +658,14 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
 - [ ] **Step 5: Sweep for the retired pieces**
 
-  Run: `git grep -n -I -E "docker/(web|worker)\.Dockerfile|staging-deploy|COOLIFY_WEBHOOK|COOLIFY_API_TOKEN" -- . ':!PROGRESS.md' ':!docs/superpowers'`
-  Expected: no output.
+  The runbook's cutover section names the retired workflow and secrets on purpose, so that the user can delete them (spec §7 steps 1 and 8). The sweep therefore excludes the runbook, and a second check confines the runbook's mentions to that section. This was amended on 2026-10-13, after the executor flagged that the original sweep contradicted Step 1.
+
+  1. Run: `git grep -n -I -E "docker/(web|worker)\.Dockerfile|staging-deploy|COOLIFY_WEBHOOK|COOLIFY_API_TOKEN" -- . ':!PROGRESS.md' ':!docs/superpowers' ':!docs/launch/staging-coolify-setup.md'`
+     Expected: no output.
+  2. Run in bash: `awk '/^## /{cutover = ($0 ~ /^## 2\. Cutover from the four-resource setup/)} !cutover && /docker\/(web|worker)\.Dockerfile|staging-deploy|COOLIFY_WEBHOOK|COOLIFY_API_TOKEN/ {print FNR": "$0}' docs/launch/staging-coolify-setup.md`
+     Expected: no output. Every mention is inside the cutover section.
+  3. Run: `grep -c -E "staging-deploy\.yml" docs/launch/staging-coolify-setup.md; grep -c -E "COOLIFY_API_TOKEN" docs/launch/staging-coolify-setup.md`
+     Expected: two numbers, each at least `1`. The cutover steps still tell the user what to delete.
 
 - [ ] **Step 6: Commit**
 
@@ -696,8 +702,8 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
 - [ ] **Step 3: Repeat the Task 7 sweep**
 
-  Run the Task 7 Step 5 command again.
-  Expected: no output.
+  Run the three Task 7 Step 5 commands again.
+  Expected: the same results. Commands 1 and 2 print nothing, and command 3 prints two numbers of at least `1`.
 
 - [ ] **Step 4: Add the session entry to `PROGRESS.md`**
 

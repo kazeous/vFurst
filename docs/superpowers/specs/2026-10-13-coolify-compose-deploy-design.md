@@ -239,7 +239,10 @@ Stop the resource, delete the `postgres_data` volume in Coolify's storage view, 
   - extend the environment rule: a new variable goes into the app's `.env.example`, the root files, **and** `compose.prod.yaml`.
 - `docs/plan/verification.md`: when `Dockerfile`, `compose.prod.yaml`, `.dockerignore` or `scripts/validate-compose.mjs` change, the session gate adds `npm run test:compose` and `npm run compose:validate`.
 - `PROGRESS.md` gets a session entry at closeout.
-- The branch must end with no reference to `docker/web.Dockerfile`, `docker/worker.Dockerfile`, `staging-deploy`, `COOLIFY_WEBHOOK` or `COOLIFY_API_TOKEN`. Historical `PROGRESS.md` entries are exempt.
+- The branch must end with no reference to `docker/web.Dockerfile`, `docker/worker.Dockerfile`, `staging-deploy`, `COOLIFY_WEBHOOK` or `COOLIFY_API_TOKEN`, with these exemptions:
+  - historical `PROGRESS.md` entries;
+  - `docs/superpowers`;
+  - the runbook's cutover section, which names the retired workflow and secrets so that the user can delete them (§7 steps 1 and 8).
 
 ## 9. Verification
 
