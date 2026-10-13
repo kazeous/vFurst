@@ -28,6 +28,8 @@
     "lint": "turbo run lint",
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
+    "test:compose": "node --test scripts/validate-compose.test.mjs",
+    "compose:validate": "node scripts/validate-compose.mjs",
     "test:boot-config": "node scripts/smoke-web-boot.mjs",
     "test:split-topology": "node --test scripts/split/topology.test.mjs",
     "test:e2e:split": "node scripts/run-split-e2e.mjs",

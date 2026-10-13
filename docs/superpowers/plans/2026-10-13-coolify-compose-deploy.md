@@ -211,7 +211,7 @@
     Resolve the repository root from `import.meta.url`, not from `process.cwd()`. Nothing is written to disk.
 - Produces root scripts `compose:validate` and `test:compose`.
 
-- [ ] **Step 1: Write the failing tests** in `scripts/validate-compose.test.mjs` (`node:test`, `node:assert/strict`):
+- [x] **Step 1: Write the failing tests** in `scripts/validate-compose.test.mjs` (`node:test`, `node:assert/strict`):
 
   1. `projectForDocker removes the migrate marker`
      - Source: a `services:` block with `migrate:` (with `    exclude_from_hc: true` and `    restart: "no"`) and `web:`.
@@ -242,23 +242,23 @@
        - migrate additionally sets `REDIS_URL`.
      - Result: `deepEqual` with `["web is missing AUTH_URL", "web must not set SENTRY_ORG", "worker is missing S3_PUBLIC_URL", "migrate must not set REDIS_URL"]`.
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
   Run: `node --test scripts/validate-compose.test.mjs`
   Expected: FAIL. The module does not exist.
 
-- [ ] **Step 3: Implement `scripts/validate-compose.mjs`** with the exports above. Use only Node built-ins (`node:child_process`, `node:fs`, `node:path`, `node:url`).
+- [x] **Step 3: Implement `scripts/validate-compose.mjs`** with the exports above. Use only Node built-ins (`node:child_process`, `node:fs`, `node:path`, `node:url`).
 
-- [ ] **Step 4: Add the root scripts**
+- [x] **Step 4: Add the root scripts**
 
   In `package.json` `scripts`, add `"compose:validate": "node scripts/validate-compose.mjs"` and `"test:compose": "node --test scripts/validate-compose.test.mjs"`.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
   Run: `npm run test:compose`
   Expected: 9/9 pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add scripts/validate-compose.mjs scripts/validate-compose.test.mjs package.json
