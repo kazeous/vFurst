@@ -31,7 +31,7 @@ npm audit --audit-level=moderate
 
 Record exact counts in `PROGRESS.md`. **Never record a pass claim from a focused run** — a focused-run habit hid a red suite for nine days (TST-01). Because the E2E runner injects env (TST-02), phase completion additionally requires the manual walkthrough below under plain `npm run dev`.
 
-## Manual walkthrough (Phase 1B completion and later; plain npm run dev, no injected env)
+## Manual walkthrough (Phase 1B completion and later; plain `npm run dev`, no injected env)
 
 1. On `{slug}.localhost:3000`, sign up with an email, then sign up again with the same email. Both show "Check your email"; Mailpit shows a setup link.
 2. Follow the link and set a name and password. Sign out. Sign in with a wrong password (inline message), then correctly. Signing up again now sends an "account exists" notice.

@@ -343,7 +343,6 @@ model Session {
   @@map("sessions")
 }
 
-
 model ControlPlaneOutboxEvent {
   id               String                     @id @default(uuid()) @db.Uuid
   idempotencyKey   String                     @unique @db.Uuid

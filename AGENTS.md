@@ -57,7 +57,7 @@ variable, add it to the app's `.env.example` **and** to the root files, or the
 sync will not carry it. `NEXT_PUBLIC_*` values are inlined at **build** time —
 runtime-only injection does nothing in production builds.
 
-Ports in local development: apps/web 3000. apps/web silently retries onto another port when 3000 is taken, while AUTH_URL keeps pointing at 3000.
+Ports in local development: `apps/web` 3000. `apps/web` silently retries onto another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
 
 ## Commands
 

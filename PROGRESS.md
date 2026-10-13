@@ -14,7 +14,7 @@ Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 remains deferred/frozen |
+| 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 withdrawn in Phase 1B (split runtime removed) |
 | 1B — Identity re-platform | In progress | 1B.1 complete; 1B.2–1B.5 remain; merge to staging once in 1B.5 |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
@@ -39,6 +39,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 - Task 4 closeout: `npx turbo run type-check lint test build --concurrency=1` passed **29/29** tasks (**7** type-check, **7** lint, **7** test suites, **8** builds; **13** cached). Suites: web **190/190**, auth **43/43**, contracts **19/19**, DB **44/44**, worker **41/41**, email **18/18**, tenant-context **50/50**. `npm run test:boot-config` passed: predev configuration assertion fired and Next listened on `127.0.0.1:61747` without injected app env. Only known BullMQ, Serwist/experimental Next information, deliberate Redis-recovery stderr, and optional Stripe configuration messages appeared; no new warning was found. Initial Turbo sandbox IO denial ran no gates and was retried with approved escalation.
 - The exact amended post-gate reference sweep passed: only the two `tenant-web:tenant-directory` consumer-name hits in `packages/db/src/control-plane-outbox.test.ts` remain, intentionally protected by spec §3. The earlier execution stopped because required verbatim Phase 1B decision/unit text contradicted the original sweep; the user approved excluding `docs/plan/phase-1b-identity.md`, recorded in amendment `77a3c34`, before this closeout.
 - Concern: the unchanged dependency install reported **20 vulnerabilities (4 moderate, 15 high, 1 critical)**. No dependency remediation or Phase 1B exit claim was made. This branch is not pushed or merged. **Next session: unit 1B.2 only** — write its plan from spec §5.2, §7, §8.3, §13 first; Phase 2 remains blocked.
+- Whole-branch review (Claude, 2026-10-13): forced serial gates **29/29** (0 cached), the same suite counts, the lockfile in sync, and `authorization_codes` absent locally. Fixed afterwards: lost code formatting in `00-reference.md`/`AGENTS.md`/`verification.md` (`<root-domain>` was rendering as an HTML tag), ambiguous exit-criteria references in `phase-1b-identity.md`, the stale Phase 1 Batch 6 note, a schema blank line, and the retention test formatting. Not fixed: the four 1B.1 commits carry a `Co-Authored-By: Claude` trailer that the plan wrongly required of the executor (a history rewrite was not authorized). The 20 npm advisories are pre-existing on `staging` (21 there) and are handled on a separate branch from `staging`.
 
 ### 2026-10-13 — Phase 1B identity re-platform design (user-requested; documentation only)
 

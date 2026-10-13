@@ -32,12 +32,14 @@
 
 ## Exit criteria
 
-1. the full production E2E suite;
-2. `npm run check:launch` with its known external failures only;
-3. `npm audit --audit-level=moderate`;
-4. the k6 proof;
-5. the updated manual walkthrough (§14);
-6. the deployed smoke test (§11.3).
+Phase 1B is complete when all of the following pass (spec §12, "Phase gates"):
+
+1. The full production E2E suite (`E2E_PRODUCTION=1 npm run test:e2e`).
+2. `npm run check:launch`, failing only on its known external checks.
+3. `npm audit --audit-level=moderate`.
+4. The 500/50 k6 load proof.
+5. The Phase 1B manual walkthrough in `docs/plan/verification.md`.
+6. The deployed smoke test from `docs/launch/authentik-setup.md` (spec §11.3).
 
 ## Branch and deployment
 

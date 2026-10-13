@@ -40,14 +40,14 @@ Plan documents never override the repository. If a plan file contradicts the cod
 |----------|----------|
 | **Tenant model** | Managed, invite-only B2B SaaS — only a `PLATFORM_ADMIN` provisions, activates, suspends, or retires an organization. Creating a user account never creates a tenant or grants organizer access. |
 | **Multi-tenancy** | Shared platform, strict tenant isolation. Public portals on `{slug}.<root-domain>`; platform-activated custom domains as portal aliases. Organizer auth stays on the central domain. |
-| **Surfaces** | /platform/* = operator control plane and /dashboard/* = membership-scoped organizer workspace, both on the central host for staff signed in through authentik. Each tenant portal host ({slug}.<root-domain> or an active custom domain) serves the public portal and that tenant's attendee account area (/account/*). There is no central attendee surface. |
-| **Checkout identity** | Authenticated checkout only, per tenant. Public submission/checkout requires a signed-in portal account of the organization that owns the event; records bind to that PortalAccount. No guest checkout. Checkout pages live on the tenant's canonical portal host. |
-| **Identity** | Two audiences, two systems. Staff and operators (anyone using /dashboard or /platform) sign in only through the studio authentik (account.reyuugames.com, OIDC); vFurst stores no staff password and derives PLATFORM_ADMIN from an authentik group. Attendees, volunteers, and vendors use PortalAccounts unique per (organization, email), independent across tenants, verified email-first. Until unit 1B.4 lands, staff still use the legacy credentials sign-in. |
+| **Surfaces** | `/platform/*` = operator control plane and `/dashboard/*` = membership-scoped organizer workspace, both on the central host for staff signed in through authentik. Each tenant portal host (`{slug}.<root-domain>` or an active custom domain) serves the public portal and that tenant's attendee account area (`/account/*`). There is no central attendee surface. |
+| **Checkout identity** | Authenticated checkout only, per tenant. Public submission/checkout requires a signed-in portal account of the organization that owns the event; records bind to that `PortalAccount`. No guest checkout. Checkout pages live on the tenant's canonical portal host. |
+| **Identity** | Two audiences, two systems. Staff and operators (anyone using `/dashboard` or `/platform`) sign in only through the studio authentik (`account.reyuugames.com`, OIDC); vFurst stores no staff password and derives `PLATFORM_ADMIN` from an authentik group. Attendees, volunteers, and vendors use `PortalAccount`s unique per `(organization, email)`, independent across tenants, verified email-first. Until unit 1B.4 lands, staff still use the legacy credentials sign-in. |
 | **UI theme** | Light-only "Operational Calm" (Geist, warm canvas, teal accent). A deliberate divergence from ConCat's dark-mode toggle; revisit only as an explicit decision. |
 | **Refresh model** | Server-first: Server Actions + route revalidation; three-second polling only on checkout payment confirmation. No SSE promise. |
 | **Mobile/event day** | Responsive web/PWA (check-in, cashier, express kiosk, scoped offline support). No native app. |
 | **Email** | Dual provider: AWS SES (production) + SMTP (dev/self-hosted), configurable per org, delivered through the encrypted PostgreSQL outbox + BullMQ worker. |
-| **Split runtime** | Removed in Phase 1B unit 1B.1 (2026-10-13). apps/web is the only serving runtime; staff identity moved to authentik and attendee identity to portal accounts. |
+| **Split runtime** | Removed in Phase 1B unit 1B.1 (2026-10-13). `apps/web` is the only serving runtime; staff identity moved to authentik and attendee identity to portal accounts. |
 | **Raffle semantics** | Two distinct products. The implemented prize raffle (giveaway for existing registrants) stays. ConCat-style **registration lottery** (win the right to purchase at capacity-limited events) is a separate Phase 5 feature. |
 
 ## Product and access model
@@ -63,7 +63,7 @@ vFurst platform
 
 ### Non-negotiable authorization rules
 
-- A User is a staff identity provisioned from authentik and grants nothing by itself. A PortalAccount is an attendee identity of one organization and can never hold membership, dashboard access, or platform roles.
+- A `User` is a staff identity provisioned from authentik and grants nothing by itself. A `PortalAccount` is an attendee identity of one organization and can never hold membership, dashboard access, or platform roles.
 - Only `PLATFORM_ADMIN` creates an `Organization`, picks its subdomain, assigns its initial owner, changes platform payment configuration, activates a custom domain, or changes tenant lifecycle.
 - Org `OWNER`/`ADMIN` operate events only inside organizations where the membership exists; they can never create another organization. Additional organizer access flows through expiring single-use invitations; acceptance creates the `OrgMember`.
 - Authorization derives from the stored resource. Server actions must not authorize a submitted `orgId` and then mutate an unrelated submitted resource ID.
@@ -98,7 +98,7 @@ vFurst platform
 | Monorepo | Turborepo (`apps/web`, `apps/worker`, `apps/docs`, `packages/db`, `packages/email`, `packages/auth`, `packages/contracts`, `packages/tenant-context`) |
 | Web | Next.js 15 App Router, RSC-first, local shadcn/ui-style components, Operational Calm tokens in `globals.css` |
 | Database | PostgreSQL + Prisma; one client singleton per process; bounded pools (see connection contract) |
-| Auth | Staff: Auth.js v5 + authentik OIDC (JWT bound to a DB Session, authVersion invalidation, back-channel logout). Attendees: first-party portal sessions (hashed opaque host-only cookie token, organization-bound) over PortalAccount. Hashed single-use invitation/setup/reset/transfer tokens. |
+| Auth | Staff: Auth.js v5 + authentik OIDC (JWT bound to a DB `Session`, `authVersion` invalidation, back-channel logout). Attendees: first-party portal sessions (hashed opaque host-only cookie token, organization-bound) over `PortalAccount`. Hashed single-use invitation/setup/reset/transfer tokens. |
 | Payments | Stripe Connect + SePay VietQR; provider-neutral `Order`/`PaymentAttempt` with single-active-attempt lock |
 | Storage | S3-compatible (`S3_ENDPOINT` → MinIO locally, AWS S3 in production); presigned uploads; tenant-prefixed keys |
 | Jobs | BullMQ + Redis: pointer-only email queue + dead letters, badge render, webhooks, SePay reconciliation, checkout expiry |
@@ -139,7 +139,7 @@ Stripe uses test mode + CLI webhook forwarding; SePay uses its Sandbox with HMAC
 - **People/ops:** Department (volunteer `formSchema`), VolunteerApplication, StaffRole, StaffAssignment, VendorApplication, AttendeeNote, Raffle, RaffleEntry, RaffleDrawResult.
 - **Delivery/control plane:** EmailDelivery, EmailDeliveryAttempt, ControlPlaneOutboxEvent, ControlPlaneEventReceipt, ApiKey, WebhookEndpoint.
 
-Phase 1B adds PortalAccount, PortalSession, and PortalAccountToken and moves attendee ownership columns to them (spec §5).
+Phase 1B adds `PortalAccount`, `PortalSession`, and `PortalAccountToken` and moves attendee ownership columns to them (spec §5).
 
 Monetary values are integers in the currency's minor unit (USD cents, VND whole đồng); the owning Event/Order carries an immutable currency. Zod contracts are colocated with their owning actions/libraries.
 
