@@ -102,7 +102,7 @@ The four public URLs and root-domain key are required; the rest have defaults in
 | `NEXT_PUBLIC_MANAGER_URL` | `https://vfurst.reyuugames.com` |
 | `NEXT_PUBLIC_CONSOLE_URL` | `https://vfurst.reyuugames.com` |
 | `NEXT_PUBLIC_API_URL` | `https://vfurst.reyuugames.com/api` |
-| `NEXT_PUBLIC_ROOT_DOMAIN` | `reyuugames.com` |
+| `NEXT_PUBLIC_ROOT_DOMAIN` | `vfurst.reyuugames.com` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry public DSN, or empty |
 | `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | Compose default or chosen rate |
 | `NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE` | Compose default or chosen rate |

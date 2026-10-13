@@ -109,7 +109,7 @@ redis (healthy) ────┼─> migrate (completed successfully) ─> worker
 
 - Each final stage also declares `ARG SOURCE_COMMIT=unknown` and sets `ENV COOLIFY_GIT_COMMIT_SHA=${SOURCE_COMMIT}`, so `/api/healthz` and the Sentry release keep reporting the commit.
 - Health checks live in `compose.prod.yaml`, not in the `Dockerfile`, so there is one definition.
-- `apps/docs`, `apps/platform-manager` and `apps/tenant-web` are not copied. The last two are removed by Phase 1B anyway.
+- `apps/docs` is excluded from the build context by `.dockerignore`. The shared build stage's `COPY . .` includes the source of `apps/platform-manager` and `apps/tenant-web`, but neither app is built or deployed as a runtime. Phase 1B removes those two split apps.
 - The worker image is not slimmed in this change.
 
 ### 5.2 Public build variables

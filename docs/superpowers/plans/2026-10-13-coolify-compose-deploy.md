@@ -681,7 +681,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 **Files:**
 - Modify: `PROGRESS.md`
 
-- [ ] **Step 1: Run the full gates**
+- [x] **Step 1: Run the full gates**
 
   Run: `npx turbo run type-check lint test build --concurrency=1; npm run test:boot-config; npm run test:compose; npm run compose:validate`
   Expected:
@@ -690,7 +690,7 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   Any new warning blocks.
 
-- [ ] **Step 2: Repeat the empty-value grep (spec K3)**
+- [x] **Step 2: Repeat the empty-value grep (spec K3)**
 
   Run:
 
@@ -700,12 +700,12 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   Expected: no output.
 
-- [ ] **Step 3: Repeat the Task 7 sweep**
+- [x] **Step 3: Repeat the Task 7 sweep**
 
   Run the three Task 7 Step 5 commands again.
   Expected: the same results. Commands 1 and 2 print nothing, and command 3 prints two numbers of at least `1`.
 
-- [ ] **Step 4: Add the session entry to `PROGRESS.md`**
+- [x] **Step 4: Add the session entry to `PROGRESS.md`**
 
   Insert a new entry at the top of "Session log": `### <today> — Single Coolify Compose deployment (out-of-phase infrastructure, executed)`. It records:
   - **what changed:** the `Dockerfile` targets, `compose.prod.yaml`, the `sync` script, the validator and contract, the CI arm64 job, the removed webhook workflow, the four empty-value fixes, and the documents;
@@ -716,13 +716,13 @@ smoke() { docker compose -p vfurst-compose-smoke --project-directory "$PWD" -f "
 
   End the entry with: `**Next:** the user pushes chore/coolify-compose-deploy, opens a pull request into staging, confirms both CI jobs are green, and follows docs/launch/staging-coolify-setup.md §2. Phase 1B continues on feat/identity-replatform with unit 1B.2; merge staging into it at the start of that unit.`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add PROGRESS.md
   git commit -m "docs(progress): record the Compose deployment change"
   ```
 
-- [ ] **Step 6: Report**
+- [x] **Step 6: Report**
 
   List the commits (`git log --oneline 97bc517..HEAD`) and the manual steps waiting for the user (spec §7). Do not push.
