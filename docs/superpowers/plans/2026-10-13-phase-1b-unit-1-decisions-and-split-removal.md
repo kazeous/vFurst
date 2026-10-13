@@ -28,6 +28,9 @@
 - **Gates** run serially: `npx turbo run <task> --concurrency=1`. The parallel run has a known `@vfurst/db/dist` clean race, recorded on 2026-07-30.
 - **Commits** use conventional messages and end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Docker containers from the user's other project ("pawket")** may hold ports 5432 and 6379. Ask the user before stopping them.
+- **Execution:** tasks run strictly in order (0 → 4) on the same branch, and each task may be its own agent run.
+  - Only Task 4 edits `PROGRESS.md`. Within this unit, Task 4 is what satisfies AGENTS.md rule 4 ("update PROGRESS.md at the end of every session"); individual task runs leave `PROGRESS.md` alone.
+  - Wherever a step says **stop** or **ask**, the agent stops, reports what it found, and does not improvise a workaround.
 
 ## Review Focus
 
@@ -376,20 +379,18 @@
 
 - [ ] **Step 3: Update `PROGRESS.md`**
 
-  - **Current phase:** `**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Unit 1B.1 complete on feat/identity-replatform (not merged). **Next session: unit 1B.2 only** — write its plan from spec §5.2, §7, §8.3, §13 first.`
-  - **Status table:**
-    - add the row `| 1B — Identity re-platform | In progress | 1B.1 complete; 1B.2–1B.5 remain; merge to staging once in 1B.5 |` after Phase 1;
-    - the Phase 2 note becomes `Blocked on Phase 1B`;
-    - the Phase 3 note "Blocked on Phase 1" becomes "Blocked on Phase 1B".
-  - **Session log entry `### 2026-10-13 — Phase 1B design and unit 1B.1`.** It records:
-    - the user's identity decisions (spec §2);
-    - the spec and plan paths;
+  The design session already wrote the 1B status row and a design log entry. This step updates them; it does not repeat the decisions.
+
+  - **Current phase:** replace the "Planned, unit 1B.1 ready to execute" paragraph with `**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Unit 1B.1 complete on feat/identity-replatform (not merged). **Next session: unit 1B.2 only** — write its plan from spec §5.2, §7, §8.3, §13 first.` Keep the sentence saying Phase 2 is blocked on Phase 1B.
+  - **Status table:** the 1B row becomes `| 1B — Identity re-platform | In progress | 1B.1 complete; 1B.2–1B.5 remain; merge to staging once in 1B.5 |`.
+  - **New session log entry above the design entry: `### <date> — Phase 1B unit 1B.1: decisions recorded, split runtime removed`.** It records:
     - the deletions (split apps, split tooling, split-only auth and contracts modules, `AuthorizationCode`);
     - the retention change;
     - the documentation updates, including the three items pulled forward from 1B.5 (`01-current-state`, `phase-6-launch`, `go-live-checklist`);
-    - the exact gate counts from Step 1;
     - the baseline counts from Task 0;
-    - the clean reference sweep.
+    - the exact gate counts from Step 1;
+    - the clean reference sweep;
+    - any stop/ask point that was hit and how the user resolved it.
 
 - [ ] **Step 4: Commit**
 

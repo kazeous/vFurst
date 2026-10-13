@@ -6,17 +6,20 @@
 
 ## Current phase
 
-**Phase 1 — Stabilize: Complete** (`docs/plan/phase-1-stabilize.md`)
+**Phase 1B — Identity re-platform: Planned, unit 1B.1 ready to execute.** The design is approved and authoritative: `docs/superpowers/specs/2026-10-13-identity-replatform-design.md`. All work happens on branch `feat/identity-replatform`, which is not pushed or merged; it merges into `staging` once, in unit 1B.5.
 
-Audit Batches 0–5, unit 1.6/TST-02, the complete plain-dev walkthrough, closeout regression, and the dependency-security gate are complete. The final clean install and registry-backed audit report **0 vulnerabilities**, and the production E2E suite passes **118/118**. Batch 6 (split-runtime hardening) remains explicitly deferred/frozen pending a separate cutover decision. **Next session: begin Phase 2 only** — read `docs/plan/00-reference.md` and `docs/plan/phase-2-attendee-parity.md`, then execute only its first numbered unit; do not start Batch 6 or split-runtime cutover work.
+Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
+
+**Next session: execute unit 1B.1 only**, task by task, exactly as written in `docs/superpowers/plans/2026-10-13-phase-1b-unit-1-decisions-and-split-removal.md`. That unit records the decisions in the plan documents, removes the split runtime, and retires `AuthorizationCode`. Do not start Phase 2 or unit 1B.2.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 remains deferred/frozen |
-| 2 — Attendee & registration parity | Not started — next | Phase 1 is complete; next session starts with the first numbered unit in the phase file |
-| 3 — Commerce & product parity | Not started | Blocked on Phase 1; age rules depend on Phase 2 DOB |
+| 1B — Identity re-platform | Planned — next | Design approved 2026-10-13; unit 1B.1 plan written; 1B.1–1B.5 remain |
+| 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
+| 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
 | 5 — Registration lottery | Not started | Product contract in the phase file needs confirmation before build |
 | 6 — Launch | Blocked (external) | All external evidence outstanding; see `docs/launch/go-live-checklist.md` |
@@ -28,6 +31,27 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-13 — Phase 1B identity re-platform design (user-requested; documentation only)
+
+- **The user's identity decisions:**
+  - Staff and operators (anyone using `/dashboard` or `/platform`) sign in only through the studio authentik at `account.reyuugames.com` (version 2025.10.3, OIDC). `PLATFORM_ADMIN` comes from an authentik group, and logging out ends the authentik session.
+  - Attendees, volunteers, and vendors use tenant-scoped accounts, unique per `(organization, email)`, fully independent across tenants, and verified email-first.
+  - All existing data is test data: databases are reset, and nothing is migrated.
+  - The split runtime is removed.
+  - Portals move to `{slug}.vfurst.reyuugames.com`.
+- **Documents on branch `feat/identity-replatform`:**
+  - spec `docs/superpowers/specs/2026-10-13-identity-replatform-design.md` (commit `a1a196e`);
+  - unit plan `docs/superpowers/plans/2026-10-13-phase-1b-unit-1-decisions-and-split-removal.md` (commit `1b5652a`).
+  - The spec's §13 sequences units 1B.1–1B.5: decisions and split removal → portal identity foundation → attendee domain on `PortalAccount` → staff SSO → closeout and a single merge to `staging`.
+- **Findings that shaped the design:**
+  - `*.reyuugames.com` has no wildcard DNS (a random subdomain returns NXDOMAIN), so tenant subdomains were never reachable on the deployed root `reyuugames.com`.
+  - authentik 2025.10 sends `email_verified: false` by default.
+  - authentik back-channel logout is labeled Preview.
+  - Cashier walk-ins create password-less identities.
+  - Checkout uses capability tokens.
+  - `@vfurst/auth`, `@vfurst/contracts`, `@vfurst/tenant-context`, and the control-plane outbox are used by web and worker, so only the split apps and their split-only modules are deleted.
+- **What did not happen:** no application code, schema, or test changed, and no gates ran. The user executes the unit plan with Codex and then asks for a whole-branch review. **Next session: unit 1B.1 only, following its plan.**
 
 ### 2026-07-30 — Phase 2 product decisions recorded (user-requested; documentation only)
 
