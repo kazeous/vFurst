@@ -280,7 +280,7 @@
   - build args `SOURCE_COMMIT` plus the ten `NEXT_PUBLIC_*` names listed in spec §5.2;
   - the npm script `sync` in `@vfurst/db`.
 
-- [ ] **Step 1: Define the schema chain once**
+- [x] **Step 1: Define the schema chain once**
 
   - In `packages/db/package.json` add `"sync": "npm run prepare:payment-attempt-locks && npm run push && npm run backfill:managed-tenancy && npm run backfill:payment-attempt-locks"`.
   - In `apps/web/package.json` set `"prestart": "node ../../scripts/check-app-env.mjs web && npm run sync --workspace @vfurst/db"`.
@@ -288,7 +288,7 @@
   Run: `node -e "const s=require('./packages/db/package.json').scripts.sync, p=require('./apps/web/package.json').scripts.prestart; if (!s || s.includes('accept-data-loss') || !p.endsWith('npm run sync --workspace @vfurst/db')) process.exit(1); console.log('ok')"`
   Expected: `ok`.
 
-- [ ] **Step 2: Write `Dockerfile`**
+- [x] **Step 2: Write `Dockerfile`**
 
   - **Header:**
     - `# syntax=docker/dockerfile:1.7`;
@@ -346,16 +346,16 @@
     CMD ["npm", "run", "sync", "--workspace", "@vfurst/db"]
     ```
 
-- [ ] **Step 3: Narrow the build context**
+- [x] **Step 3: Narrow the build context**
 
   Append these lines to `.dockerignore`: `docs`, `apps/docs`, `tests`, `.superpowers`, `.hallmark`, `.backups`, `PROGRESS.md`.
 
-- [ ] **Step 4: Delete the old Dockerfiles**
+- [x] **Step 4: Delete the old Dockerfiles**
 
   Run: `git rm docker/web.Dockerfile docker/worker.Dockerfile`
   Expected: the `docker/` directory no longer exists.
 
-- [ ] **Step 5: Build every target locally**
+- [x] **Step 5: Build every target locally**
 
   Run in bash:
 
@@ -371,7 +371,7 @@
 
   A build failure that a change inside this task's files cannot fix means **stop**.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add Dockerfile .dockerignore packages/db/package.json apps/web/package.json

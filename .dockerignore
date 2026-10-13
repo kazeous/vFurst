@@ -24,3 +24,10 @@ test-results
 *.tsbuildinfo
 apps/web/public/sw.js
 apps/web/public/sw.js.map
+docs
+apps/docs
+tests
+.superpowers
+.hallmark
+.backups
+PROGRESS.md
