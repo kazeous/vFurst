@@ -391,7 +391,7 @@
   - `npm run compose:validate` from Task 2.
 - Produces: services `postgres`, `redis`, `migrate`, `worker`, `web`, and volumes `postgres_data`, `redis_data`. Later tasks and the runbook rely on these names.
 
-- [ ] **Step 1: Write `compose.prod.yaml`**
+- [x] **Step 1: Write `compose.prod.yaml`**
 
   Start with a comment of at most four lines:
   - this is the Coolify deployment source;
@@ -439,17 +439,17 @@
     - `REDIS_URL` is `redis://redis:6379`.
   - **Top-level `volumes:`:** `postgres_data:` and `redis_data:`.
 
-- [ ] **Step 2: Validate**
+- [x] **Step 2: Validate**
 
   Run: `npm run compose:validate`
   Expected: `compose.prod.yaml is valid: web <n> keys, worker <m> keys.` and exit code 0. Any `is missing` or `must not set` line means the environment is wrong; fix the file, not the validator.
 
-- [ ] **Step 3: Check the file rules**
+- [x] **Step 3: Check the file rules**
 
   Run in bash: `grep -nP '[^\x00-\x7F]' compose.prod.yaml; grep -nE '^\s+ports:|<<:|&[a-z]' compose.prod.yaml; grep -c 'exclude_from_hc' compose.prod.yaml`
   Expected: no output from the first two commands, and `1` from the third.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add compose.prod.yaml
