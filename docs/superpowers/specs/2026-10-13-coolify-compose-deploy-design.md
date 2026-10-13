@@ -1,6 +1,6 @@
 # Coolify Compose deployment and arm64 CI gate — design
 
-> **Status:** design approved in conversation on 2026-10-13 (sections 1–4); this written spec awaits review.
+> **Status:** approved 2026-10-13. Implementation plan: `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md`.
 > **Placement:** out-of-phase infrastructure work. It does not advance Phase 1B; the next Phase 1B unit stays 1B.2.
 > **Branch:** `chore/coolify-compose-deploy`, cut from `origin/staging` (`97bc517`), merged to `staging` on its own.
 
@@ -86,8 +86,8 @@ redis (healthy) ────┼─> migrate (completed successfully) ─> worker
 | Derived | literal | `DATABASE_URL` and `DIRECT_DATABASE_URL` = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public` (each reference in its `:?` form); `REDIS_URL` = `redis://redis:6379` |
 | Fixed | literal | `NODE_ENV=production` (all); web `PORT=3000`, `HOSTNAME=0.0.0.0`, `AUTH_TRUST_HOST=true`; worker `WORKER_HEALTH_PORT=3100` |
 | Required | `${VAR:?Set VAR in Coolify}` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MANAGER_URL`, `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`; `AUTH_URL`, `AUTH_SECRET`; `EMAIL_DELIVERY_ENCRYPTION_KEY`; `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
-| Tunable | `${VAR:-<default>}`, with the default taken from the app's `.env.example` | `NEXT_PUBLIC_APP_NAME`; `VFURST_DB_CONNECTION_LIMIT`, `VFURST_DB_POOL_TIMEOUT_SECONDS`, `VFURST_DB_CONNECTION_BUDGET`, `VFURST_WEB_REPLICAS` (default **1**, not the example's 6), `VFURST_WORKER_REPLICAS`; `VFURST_RATE_LIMIT_PREFIX` and the five `VFURST_*_RATE_LIMIT_PER_MINUTE`; `CONTROL_PLANE_INVALIDATION_CHANNEL`; `SEPAY_ENV`; `WORKER_STARTUP_TIMEOUT_MS`; the four Sentry sample rates (`NEXT_PUBLIC_SENTRY_*_SAMPLE_RATE`, `SENTRY_TRACES_SAMPLE_RATE`) |
-| Optional | `${VAR:-}` | `S3_ENDPOINT`, `S3_PUBLIC_URL`; `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`; `SALES_CONTACT_EMAIL`; `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_CLIENT_ID`; `SEPAY_WEBHOOK_SECRET`, `SEPAY_API_TOKEN`; `CHECKOUT_TOKEN_SECRET`; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
+| Tunable | `${VAR:-<default>}`, with the default taken from the app's `.env.example` | `NEXT_PUBLIC_APP_NAME`; `SALES_CONTACT_EMAIL`; `VFURST_DB_CONNECTION_LIMIT`, `VFURST_DB_POOL_TIMEOUT_SECONDS`, `VFURST_DB_CONNECTION_BUDGET`, `VFURST_WEB_REPLICAS` (default **1**, not the example's 6), `VFURST_WORKER_REPLICAS`; `VFURST_RATE_LIMIT_PREFIX` and the five `VFURST_*_RATE_LIMIT_PER_MINUTE`; `CONTROL_PLANE_INVALIDATION_CHANNEL`; `SEPAY_ENV`; `WORKER_STARTUP_TIMEOUT_MS`; the four Sentry sample rates (`NEXT_PUBLIC_SENTRY_*_SAMPLE_RATE`, `SENTRY_TRACES_SAMPLE_RATE`) |
+| Optional | `${VAR:-}` | `S3_ENDPOINT`, `S3_PUBLIC_URL`; `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`; `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_CLIENT_ID`; `SEPAY_WEBHOOK_SECRET`, `SEPAY_API_TOKEN`; `CHECKOUT_TOKEN_SECRET`; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
 | Excluded | absent | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (build-time only, C8); `VFURST_LAUNCH_URL` (an operator-tool input that the runtime does not read) |
 
 - The operator keeps one set of PostgreSQL credentials. `POSTGRES_PASSWORD` must be URL-safe, so the runbook generates it with `openssl rand -hex 32`.
@@ -129,7 +129,20 @@ The `build` stage declares these as `ARG` only. Docker exposes `ARG` values to `
 - `apps/web/package.json` `prestart` becomes `node ../../scripts/check-app-env.mjs web && npm run sync --workspace @vfurst/db`. Local behavior is unchanged.
 - The chain stays non-destructive. `push` is `prisma db push --skip-generate` without `--accept-data-loss`, as identity spec §5.6 requires. A destructive schema difference makes `migrate` exit non-zero and the deployment stops before web and worker start.
 
-### 5.4 `.dockerignore`
+### 5.4 Empty optional values in web
+
+The worker already treats an empty string as unset. Web code does not everywhere, and `${VAR:-}` hands it an empty string. The 2026-10-13 grep (K3) found four reads to change:
+
+| File | Today | Change | Effect today with an empty value |
+|---|---|---|---|
+| `apps/web/src/lib/payments/checkout-token.ts` | `CHECKOUT_TOKEN_SECRET ?? AUTH_SECRET` | `\|\|` | checkout throws `CHECKOUT_TOKEN_SECRET is not configured.` instead of falling back to `AUTH_SECRET` |
+| `apps/web/src/sentry.server.config.ts` | `NEXT_PUBLIC_SENTRY_DSN ?? SENTRY_DSN` | `\|\|` | the empty public DSN wins, and server Sentry stays off |
+| `apps/web/src/sentry.edge.config.ts` | same | same | same |
+| `apps/web/src/lib/s3.ts` | `endpoint: process.env.S3_ENDPOINT` | `endpoint: process.env.S3_ENDPOINT \|\| undefined` | an empty endpoint reaches the AWS SDK instead of the default AWS endpoint |
+
+`SALES_CONTACT_EMAIL ?? "sales@vfurst.com"` is handled by making the key tunable with that default (§4.3). The Sentry sample rates are tunables too, so their `?? <number>` reads never see an empty string.
+
+### 5.5 `.dockerignore`
 
 Add `docs`, `apps/docs`, `tests`, `.superpowers`, `.hallmark`, `.backups` and `PROGRESS.md` to the existing list. `**/.env` stays excluded, so `packages/db/.env` (local Prisma default) never enters an image.
 
@@ -216,7 +229,10 @@ Stop the resource, delete the `postgres_data` volume in Coolify's storage view, 
   - the cutover in §7 and the database reset in §7.1;
   - the ruleset;
   - smoke checks and troubleshooting: a missing `SOURCE_COMMIT`, a failed `migrate`, a `[check-app-env]` exit, an unhealthy worker, and a public variable that is not marked Build Variable.
-- `docs/launch/go-live-checklist.md` gains an open item: a production PostgreSQL backup and restore drill, because the Compose topology has no Coolify-managed backups.
+- `docs/launch/go-live-checklist.md`:
+  - add an open item: a production PostgreSQL backup and restore drill, because the Compose topology has no Coolify-managed backups;
+  - correct the schema paragraph. It says the web `prestart` hook synchronizes the schema before Next.js accepts traffic, which the image never did. It should say the `migrate` service runs `npm run sync --workspace @vfurst/db` before web and worker start;
+  - drop "rolling-deploy overlap" from the connection-budget paragraph, because Compose deployments do not overlap.
 - `AGENTS.md`:
   - distinguish `docker-compose.yml` (local services) from `compose.prod.yaml` and `Dockerfile` (deployment);
   - add `npm run compose:validate` to Commands;
@@ -233,7 +249,7 @@ Run by the executor:
 2. `npm run test:compose` and `npm run compose:validate` pass.
 3. **Each target builds locally** for the host platform (amd64): `docker buildx build --target web .`, the same for `worker` and `migrate`.
 4. **Local stack smoke:**
-   - Command: `node scripts/validate-compose.mjs --print | docker compose -p vfurst-compose-smoke -f - --env-file <scratch env file> up -d --build`.
+   - Command: write `node scripts/validate-compose.mjs --print` to a scratch directory outside the repository, then run `docker compose -p vfurst-compose-smoke --project-directory <repo root> -f <scratch>/compose.yaml --env-file <scratch>/smoke.env up -d --build`. Every later compose command uses the same flags.
    - Test environment: the scratch env file holds synthetic values only. S3 and SMTP point at unreachable placeholders, which `/api/healthz` does not probe.
    - Assertions:
      - `migrate` exited 0;
@@ -259,7 +275,7 @@ Run by the executor:
 |---|---|---|
 | K1 | Coolify's Compose parser mishandles `exclude_from_hc`, `${VAR:?…}` or `build.target` | All three are in use by pawket on the same Coolify host. The first manual deploy (§7 step 6) is the check. |
 | K2 | Three targets built concurrently on the host duplicate the `build` stage and exhaust memory | Identical `build.args` keep the shared stages identical, so BuildKit can reuse them; pawket builds three targets of one `Dockerfile` on the same host. The user reads the first deployment's build log. If the stage ran more than once, record it as a follow-up; the deployment still works, only slower. |
-| K3 | Web code reads an optional variable with `??`, so an empty string from `${VAR:-}` behaves differently from unset | The executor greps `apps/web/src` and `packages/*/src` for `process.env.<optional key> ??` and reports any hit before choosing defaults. The local stack smoke boots web with the optional keys empty. |
+| K3 | Web code reads an optional variable with `??`, so an empty string from `${VAR:-}` behaves differently from unset | Resolved by §5.4 and the `SALES_CONTACT_EMAIL` tunable. The closeout repeats the grep, and the local stack smoke boots web with the optional keys empty. |
 | K4 | `migrate` fails on a destructive schema change and staging stays down | Intended fail-closed behavior. 1B.5 uses §7.1 deliberately. |
 | K5 | The repository becomes private and `ubuntu-24.04-arm` stops being free | Out of scope. The job would then need a paid runner or removal. |
 | K6 | `staging-deploy.yml` lingers on `main` and fires failing runs | §7 step 1 comes first in the runbook. |

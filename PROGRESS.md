@@ -29,6 +29,26 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-13 — Single Coolify Compose deployment: design and plan (out-of-phase infrastructure; documentation only)
+
+- **What the user wants:**
+  - Replace the four staging Coolify resources (`postgresql-vfur`, `redis-vfur`, `v-furst:staging-web`, `v-furst:staging-worker`) with one Docker Compose resource, so web and worker always run the same commit.
+  - Build-check the production images natively on GitHub's `ubuntu-24.04-arm` runner, with no QEMU and no GHCR packages.
+- **What the user decided:**
+  - The arm64 job builds to the cache only; Coolify still builds on the host.
+  - Coolify deploys through its GitHub App auto-deploy, with no API token or webhook in GitHub.
+  - The CI gate becomes a `staging` ruleset that requires both checks.
+  - Staging data is test data, so the new PostgreSQL and Redis start empty.
+- **Findings:**
+  - The pipeline already stopped using QEMU and pushing to GHCR in PR #7/#8. The two GHCR packages are stale leftovers from PR #5/#6.
+  - The web image never ran the schema chain; the runbook had the operator run it by hand. A one-shot `migrate` service now runs it.
+  - Four web reads mishandle an empty optional value. They are fixed in the plan's Task 1.
+- **Documents on branch `chore/coolify-compose-deploy`** (cut from `origin/staging` at `97bc517`; worktree `.claude/worktrees/coolify-compose-deploy`; not pushed):
+  - spec `docs/superpowers/specs/2026-10-13-coolify-compose-deploy-design.md`;
+  - plan `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md`.
+- **What did not happen:** no code, configuration, workflow or Coolify setting changed, and no gate ran. Phase status is unchanged.
+- **Next session:** execute `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md` (Tasks 0–8) in that worktree. Phase 1B continues separately on `feat/identity-replatform` with unit 1B.2.
+
 ### 2026-10-13 — Dependency advisory remediation on `staging` (user-requested)
 
 - New advisories since the July closeout: the lockfile went from 0 to 21 findings (1 critical in Next.js). Next moved to 15.5.27, nodemailer to 10.1.0, and the sharp, PostCSS, `brace-expansion`, `fast-uri`, and `deepmerge-ts` overrides and vitest were raised; the remainder came from a non-forced `npm audit fix`.
