@@ -55,7 +55,9 @@ validates the required set and runs from `predev`/`prestart` — never during
 `next build`, so CI (which sets only `DATABASE_URL`) is unaffected. When adding a
 variable, add it to the app's `.env.example`, to the root files, **and** to
 `compose.prod.yaml`, or the sync or the deployment will not carry it;
-`npm run compose:validate` fails until the deployment does. `NEXT_PUBLIC_*` values are inlined at **build** time —
+`npm run compose:validate` fails until the deployment does. In `compose.prod.yaml`
+only `SOURCE_COMMIT` and `NEXT_PUBLIC_*` may use `${VAR:?}`; everything else is
+`${VAR:-}`, because Coolify builds with build-time variables only. `NEXT_PUBLIC_*` values are inlined at **build** time —
 runtime-only injection does nothing in production builds.
 
 Ports in local development: `apps/web` 3000, split runtimes 3200/3201 behind the

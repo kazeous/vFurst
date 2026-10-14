@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  checkBuildTimeRequirements,
   checkEnvironmentContract,
   parseEnvExampleKeys,
   placeholderEnvironment,
@@ -49,6 +50,19 @@ test("placeholderEnvironment lists each required variable once", () => {
     A: "compose-validate-placeholder",
     B: "compose-validate-placeholder",
   });
+});
+
+test("checkBuildTimeRequirements accepts build-time required variables", () => {
+  const source = "a: ${SOURCE_COMMIT:?x}\nb: ${NEXT_PUBLIC_APP_URL:?y}\nc: ${AUTH_SECRET:-}";
+  assert.deepEqual(checkBuildTimeRequirements(source), []);
+});
+
+test("checkBuildTimeRequirements rejects runtime variables marked required", () => {
+  const source = "a: ${POSTGRES_USER:?x}\nb: ${AUTH_SECRET:?y}\nc: ${POSTGRES_USER:?z}";
+  assert.deepEqual(checkBuildTimeRequirements(source), [
+    "POSTGRES_USER must not use :? because Coolify interpolates the Compose file with build-time variables only",
+    "AUTH_SECRET must not use :? because Coolify interpolates the Compose file with build-time variables only",
+  ]);
 });
 
 test("parseEnvExampleKeys ignores comments and blank lines", () => {
