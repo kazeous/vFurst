@@ -7,8 +7,7 @@ npm run test:load:launch
 npm run check:launch
 ```
 
-The checker verifies the automated items in this list. The production backup
-and restore-drill item requires manual evidence:
+The checker verifies:
 
 - Marketing, legal, E2E, load-test, and launch audit artifacts exist.
 - Stripe secret-key and webhook-signing environment variables, Sentry production variables, valid runtime/direct Postgres URLs, a bounded database connection budget, a valid shared Redis URL, and positive rate-limit quotas are configured.
@@ -17,7 +16,6 @@ and restore-drill item requires manual evidence:
 - Full k6 target run is documented as passed.
 - Physical screen-reader pass is explicitly documented as complete with tester, assistive-technology, and flow evidence.
 - `VFURST_LAUNCH_URL` returns live marketing/legal routes with expected vFurst launch content.
-- Production PostgreSQL backups and a restore drill are in place. The single-resource Compose topology has no Coolify-managed database backups (decided 2026-10-13).
 
 The checker does **not** yet parse every mandatory external proof. Complete and
 record these manually before Phase 6 can close:
@@ -26,6 +24,7 @@ record these manually before Phase 6 can close:
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence before SePay is enabled.
 - A production transactional email provider tested through password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
 - The deployed persona/tenant-isolation matrix, a recorded split-runtime launch decision, and the final full-system audit rerun against the deployed environment.
+- Production PostgreSQL backups and a recorded restore drill. The single-resource Compose topology has no Coolify-managed database backups (decided 2026-10-13).
 
 The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
 
