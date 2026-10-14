@@ -525,6 +525,41 @@
 
 ---
 
+### Task 7A: Token-page referrer header (amendment 2026-10-14)
+
+The first execution stopped here, correctly. Spec §7.5 originally banned third-party resources on token pages, but `/set-password` inherits `ConventionPortalShell`, which loads organizer-configured logo and cover images through CSS. The spec was amended instead of restructuring the portal layout: the guarantee is now an HTTP `Referrer-Policy: no-referrer` header, so it applies before the document is parsed, even if Next.js streams the metadata tag. No script from a third party runs on the page.
+
+**Files:**
+- Modify: `apps/web/next.config.ts`
+
+- [ ] **Step 1: Add the header.**
+
+  Add an `async headers()` entry to the Next config that returns `[{ key: "Referrer-Policy", value: "no-referrer" }]` for two sources:
+  - `"/set-password"` (tenant hosts, before the middleware rewrite);
+  - `"/:orgSlug/set-password"` (central path).
+
+  Keep the page's `metadata.referrer`.
+
+- [ ] **Step 2: Verify the header.**
+
+  With `npm run dev` running:
+  `curl -sI -H "Host: probe.localhost:3000" "http://127.0.0.1:3000/set-password?token=x" | grep -i referrer-policy`
+  Expected: `Referrer-Policy: no-referrer`. Config headers apply even when the page answers 404, so no probe organization is needed.
+
+- [ ] **Step 3: Run the gates.**
+
+  Run: `npx turbo run type-check lint build --filter=@vfurst/web --concurrency=1`
+  Expected: PASS.
+
+- [ ] **Step 4: Commit.**
+
+  ```bash
+  git add apps/web/next.config.ts
+  git commit -m "fix(web): send no-referrer on portal set-password pages"
+  ```
+
+---
+
 ### Task 8: Retention for portal sessions and tokens
 
 **Files:**
@@ -598,6 +633,7 @@
 5. **Cross-tenant isolation.** Copy A's `vfurst-portal` cookie value onto the B host and open B's `/login`: it shows the sign-in form, not "Signed in as". Signing in on B with A's credentials fails.
 6. **Reset and replay.** Forgot-password on A gives the subject `Reset your … account password`. Set a new password; the old password now fails. Reopening the same link shows "This link is invalid, expired, or has already been used."
 7. **Walk-in claim.** Sign up on A with the walk-in email. Mailpit receives the **setup** subject, not the exists notice.
+7a. **Token page referrer.** The response that opens a set-password link from Mailpit has the header `referrer-policy: no-referrer`. Use the `Response` returned by `page.goto`.
 8. **Central path.** `page.goto("http://localhost:3000/portal-a-…/login")` ends on the A host, and `context.cookies("http://localhost:3000")` contains no `vfurst-portal` cookie (Review Focus 2).
 
 - [ ] **Step 1: Write the spec.**

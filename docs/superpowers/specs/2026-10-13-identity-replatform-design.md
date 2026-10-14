@@ -386,7 +386,7 @@ authentik 2025.10 sends `email_verified: false` by default. The runbook (§11.3)
 - Stored as SHA-256 hex.
 - Single use, valid for 1 hour.
 - Issuing a token consumes any older unconsumed token with the same account and purpose.
-- Pages that carry a token send `Referrer-Policy: no-referrer` and load no third-party resources.
+- Pages that carry a token send `Referrer-Policy: no-referrer` as an HTTP response header, plus the matching meta tag, and run no third-party script. The tenant branding images that the portal shell loads through CSS are allowed: the referrer policy keeps the token URL from reaching their hosts, and the token is single-use and expires in one hour. *(Amended 2026-10-14 during unit 1B.2: the original wording also banned third-party resources, but every token page inherits the portal shell's branding images.)*
 
 ### 7.6 Portal session
 
