@@ -140,9 +140,13 @@ const sharedRateLimit = createFixedWindowRateLimiter(
   }
 );
 
+export function getClientIpFromHeaders(headers: Headers): string {
+  const forwardedFor = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwardedFor || headers.get("x-real-ip") || "local";
+}
+
 export function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwardedFor || request.headers.get("x-real-ip") || "local";
+  return getClientIpFromHeaders(request.headers);
 }
 
 export function applyFixedWindowRateLimit(options: RateLimitOptions) {
@@ -210,7 +214,11 @@ export async function assertActionRateLimit(
   }
 }
 
-export async function assertAuthActionRateLimit(namespace: string, key: string) {
+export async function assertAuthActionRateLimit(
+  namespace: string,
+  key: string,
+  message = "Too many account-recovery requests. Please wait a minute and try again."
+): Promise<void> {
   const result = await applyFixedWindowRateLimit({
     namespace,
     key,
@@ -220,6 +228,6 @@ export async function assertAuthActionRateLimit(namespace: string, key: string) 
   });
 
   if (result.limited) {
-    throw new RateLimitExceededError(result, "Too many account-recovery requests. Please wait a minute and try again.");
+    throw new RateLimitExceededError(result, message);
   }
 }
