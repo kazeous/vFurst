@@ -47,6 +47,9 @@ export async function sendPlatformEmail(to: string, template: EmailTemplateName,
 const nonReplayableTemplates = new Set<EmailTemplateName>([
   "organization-invitation",
   "password-reset",
+  "portal-account-setup",
+  "portal-password-reset",
+  "portal-account-exists",
   "registration-transfer"
 ]);
 

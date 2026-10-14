@@ -4,6 +4,9 @@ import { passwordResetTemplate } from "./templates/password-reset.js";
 import { hotelBookingConfirmationTemplate } from "./templates/hotel-booking-confirmation.js";
 import { organizationInvitationTemplate } from "./templates/organization-invitation.js";
 import { paymentReceiptTemplate } from "./templates/payment-receipt.js";
+import { portalAccountExistsTemplate } from "./templates/portal-account-exists.js";
+import { portalAccountSetupTemplate } from "./templates/portal-account-setup.js";
+import { portalPasswordResetTemplate } from "./templates/portal-password-reset.js";
 import { registrationConfirmationTemplate } from "./templates/registration-confirmation.js";
 import { registrationTransferTemplate } from "./templates/registration-transfer.js";
 import { staffMessageTemplate } from "./templates/staff-message.js";
@@ -108,6 +111,22 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
         role: typeof data.role === "string" ? data.role : "MEMBER",
         invitationUrl: typeof data.invitationUrl === "string" ? data.invitationUrl : "",
         expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : "soon"
+      });
+    case "portal-account-setup":
+      return portalAccountSetupTemplate({
+        organizationName: typeof data.organizationName === "string" ? data.organizationName : "the convention",
+        setupUrl: typeof data.setupUrl === "string" ? data.setupUrl : ""
+      });
+    case "portal-password-reset":
+      return portalPasswordResetTemplate({
+        organizationName: typeof data.organizationName === "string" ? data.organizationName : "the convention",
+        resetUrl: typeof data.resetUrl === "string" ? data.resetUrl : ""
+      });
+    case "portal-account-exists":
+      return portalAccountExistsTemplate({
+        organizationName: typeof data.organizationName === "string" ? data.organizationName : "the convention",
+        signInUrl: typeof data.signInUrl === "string" ? data.signInUrl : "",
+        resetUrl: typeof data.resetUrl === "string" ? data.resetUrl : ""
       });
     case "password-reset":
       return passwordResetTemplate({
