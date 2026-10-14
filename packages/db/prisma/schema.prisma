@@ -188,6 +188,11 @@ enum RaffleEntryMethod {
   PURCHASED
 }
 
+enum PortalAccountTokenPurpose {
+  ACCOUNT_SETUP // sign-up and walk-in claim
+  PASSWORD_RESET
+}
+
 model User {
   id                                   String                        @id @default(uuid()) @db.Uuid
   email                                String                        @unique
@@ -233,6 +238,57 @@ model User {
   @@map("users")
 }
 
+model PortalAccount {
+  id              String               @id @default(uuid()) @db.Uuid
+  orgId           String               @db.Uuid
+  email           String               // normalizeIdentityEmail()
+  name            String?
+  passwordHash    String?              // null = unclaimed (walk-in or setup not finished)
+  emailVerifiedAt DateTime?            // set together with passwordHash
+  authVersion     Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  org             Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sessions        PortalSession[]
+  tokens          PortalAccountToken[]
+
+  @@unique([orgId, email])
+  @@unique([orgId, id])
+  @@map("portal_accounts")
+}
+
+model PortalSession {
+  id              String        @id @default(uuid()) @db.Uuid
+  orgId           String        @db.Uuid
+  portalAccountId String        @db.Uuid
+  tokenHash       String        @unique @db.Char(64) // SHA-256 hex of the cookie value
+  authVersion     Int
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  portalAccount   PortalAccount @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+
+  @@index([portalAccountId])
+  @@index([expiresAt])
+  @@map("portal_sessions")
+}
+
+model PortalAccountToken {
+  id              String                    @id @default(uuid()) @db.Uuid
+  orgId           String                    @db.Uuid
+  portalAccountId String                    @db.Uuid
+  purpose         PortalAccountTokenPurpose
+  tokenHash       String                    @unique @db.Char(64)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime                   @default(now())
+  portalAccount   PortalAccount             @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+
+  @@index([portalAccountId, purpose])
+  @@index([expiresAt])
+  @@map("portal_account_tokens")
+}
+
 model Organization {
   id                           String                        @id @default(uuid()) @db.Uuid
   name                         String
@@ -274,6 +330,7 @@ model Organization {
   members                      OrgMember[]
   orderItems                   OrderItem[]
   orders                       Order[]
+  portalAccounts               PortalAccount[]
   raffleEntries                RaffleEntry[]
   raffleDrawResults            RaffleDrawResult[]
   raffles                      Raffle[]

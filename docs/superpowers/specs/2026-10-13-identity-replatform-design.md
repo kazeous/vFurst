@@ -197,6 +197,8 @@ model PortalAccountToken {
 
 Every relation in the table, plus `PortalSession` and `PortalAccountToken`, is a **composite** foreign key:
 
+**Amended 2026-10-14 (unit 1B.2):** `PortalSession` and `PortalAccountToken` keep the composite key but use `onDelete: Cascade`. Nothing cascades into them from `Organization`, so `NoAction` would fail organization deletion. `NoAction` remains the rule for the business tables listed above.
+
 ```prisma
 portalAccount PortalAccount @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 ```
