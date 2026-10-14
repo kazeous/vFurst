@@ -29,6 +29,20 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-14 — Compose deployment cutover complete; cleanup (out-of-phase infrastructure)
+
+- **Cutover finished.** The user created the Coolify Compose resource, moved `vfurst.reyuugames.com`, and deployed `07f6f86` successfully. External smoke passed:
+  - `/api/healthz` returned 200 with database and Redis `ok` and commit `07f6f86`, matching `staging` HEAD and green CI;
+  - `/api/v1/events` returned 401;
+  - `/` returned 200.
+
+  The user then enabled Auto Deploy, deleted the four old resources, deleted the GitHub secrets, revoked the Coolify API token, and deleted the GHCR packages.
+- **"no available server" was transient.** Right after the deploy, the domain returned "no available server". Coolify reports success when containers start, while Traefik routes only to healthy containers, and web's 10 s health interval left a gap. The web and worker health checks gained `start_interval: 2s`.
+- **Removed unused Stripe keys.** `STRIPE_PUBLISHABLE_KEY` and `STRIPE_CONNECT_CLIENT_ID` are gone from `.env.example`, `.env.local`, `apps/web/.env.example`, and `compose.prod.yaml`, because no code reads them.
+- **Runbook trimmed.** The one-time cutover section was removed from `docs/launch/staging-coolify-setup.md`, and the remaining sections were renumbered.
+- **Verification:** `npm run test:compose` **11/11**; `npm run compose:validate` (web 52, worker 26 keys).
+- **Next:** Phase 1B continues on `feat/identity-replatform` with unit 1B.2. Merge `staging` into it at the start of that unit.
+
 ### 2026-10-14 — Compose build-time variable fix (out-of-phase infrastructure)
 
 - The first manual deployment of the new Coolify Compose resource (`1ea95ea`) failed at build. The error was `required variable POSTGRES_USER is missing a value`. Coolify builds with an env file that holds only the variables ticked "Available at Buildtime", and Compose interpolates the whole file, `environment:` included. The deploy log also showed Coolify injecting an `ARG` for every build-time variable into every Dockerfile stage, including secrets such as `AWS_SECRET_ACCESS_KEY` and `STRIPE_SECRET_KEY`.

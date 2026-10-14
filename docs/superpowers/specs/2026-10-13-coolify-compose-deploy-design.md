@@ -88,7 +88,7 @@ redis (healthy) ────┼─> migrate (completed successfully) ─> worker
 | Build-required | `${VAR:?Set VAR in Coolify}` | `SOURCE_COMMIT`; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MANAGER_URL`, `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_ROOT_DOMAIN` |
 | Runtime-required | `${VAR:-}`; the container refuses to start without it | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`; `AUTH_URL`, `AUTH_SECRET`; `EMAIL_DELIVERY_ENCRYPTION_KEY`; `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 | Tunable | `${VAR:-<default>}`, with the default taken from the app's `.env.example` | `NEXT_PUBLIC_APP_NAME`; `SALES_CONTACT_EMAIL`; `VFURST_DB_CONNECTION_LIMIT`, `VFURST_DB_POOL_TIMEOUT_SECONDS`, `VFURST_DB_CONNECTION_BUDGET`, `VFURST_WEB_REPLICAS` (default **1**, not the example's 6), `VFURST_WORKER_REPLICAS`; `VFURST_RATE_LIMIT_PREFIX` and the five `VFURST_*_RATE_LIMIT_PER_MINUTE`; `CONTROL_PLANE_INVALIDATION_CHANNEL`; `SEPAY_ENV`; `WORKER_STARTUP_TIMEOUT_MS`; the four Sentry sample rates (`NEXT_PUBLIC_SENTRY_*_SAMPLE_RATE`, `SENTRY_TRACES_SAMPLE_RATE`) |
-| Optional | `${VAR:-}` | `S3_ENDPOINT`, `S3_PUBLIC_URL`; `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`; `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_CLIENT_ID`; `SEPAY_WEBHOOK_SECRET`, `SEPAY_API_TOKEN`; `CHECKOUT_TOKEN_SECRET`; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
+| Optional | `${VAR:-}` | `S3_ENDPOINT`, `S3_PUBLIC_URL`; `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`; `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; `SEPAY_WEBHOOK_SECRET`, `SEPAY_API_TOKEN`; `CHECKOUT_TOKEN_SECRET`; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
 | Excluded | absent | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (build-time only, C8); `VFURST_LAUNCH_URL` (an operator-tool input that the runtime does not read) |
 
 - The operator keeps one set of PostgreSQL credentials. `POSTGRES_PASSWORD` must be URL-safe, so the runbook generates it with `openssl rand -hex 32`.
@@ -288,6 +288,11 @@ Run by the executor:
 | K5 | The repository becomes private and `ubuntu-24.04-arm` stops being free | Out of scope. The job would then need a paid runner or removal. |
 | K6 | `staging-deploy.yml` lingers on `main` and fires failing runs | §7 step 1 comes first in the runbook. |
 | K7 | A runtime value marked `:?`, or a secret ticked for build time, breaks the build or leaks into image metadata | Happened on the first deploy (2026-10-14). Fixed by the §4.3 amendment and the validator rule. |
+
+**Cleanup on 2026-10-14, after the cutover:**
+- `STRIPE_PUBLISHABLE_KEY` and `STRIPE_CONNECT_CLIENT_ID` were removed from the app contract and from Compose, because no code reads them. Connect onboarding uses Account Links.
+- The web and worker health checks gained `start_interval: 2s`, so Traefik starts routing within a few seconds of readiness instead of up to 10.
+- The runbook's one-time cutover section was removed.
 
 ## 12. Out of scope
 

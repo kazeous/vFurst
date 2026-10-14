@@ -5,6 +5,9 @@ Coolify GitHub App deploys `staging`; a GitHub branch ruleset gates merges. CI
 builds the production images natively on arm64 to the cache only, while Coolify
 builds deployed images on its host. There is no GHCR, API token, or webhook.
 
+This replaced the earlier four-resource setup on 2026-10-14; the one-time
+cutover steps are in git history and `PROGRESS.md`.
+
 ## 1. Topology
 
 | Service | Image | Restart | Ports | Health |
@@ -35,39 +38,7 @@ redeployment of the previous commit. The Compose database has no
 Coolify-managed backups. Staging holds test data; production PostgreSQL
 backups and a restore drill are a [go-live item](go-live-checklist.md).
 
-## 2. Cutover from the four-resource setup
-
-1. In GitHub on `main`, delete `.github/workflows/staging-deploy.yml` with the
-   web UI option **Create a new branch and start a pull request**, then merge
-   that deletion-only pull request. Until it lands, each green `staging` CI run
-   still calls the old hooks.
-2. Merge this branch into `staging` through a pull request with both checks
-   green. The old resources have Auto Deploy off, so this merge deploys nothing.
-3. In Coolify project **VFur**, environment **production**, create an
-   application from the Coolify GitHub App, repository `kazeous/vFurst`, branch
-   `staging`. Choose Docker Compose, base directory `/`, compose location
-   `/compose.prod.yaml`. Enable **Include Source Commit in Build**; leave Auto
-   Deploy and preview deployments off for the manual first deployment.
-4. Enter `POSTGRES_USER`, `POSTGRES_DB`, and `POSTGRES_PASSWORD` generated with
-   `openssl rand -hex 32`. Enter all `NEXT_PUBLIC_*` values as Build Variables.
-   Copy runtime secrets from the old web and worker resources. A new
-   `EMAIL_DELIVERY_ENCRYPTION_KEY` is acceptable because the database starts
-   empty. Untick **Available at Buildtime** on every variable that is not
-   `NEXT_PUBLIC_*` (see [Environment](#4-environment)).
-5. Remove `vfurst.reyuugames.com` from `v-furst:staging-web`. On the new
-   resource's `web` service set `https://vfurst.reyuugames.com:3000`.
-6. Deploy once by hand. Verify `migrate` exited 0, `worker` and `web` are
-   healthy, `/api/healthz` returns 200 with the `staging` HEAD commit,
-   `/api/v1/events` returns 401, and `/` returns 200. Use [Smoke](#7-smoke).
-7. Turn Auto Deploy on. Stop, then delete `v-furst:staging-web`,
-   `v-furst:staging-worker`, `redis-vfur`, and `postgresql-vfur`. Deletion is
-   irreversible; their data is staging test data and is not restored.
-8. Delete GitHub secrets `COOLIFY_API_TOKEN`, `COOLIFY_WEBHOOK_URL_WEB`,
-   `COOLIFY_WEBHOOK_URL_WORKER`, and `GHCR_TOKEN` if present. Revoke the Coolify
-   API token, delete GHCR packages `vfurst/web` and `vfurst/worker`, and create
-   the branch ruleset described below.
-
-## 3. Create the Compose resource
+## 2. Create the Compose resource
 
 | Setting | Value |
 |---|---|
@@ -85,7 +56,7 @@ Set `https://vfurst.reyuugames.com:3000` on the **web** service. The `:3000`
 means Coolify proxies to container port 3000; it does not publish a host port.
 Leave the other services without domains.
 
-## 4. Environment
+## 3. Environment
 
 Enter values in the Coolify resource environment. Shared web and worker keys
 must have the same value.
@@ -130,8 +101,8 @@ check that each one is set before deploying. Enter `POSTGRES_USER`, `POSTGRES_PA
 `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Use
 `AUTH_URL=https://vfurst.reyuugames.com`. Generate the URL-safe database
 password with `openssl rand -hex 32`; generate `AUTH_SECRET` and the shared
-email key independently with `openssl rand -base64 32`. Copy S3/AWS values
-from the old resources. Object storage and SMTP remain external.
+email key independently with `openssl rand -base64 32`. Object storage and SMTP
+are external services; take their values from the provider.
 
 **Tunables and optional values.** See `compose.prod.yaml` for defaults and
 empty optional values before overriding connection pools, replica counts,
@@ -144,7 +115,7 @@ this deployment's build and runtime.
 `compose.prod.yaml`; **do not enter them** in Coolify. `NODE_ENV`, web port and
 hostname, worker health port, and `AUTH_TRUST_HOST` are fixed there as well.
 
-## 5. Branch ruleset
+## 4. Branch ruleset
 
 In GitHub repository settings, create a ruleset targeting `staging`. Require
 a pull request before merging and these exact status check names:
@@ -155,7 +126,7 @@ a pull request before merging and these exact status check names:
 Block force pushes and deletion. The user decides who may bypass the ruleset;
 a direct push by a bypass actor can deploy to staging without the CI gate.
 
-## 6. Deploy flow
+## 5. Deploy flow
 
 Merge a pull request into `staging` after both checks pass. The GitHub App
 notifies Coolify, where Auto Deploy starts one build of the `web`, `worker`,
@@ -169,7 +140,7 @@ the containers, a non-zero `migrate` exit prevents web and worker from
 starting; staging stays down until a corrected deployment or a redeploy of
 the previous commit succeeds.
 
-## 7. Smoke
+## 6. Smoke
 
 Confirm `migrate` exited 0 and both application services are healthy. Then:
 
@@ -188,7 +159,7 @@ Compare the commit in `/api/healthz` and the Coolify deployment log with the
 successful `staging` HEAD CI SHA. Do not mark the deployment complete if they
 differ.
 
-## 8. Database reset
+## 7. Database reset
 
 For the planned Phase 1B unit 1B.5 staging reset, stop the resource, delete
 the `postgres_data` volume in Coolify's storage view, then deploy. `migrate`
