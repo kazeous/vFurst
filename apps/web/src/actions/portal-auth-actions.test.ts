@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
+import type * as PortalAccountModule from "@/lib/portal-account";
+import type * as PortalRequestModule from "@/lib/portal-request";
+import type * as PortalSessionModule from "@/lib/portal-session";
 import type * as RateLimitModule from "@/lib/rate-limit";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
+  cookies: vi.fn(),
   redirect: vi.fn(),
   unstable_rethrow: vi.fn(),
   getRequestPortalOrg: vi.fn(),
@@ -12,13 +17,21 @@ const mocks = vi.hoisted(() => ({
   setPortalAccountPassword: vi.fn(),
   startPortalSession: vi.fn(),
   endPortalSession: vi.fn(),
+  revokePortalSession: vi.fn(),
   assertAuthActionRateLimit: vi.fn(),
   getClientIpFromHeaders: vi.fn()
 }));
 
-vi.mock("next/headers", () => ({ headers: mocks.headers }));
+vi.mock("next/headers", () => ({ headers: mocks.headers, cookies: mocks.cookies }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, unstable_rethrow: mocks.unstable_rethrow }));
-vi.mock("@/lib/portal-request", () => ({ getRequestPortalOrg: mocks.getRequestPortalOrg }));
+vi.mock("@/lib/portal-request", async (importOriginal) => ({
+  ...await importOriginal<typeof PortalRequestModule>(),
+  getRequestPortalOrg: mocks.getRequestPortalOrg
+}));
+vi.mock("@/lib/portal-session", async (importOriginal) => ({
+  ...await importOriginal<typeof PortalSessionModule>(),
+  revokePortalSession: mocks.revokePortalSession
+}));
 vi.mock("@/lib/portal-accounts", () => ({
   authenticatePortalAccount: mocks.authenticatePortalAccount,
   requestPortalAccountSetup: mocks.requestPortalAccountSetup,
@@ -219,5 +232,38 @@ describe("portal auth actions", () => {
     mocks.setPortalAccountPassword.mockRejectedValue(error);
     await expect(portalSetPassword({}, form())).rejects.toBe(error);
     expect(mocks.unstable_rethrow).toHaveBeenCalledExactlyOnceWith(error);
+  });
+});
+
+describe("portal session cookie expiration", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it.each([
+    ["https", "__Host-vfurst-portal", true],
+    ["https", "__Host-vfurst-portal", false],
+    ["http", "vfurst-portal", true],
+    ["http", "vfurst-portal", false]
+  ] as const)("expires the %s cookie %s with matching attributes (existing token: %s)", async (protocol, cookieName, hasToken) => {
+    const responseHeaders = new Headers();
+    const cookieStore = new ResponseCookies(responseHeaders);
+    cookieStore.set("staff-session", "untouched");
+    if (hasToken) cookieStore.set(cookieName, "current-token");
+    mocks.headers.mockResolvedValue(new Headers({ "x-forwarded-proto": protocol }));
+    mocks.cookies.mockResolvedValue(cookieStore);
+    const { endPortalSession } = await vi.importActual<typeof PortalAccountModule>("@/lib/portal-account");
+
+    await endPortalSession();
+    await endPortalSession();
+
+    const expiration = responseHeaders.getSetCookie().find((value) => value.startsWith(`${cookieName}=`));
+    expect(expiration).toContain(`${cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+    if (protocol === "https") expect(expiration).toContain("; Secure");
+    else expect(expiration).not.toContain("; Secure");
+    expect(expiration).toContain("; HttpOnly");
+    expect(expiration).toContain("; SameSite=lax");
+    expect(expiration).not.toContain("Domain=");
+    expect(cookieStore.get(cookieName)?.value).toBe("");
+    expect(cookieStore.get("staff-session")?.value).toBe("untouched");
+    expect(mocks.revokePortalSession.mock.calls).toEqual(hasToken ? [["current-token"]] : []);
   });
 });

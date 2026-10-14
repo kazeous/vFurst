@@ -42,9 +42,11 @@ export async function startPortalSession(account: { id: string; orgId: string; a
 }
 
 export async function endPortalSession(): Promise<void> {
-  const cookieName = portalSessionCookieName(isSecureRequest(await headers()));
+  const secure = isSecureRequest(await headers());
+  const cookieName = portalSessionCookieName(secure);
   const cookieStore = await cookies();
   const token = cookieStore.get(cookieName)?.value;
   if (token) await revokePortalSession(token);
-  cookieStore.delete(cookieName);
+  // Browsers require Secure even when expiring a __Host- cookie.
+  cookieStore.set(cookieName, "", portalSessionCookieOptions(secure, new Date(0)));
 }
