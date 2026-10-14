@@ -19,6 +19,9 @@ const emailTemplateNames = new Set<EmailTemplateName>([
   "staff-message",
   "registration-transfer",
   "organization-invitation",
+  "portal-account-setup",
+  "portal-password-reset",
+  "portal-account-exists",
   "password-reset"
 ]);
 
