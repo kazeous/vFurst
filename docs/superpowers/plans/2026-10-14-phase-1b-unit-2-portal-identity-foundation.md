@@ -737,11 +737,31 @@ Task 9's expectations do not change. Its sign-out, sign-in, and set-password cas
   5. Clean up: `docker compose exec -T postgres dropdb -U postgres vfurst_e2e_baseline`, then `git worktree remove` (stop its processes first).
   6. **Stop and report** the table with evidence paths. Fix nothing. Pre-existing failures need a separate decision by the user, and regressions need a plan amendment.
 
+- [x] **Step 3 outcome (recorded by the reviewer, 2026-10-14).**
+
+  The baseline was rebuilt correctly this time: `npm ci`, `node scripts/sync-app-env.mjs`, `npx turbo run build` (which runs `prisma generate`), then `prestart` on the isolated database. Both runs used `--workers=1` against freshly built production artifacts.
+
+  | Run | Passed | Failed | Did not run |
+  |---|---|---|---|
+  | HEAD `2cb5bec` | 58 | 17 | 52 (127 tests) |
+  | Baseline `504b30d` (pre-1B.2) | 50 | 17 | 51 (118 tests) |
+
+  - **16 failing titles are identical** in both runs.
+  - **The 17th is the same `page.goto: net::ERR_ABORTED` on `/transfer/…`** in the serial `registration-transfer.spec.ts`. At HEAD it hit "recipient accepts once…"; at the baseline it hit the next test, "an account with a different normalized email…". This is the same race landing on a neighboring test.
+  - **Both error families are already present at the baseline:** 24 "Page changed from static to dynamic at runtime /{slug}/register, reason: headers" and 14 `ERR_ABORTED`.
+  - **All 9 portal-auth tests pass.**
+  - **Classification: every failure is pre-existing; 1B.2 introduced no regression.** The likely origin is the focused-only `staging` changes made after the last full green run on 2026-07-29.
+
+  **Decision:**
+  - Unit 1B.2 closes on "no regression versus the pre-1B.2 baseline", recording the red counts honestly. It does not claim a green suite.
+  - A green full suite remains a hard prerequisite for the Phase 1B exit (1B.5). It is restored by a separate fix on `staging` that this branch takes in before 1B.5.
+
 - [ ] **Step 4: Update the documents.**
   - In `docs/plan/phase-1b-identity.md`, set the 1B.2 Plan cell to this file's link.
   - In `PROGRESS.md`:
     - Current phase: unit 1B.2 complete; next session is unit 1B.3 only, and its plan is written first.
     - The 1B row: `1B.1–1B.2 complete; 1B.3–1B.5 remain`.
+    - Note in the current-phase paragraph that the full E2E suite is red from **pre-existing** failures (Step 3 outcome), which must be fixed on `staging` before 1B.5.
     - A new session-log entry on top that records:
       - what was added;
       - the four deviations;
