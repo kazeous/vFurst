@@ -9,7 +9,7 @@ import { TextInput } from "@/components/ui/input";
 
 const initialState: PortalAuthFormState = {};
 
-export function LoginForm({ returnTo }: { returnTo: string }) {
+export function LoginForm({ returnTo, visible }: { returnTo: string; visible: boolean }) {
   const [state, formAction, pending] = useActionState(portalSignIn, initialState);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,6 +17,8 @@ export function LoginForm({ returnTo }: { returnTo: string }) {
   useEffect(() => {
     if (state.redirectTo) window.location.replace(state.redirectTo);
   }, [state.redirectTo]);
+
+  if (!visible) return null;
 
   return (
     <form action={formAction} className="vf-form">

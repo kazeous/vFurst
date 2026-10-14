@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Alert } from "@/components/ui/alert";
 import { findUsablePortalAccountToken } from "@/lib/portal-accounts";
 import { resolvePortalAuthPage } from "@/lib/portal-auth-page";
 import { safeReturnTo } from "@/lib/return-to";
@@ -20,17 +18,13 @@ export default async function PortalSetPasswordPage({ params, searchParams }: {
   return (
     <main className="vf-public-page">
       <section className="vf-section vf-stack">
-        {usableToken ? (
-          <>
-            <h1>{usableToken.purpose === "ACCOUNT_SETUP" ? "Create your account" : "Choose a new password"}</h1>
-            <SetPasswordForm token={token} returnTo={safeReturnTo(query.returnTo, "/")} name={usableToken.account.name ?? ""} />
-          </>
-        ) : (
-          <>
-            <Alert variant="error">This link is invalid, expired, or has already been used.</Alert>
-            <Link href="/forgot-password">Request a new link</Link>
-          </>
-        )}
+        {/* Keep the action owner mounted when the cookie refresh sees the consumed token. */}
+        <SetPasswordForm
+          token={token}
+          returnTo={safeReturnTo(query.returnTo, "/")}
+          name={usableToken?.account.name ?? ""}
+          heading={usableToken ? (usableToken.purpose === "ACCOUNT_SETUP" ? "Create your account" : "Choose a new password") : null}
+        />
       </section>
     </main>
   );

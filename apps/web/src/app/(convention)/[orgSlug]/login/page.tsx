@@ -20,20 +20,15 @@ export default async function PortalLoginPage({ params, searchParams }: {
     <main className="vf-public-page">
       <section className="vf-section vf-stack">
         <h1>Sign in</h1>
-        {account ? (
-          <>
-            <p>Signed in as {account.email}</p>
-            <SignOutForm />
-          </>
-        ) : (
-          <>
-            <LoginForm returnTo={returnTo} />
-            <div className="vf-actions">
-              <Link href={`/signup?returnTo=${encodeURIComponent(returnTo)}`}>Create account</Link>
-              <Link href="/forgot-password">Forgot password?</Link>
-            </div>
-          </>
-        )}
+        {/* Cookie updates must preserve both action owners until their navigation effects run. */}
+        <LoginForm returnTo={returnTo} visible={!account} />
+        <SignOutForm email={account?.email ?? null} />
+        {!account ? (
+          <div className="vf-actions">
+            <Link href={`/signup?returnTo=${encodeURIComponent(returnTo)}`}>Create account</Link>
+            <Link href="/forgot-password">Forgot password?</Link>
+          </div>
+        ) : null}
       </section>
     </main>
   );
