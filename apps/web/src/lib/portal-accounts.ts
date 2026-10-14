@@ -86,7 +86,7 @@ export async function requestPortalAccountSetup(input: AccountRequest): Promise<
   }
 
   await sendAccountEmail(input.org, email, "portal-account-exists", {
-    signInUrl: getPortalUrl(input.org, `/login?returnTo=${encodeURIComponent(input.returnTo)}`),
+    signInUrl: getPortalUrl(input.org, `/login?returnTo=${encodeURIComponent(safeReturnTo(input.returnTo, "/"))}`),
     resetUrl: getPortalUrl(input.org, "/forgot-password")
   });
 }
@@ -129,12 +129,18 @@ export async function setPortalAccountPassword(input: {
   password: string;
   now?: Date;
 }): Promise<AccountWithVersion | null> {
-  const passwordHash = await hashPassword(input.password);
   const now = input.now ?? new Date();
+  const tokenHash = hashOpaqueToken(input.token);
+  const isUsable = (token: { consumedAt: Date | null; expiresAt: Date; orgId: string } | null) =>
+    token !== null && token.consumedAt === null && token.expiresAt > now && token.orgId === input.orgId;
+
+  // Reject unusable links with one indexed read before spending bcrypt work.
+  if (!isUsable(await prisma.portalAccountToken.findUnique({ where: { tokenHash } }))) return null;
+  const passwordHash = await hashPassword(input.password);
 
   return prisma.$transaction(async (tx) => {
-    const token = await tx.portalAccountToken.findUnique({ where: { tokenHash: hashOpaqueToken(input.token) } });
-    if (!token || token.consumedAt !== null || token.expiresAt <= now || token.orgId !== input.orgId) return null;
+    const token = await tx.portalAccountToken.findUnique({ where: { tokenHash } });
+    if (!token || !isUsable(token)) return null;
 
     // Keep the account-before-token write order shared with issuance. The guard
     // rechecks consumption after waiting for an issuer or another password write.

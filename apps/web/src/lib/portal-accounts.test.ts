@@ -306,15 +306,31 @@ describe("portal accounts", () => {
     expect(mocks.portalAccountToken.findUnique.mock.calls[0][0].where).toEqual({ tokenHash: hashOpaqueToken(passwordInput.token) });
   });
 
-  it("rejects invalid tokens inside the password transaction without writing account state", async () => {
+  it("rejects unusable tokens before hashing the password or opening a transaction", async () => {
     for (const row of [null, { ...usableToken(), expiresAt: now }, { ...usableToken(), consumedAt: now },
       { ...usableToken(), orgId: "other-org" }]) {
       mocks.portalAccountToken.findUnique.mockResolvedValue(row);
       await expect(setPortalAccountPassword(passwordInput)).resolves.toBeNull();
     }
+    expect(mocks.hashPassword).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the token inside the password transaction without writing account state", async () => {
+    for (const row of [null, { ...usableToken(), expiresAt: now }, { ...usableToken(), consumedAt: now },
+      { ...usableToken(), orgId: "other-org" }]) {
+      mocks.portalAccountToken.findUnique.mockResolvedValueOnce(usableToken()).mockResolvedValueOnce(row);
+      await expect(setPortalAccountPassword(passwordInput)).resolves.toBeNull();
+    }
     expect(mocks.portalAccountToken.updateMany).not.toHaveBeenCalled();
     expect(mocks.portalAccount.update).not.toHaveBeenCalled();
     expect(mocks.portalSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps account-exists sign-in links on local return paths", async () => {
+    mocks.portalAccount.upsert.mockResolvedValue({ ...account, passwordHash: "stored-hash" });
+    await requestPortalAccountSetup({ ...request, returnTo: "//evil.test" });
+    expect(mocks.getPortalUrl).toHaveBeenCalledWith(org, "/login?returnTo=%2F");
   });
 
   it("sanitizes external return paths in account token links", async () => {

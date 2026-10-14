@@ -20,11 +20,13 @@ const mocks = vi.hoisted(() => ({
   endPortalSession: vi.fn(),
   revokePortalSession: vi.fn(),
   assertAuthActionRateLimit: vi.fn(),
-  getClientIpFromHeaders: vi.fn()
+  getClientIpFromHeaders: vi.fn(),
+  after: vi.fn()
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers, cookies: mocks.cookies }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, unstable_rethrow: mocks.unstable_rethrow }));
+vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("@/lib/portal-request", async (importOriginal) => ({
   ...await importOriginal<typeof PortalRequestModule>(),
   getRequestPortalOrg: mocks.getRequestPortalOrg
@@ -85,6 +87,7 @@ describe("portal auth actions", () => {
     mocks.getClientIpFromHeaders.mockReturnValue("192.0.2.1");
     mocks.authenticatePortalAccount.mockResolvedValue(account);
     mocks.setPortalAccountPassword.mockResolvedValue(account);
+    mocks.after.mockImplementation((task: () => unknown) => task());
     mocks.redirect.mockImplementation((path: string) => {
       throw Object.assign(new Error(`Redirect: ${path}`), { digest: "NEXT_REDIRECT" });
     });
@@ -166,13 +169,36 @@ describe("portal auth actions", () => {
     ]);
   });
 
-  it.each([portalSignIn, portalSignUp, portalRequestPasswordReset])("maps rate limits to inline form state", async (action) => {
+  it.each([
+    ["sign-up", portalSignUp, mocks.requestPortalAccountSetup],
+    ["reset", portalRequestPasswordReset, mocks.requestPortalPasswordReset]
+  ] as const)("defers %s account work until after the response so timing does not reveal account state", async (_name, action, request) => {
+    const scheduled: Array<() => unknown> = [];
+    mocks.after.mockImplementation((task: () => unknown) => { scheduled.push(task); });
+    await expect(action({}, form())).resolves.toEqual({ sent: true });
+    expect(request).not.toHaveBeenCalled();
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0]!();
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("rate-limits password setting by tenant and client IP before any account work", async () => {
+    await portalSetPassword({}, form());
+    expect(mocks.assertAuthActionRateLimit.mock.calls).toEqual([
+      ["portal-set-password", `${org.id}:192.0.2.1`, rateLimitMessage]
+    ]);
+    expect(mocks.assertAuthActionRateLimit.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.setPortalAccountPassword.mock.invocationCallOrder[0]!);
+  });
+
+  it.each([portalSignIn, portalSignUp, portalRequestPasswordReset, portalSetPassword])("maps rate limits to inline form state", async (action) => {
     mocks.assertAuthActionRateLimit.mockRejectedValue(new RateLimitExceededError(rateLimitResult, rateLimitMessage));
     await expect(action({}, form())).resolves.toEqual({ error: rateLimitMessage });
     expect(mocks.startPortalSession).not.toHaveBeenCalled();
     expect(mocks.authenticatePortalAccount).not.toHaveBeenCalled();
     expect(mocks.requestPortalAccountSetup).not.toHaveBeenCalled();
     expect(mocks.requestPortalPasswordReset).not.toHaveBeenCalled();
+    expect(mocks.setPortalAccountPassword).not.toHaveBeenCalled();
   });
 
   it.each([portalSignIn, portalSignUp, portalRequestPasswordReset])("does not continue when rate controls are unavailable", async (action) => {

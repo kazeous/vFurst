@@ -3,6 +3,7 @@
 import { normalizeIdentityEmail } from "@vfurst/auth/core";
 import { headers } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { endPortalSession, startPortalSession } from "@/lib/portal-account";
 import {
@@ -86,7 +87,9 @@ async function portalSignUpInner(formData: FormData): Promise<PortalAuthFormStat
 
   const email = normalizeIdentityEmail(parsed.data);
   await assertPortalAuthRateLimit("portal-signup", org.id, email);
-  await requestPortalAccountSetup({ org, email, returnTo: safeReturnTo(field(formData, "returnTo"), "/") });
+  const returnTo = safeReturnTo(field(formData, "returnTo"), "/");
+  // Run after the response so its timing cannot reveal whether the account exists.
+  after(() => requestPortalAccountSetup({ org, email, returnTo }));
   return { sent: true };
 }
 
@@ -113,7 +116,8 @@ async function portalRequestPasswordResetInner(formData: FormData): Promise<Port
 
   const email = normalizeIdentityEmail(parsed.data);
   await assertPortalAuthRateLimit("portal-reset", org.id, email);
-  await requestPortalPasswordReset({ org, email, returnTo: "/" });
+  // Run after the response so unknown and known emails answer in the same time.
+  after(() => requestPortalPasswordReset({ org, email, returnTo: "/" }));
   return { sent: true };
 }
 
@@ -138,6 +142,10 @@ async function portalSetPasswordInner(formData: FormData): Promise<PortalAuthFor
   const parsed = setPasswordSchema.safeParse({ name: field(formData, "name"), password: field(formData, "password") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
   if (parsed.data.password !== field(formData, "confirmPassword")) return { error: "Passwords do not match." };
+
+  // Password setting hashes with bcrypt, so bound it before any token work.
+  const ip = getClientIpFromHeaders(await headers());
+  await assertAuthActionRateLimit("portal-set-password", `${org.id}:${ip}`, rateLimitMessage);
 
   const account = await setPortalAccountPassword({
     orgId: org.id,

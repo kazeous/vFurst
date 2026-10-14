@@ -25,6 +25,12 @@ export function SetPasswordForm({ token, returnTo, name: initialName, heading }:
     if (state.redirectTo) window.location.replace(state.redirectTo);
   }, [state.redirectTo]);
 
+  // After success the refreshed page sees the token as consumed; show the
+  // outcome instead of the invalid-link state until navigation completes.
+  if (state.redirectTo) {
+    return <Alert variant="success">Password saved. Signing you in…</Alert>;
+  }
+
   if (!heading) {
     return (
       <>
