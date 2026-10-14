@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true
   },
   reactStrictMode: true,
+  async headers() {
+    return [
+      {
+        source: "/set-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }]
+      },
+      {
+        source: "/:orgSlug/set-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }]
+      }
+    ];
+  },
   webpack(config) {
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
