@@ -426,10 +426,10 @@
   - `portalSignUp(prev, formData)`. Fields: `email`, `returnTo`. Returns `{ sent: true }`.
   - `portalRequestPasswordReset(prev, formData)`. Fields: `email`. Returns `{ sent: true }`.
   - `portalSetPassword(prev, formData)`. Fields: `token`, `name`, `password`, `confirmPassword`, `returnTo`.
-  - `portalSignOut(formData: FormData): Promise<void>`. Redirects to `/login`.
+  - `portalSignOut(formData: FormData): Promise<void>`. A plain form action, not used with `useActionState`. It always calls `endPortalSession()`, which is idempotent and touches only this host's cookie. It then redirects to `/login` when `getRequestPortalOrg()` returns an organization, and to `/` otherwise, because `/login` on the central host is the staff page. It never returns an error object.
 
 **Exact copy and rules:**
-- **No tenant host** (`getRequestPortalOrg()` returns `null`) → `{ error: "Open this page from the convention's portal address." }`.
+- **No tenant host** (`getRequestPortalOrg()` returns `null`): the four state-returning actions (`portalSignIn`, `portalSignUp`, `portalRequestPasswordReset`, `portalSetPassword`) return `{ error: "Open this page from the convention's portal address." }`. `portalSignOut` is exempt; see its interface line. *(Clarified 2026-10-14 after the first execution stopped on this.)*
 - **Validation:**
   - `email`: `z.string().trim().email("A valid email is required")`;
   - `name`: `z.string().trim().min(1, "Name is required")`;
@@ -444,7 +444,8 @@
   - success → `startPortalSession`, then redirect as for sign-in.
 
 - [ ] **Step 1: Write the failing tests.**
-  - Each action returns the no-tenant error when `getRequestPortalOrg` returns `null`.
+  - Each of the four state-returning actions returns the no-tenant error when `getRequestPortalOrg` returns `null`.
+  - `portalSignOut` with a tenant organization calls `endPortalSession` and redirects to `/login`. With no tenant host, it still calls `endPortalSession` and redirects to `/`, and it does not throw.
   - Sign-in with bad credentials returns the incorrect-credentials error and does not start a session.
   - Sign-in success calls `startPortalSession` and redirects to `"/"` when `returnTo` is `//evil.test`.
   - Sign-up and reset return `{ sent: true }` for any email, with the same object whatever the account state.
