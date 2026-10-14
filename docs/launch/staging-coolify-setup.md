@@ -52,7 +52,8 @@ backups and a restore drill are a [go-live item](go-live-checklist.md).
    `openssl rand -hex 32`. Enter all `NEXT_PUBLIC_*` values as Build Variables.
    Copy runtime secrets from the old web and worker resources. A new
    `EMAIL_DELIVERY_ENCRYPTION_KEY` is acceptable because the database starts
-   empty.
+   empty. Untick **Available at Buildtime** on every variable that is not
+   `NEXT_PUBLIC_*` (see [Environment](#4-environment)).
 5. Remove `vfurst.reyuugames.com` from `v-furst:staging-web`. On the new
    resource's `web` service set `https://vfurst.reyuugames.com:3000`.
 6. Deploy once by hand. Verify `migrate` exited 0, `worker` and `web` are
@@ -89,6 +90,20 @@ Leave the other services without domains.
 Enter values in the Coolify resource environment. Shared web and worker keys
 must have the same value.
 
+**Build time versus runtime.** Tick **Available at Buildtime** only on the ten
+`NEXT_PUBLIC_*` keys. Every other key, and every secret in particular, is
+**runtime only**. Coolify writes the build-time keys into the build's env file
+and also injects an `ARG` for each of them into every Dockerfile stage. A
+secret left at build time therefore ends up in the image's build metadata, and
+changing any build-time key reruns `npm ci` and the full build.
+`compose.prod.yaml` follows the same rule: only `SOURCE_COMMIT` and
+`NEXT_PUBLIC_*` use `${VAR:?}`, which fails the build when they are missing.
+Runtime keys use `${VAR:-}`. When one of those is missing, the build still
+succeeds and the container refuses to start: PostgreSQL without its password,
+web through `[check-app-env]`, and the worker through
+`WorkerConfigurationError`. `npm run compose:validate` rejects `${VAR:?}` on any
+other key.
+
 **Build variables.** Mark all ten `NEXT_PUBLIC_*` keys as **Build Variable**;
 Next.js inlines them during the image build. The URL and root-domain values
 also reach the web runtime, and `NEXT_PUBLIC_APP_URL` reaches the worker runtime.
@@ -108,7 +123,8 @@ The four public URLs and root-domain key are required; the rest have defaults in
 | `NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE` | Compose default or chosen rate |
 | `NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE` | Compose default or chosen rate |
 
-**Required runtime values.** Enter `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+**Required runtime values.** Compose does not enforce these at build time, so
+check that each one is set before deploying. Enter `POSTGRES_USER`, `POSTGRES_PASSWORD`,
 `POSTGRES_DB`, `AUTH_URL`, `AUTH_SECRET`,
 `EMAIL_DELIVERY_ENCRYPTION_KEY`, `S3_BUCKET_NAME`, `AWS_REGION`,
 `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Use
@@ -183,6 +199,14 @@ do not add a data-loss flag to `sync`.
 
 - **Missing `SOURCE_COMMIT`:** Enable **Include Source Commit in Build** on
   the resource, then redeploy.
+- **Build fails with `required variable … is missing a value`:** A
+  `NEXT_PUBLIC_*` key is missing or is not ticked **Available at Buildtime**.
+  If the named key is not `NEXT_PUBLIC_*` or `SOURCE_COMMIT`,
+  `compose.prod.yaml` is using `${VAR:?}` where it should use `${VAR:-}`. Fix
+  the file, not the Coolify setting.
+- **`postgres` unhealthy right after the first deploy:** `POSTGRES_PASSWORD`,
+  `POSTGRES_USER`, or `POSTGRES_DB` is empty at runtime. Set it, delete the
+  `postgres_data` volume if it was created empty, and redeploy.
 - **`migrate` exited non-zero:** Read the `migrate` container log. If Prisma
   refuses a destructive schema change, review the change and the backup or
   migration procedure; do not add `--accept-data-loss` to `sync`.

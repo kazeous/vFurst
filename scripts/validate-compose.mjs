@@ -32,6 +32,21 @@ export function placeholderEnvironment(source) {
   return environment;
 }
 
+// Coolify builds a Compose resource with only the variables marked "Available
+// at Buildtime", and Compose interpolates the whole file, environment included,
+// before it builds. A runtime-only variable written as ${VAR:?} therefore fails
+// every build, so `:?` is reserved for values the image build itself needs.
+function isBuildTimeVariable(name) {
+  return name === "SOURCE_COMMIT" || name.startsWith("NEXT_PUBLIC_");
+}
+
+export function checkBuildTimeRequirements(source) {
+  const names = new Set(Object.keys(placeholderEnvironment(source)));
+  return [...names]
+    .filter((name) => !isBuildTimeVariable(name))
+    .map((name) => `${name} must not use :? because Coolify interpolates the Compose file with build-time variables only`);
+}
+
 export function parseEnvExampleKeys(source) {
   const keys = new Set();
   for (const match of source.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)) {
@@ -72,6 +87,10 @@ export function main(argv) {
       process.stdout.write(projected);
       return 0;
     }
+
+    const buildTimeErrors = checkBuildTimeRequirements(source);
+    for (const error of buildTimeErrors) process.stderr.write(`${error}\n`);
+    if (buildTimeErrors.length > 0) return 1;
 
     const result = spawnSync("docker", ["compose", "-p", "vfurst-compose-validate", "-f", "-", "config", "--format", "json"], {
       input: projected,

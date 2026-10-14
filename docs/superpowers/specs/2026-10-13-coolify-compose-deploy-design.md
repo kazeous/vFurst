@@ -85,13 +85,18 @@ redis (healthy) ────┼─> migrate (completed successfully) ─> worker
 |---|---|---|
 | Derived | literal | `DATABASE_URL` and `DIRECT_DATABASE_URL` = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public` (each reference in its `:?` form); `REDIS_URL` = `redis://redis:6379` |
 | Fixed | literal | `NODE_ENV=production` (all); web `PORT=3000`, `HOSTNAME=0.0.0.0`, `AUTH_TRUST_HOST=true`; worker `WORKER_HEALTH_PORT=3100` |
-| Required | `${VAR:?Set VAR in Coolify}` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MANAGER_URL`, `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`; `AUTH_URL`, `AUTH_SECRET`; `EMAIL_DELIVERY_ENCRYPTION_KEY`; `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| Build-required | `${VAR:?Set VAR in Coolify}` | `SOURCE_COMMIT`; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MANAGER_URL`, `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_ROOT_DOMAIN` |
+| Runtime-required | `${VAR:-}`; the container refuses to start without it | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`; `AUTH_URL`, `AUTH_SECRET`; `EMAIL_DELIVERY_ENCRYPTION_KEY`; `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 | Tunable | `${VAR:-<default>}`, with the default taken from the app's `.env.example` | `NEXT_PUBLIC_APP_NAME`; `SALES_CONTACT_EMAIL`; `VFURST_DB_CONNECTION_LIMIT`, `VFURST_DB_POOL_TIMEOUT_SECONDS`, `VFURST_DB_CONNECTION_BUDGET`, `VFURST_WEB_REPLICAS` (default **1**, not the example's 6), `VFURST_WORKER_REPLICAS`; `VFURST_RATE_LIMIT_PREFIX` and the five `VFURST_*_RATE_LIMIT_PER_MINUTE`; `CONTROL_PLANE_INVALIDATION_CHANNEL`; `SEPAY_ENV`; `WORKER_STARTUP_TIMEOUT_MS`; the four Sentry sample rates (`NEXT_PUBLIC_SENTRY_*_SAMPLE_RATE`, `SENTRY_TRACES_SAMPLE_RATE`) |
 | Optional | `${VAR:-}` | `S3_ENDPOINT`, `S3_PUBLIC_URL`; `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`; `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_CLIENT_ID`; `SEPAY_WEBHOOK_SECRET`, `SEPAY_API_TOKEN`; `CHECKOUT_TOKEN_SECRET`; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
 | Excluded | absent | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (build-time only, C8); `VFURST_LAUNCH_URL` (an operator-tool input that the runtime does not read) |
 
 - The operator keeps one set of PostgreSQL credentials. `POSTGRES_PASSWORD` must be URL-safe, so the runbook generates it with `openssl rand -hex 32`.
 - The required set is a superset of what `scripts/check-app-env.mjs` and `apps/worker/src/env.ts` require. It also includes the public URLs and `AUTH_URL`, because their `.env.example` defaults point at `localhost` and are wrong in any deployment.
+- **Amended 2026-10-14 after the first Coolify deploy failed.** Coolify builds a Compose resource with an env file that holds only the variables ticked "Available at Buildtime". Compose interpolates the whole file, `environment:` included, before it builds, so a runtime-only `${VAR:?}` failed the build. Coolify also injects an `ARG` for every build-time variable into every Dockerfile stage, so a secret ticked for build time lands in the image's build metadata and invalidates the `npm ci` cache whenever it changes. The rules are therefore:
+  - `:?` is only for `SOURCE_COMMIT` and `NEXT_PUBLIC_*`, and `npm run compose:validate` rejects it anywhere else;
+  - in Coolify, only `NEXT_PUBLIC_*` is ticked "Available at Buildtime";
+  - a missing runtime value fails at container start instead of at build time: PostgreSQL refuses an empty password, web fails `check-app-env`, and the worker raises `WorkerConfigurationError`.
 - A key that appears in both services uses the same class in both.
 
 ## 5. Image build
@@ -282,6 +287,7 @@ Run by the executor:
 | K4 | `migrate` fails on a destructive schema change and staging stays down | Intended fail-closed behavior. 1B.5 uses §7.1 deliberately. |
 | K5 | The repository becomes private and `ubuntu-24.04-arm` stops being free | Out of scope. The job would then need a paid runner or removal. |
 | K6 | `staging-deploy.yml` lingers on `main` and fires failing runs | §7 step 1 comes first in the runbook. |
+| K7 | A runtime value marked `:?`, or a secret ticked for build time, breaks the build or leaks into image metadata | Happened on the first deploy (2026-10-14). Fixed by the §4.3 amendment and the validator rule. |
 
 ## 12. Out of scope
 

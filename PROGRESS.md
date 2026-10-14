@@ -29,6 +29,19 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-14 — Compose build-time variable fix (out-of-phase infrastructure)
+
+- The first manual deployment of the new Coolify Compose resource (`1ea95ea`) failed at build. The error was `required variable POSTGRES_USER is missing a value`. Coolify builds with an env file that holds only the variables ticked "Available at Buildtime", and Compose interpolates the whole file, `environment:` included. The deploy log also showed Coolify injecting an `ARG` for every build-time variable into every Dockerfile stage, including secrets such as `AWS_SECRET_ACCESS_KEY` and `STRIPE_SECRET_KEY`.
+- **Fix:**
+  - `compose.prod.yaml` keeps `${VAR:?}` only for `SOURCE_COMMIT` and the required `NEXT_PUBLIC_*`. The ten runtime-required keys use `${VAR:-}` and fail at container start.
+  - `scripts/validate-compose.mjs` gains `checkBuildTimeRequirements`, which rejects `:?` on any other key; its tests went from **9 to 11**.
+  - The runbook, spec §4.3 and K7, and AGENTS.md now say to tick "Available at Buildtime" only for `NEXT_PUBLIC_*`.
+- **Verification:**
+  - `npm run test:compose` **11/11**; `npm run compose:validate` (web 54, worker 26 keys).
+  - With only build-time variables, `docker compose config` reproduces the Coolify error on the old file and passes on the new one.
+  - The PostgreSQL empty-password fail-closed behavior was not rerun locally, because Docker Desktop was stopped.
+- **Next:** after merge, untick "Available at Buildtime" on every non-`NEXT_PUBLIC_*` variable in Coolify and redeploy.
+
 ### 2026-10-13 — Single Coolify Compose deployment (out-of-phase infrastructure, executed)
 
 - On `chore/coolify-compose-deploy`, added one shared `Dockerfile` with `web`, `worker`, and one-shot `migrate` targets; `compose.prod.yaml` starts PostgreSQL and Redis before the migration, then the two application services from the same source commit. The non-destructive DB `sync` script runs the schema preparation, push, and backfills. The Compose validator enforces the environment contract and generated service configuration. Four web reads now treat empty optional environment values as unset.
