@@ -115,6 +115,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+      start_interval: 2s
     depends_on:
       postgres:
         condition: service_healthy
@@ -183,9 +184,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-}
       AUTH_TRUST_HOST: "true"
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_CONNECT_CLIENT_ID: ${STRIPE_CONNECT_CLIENT_ID:-}
       SEPAY_ENV: ${SEPAY_ENV:-sandbox}
       SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-}
       SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
@@ -204,6 +203,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+      start_interval: 2s
     depends_on:
       postgres:
         condition: service_healthy
