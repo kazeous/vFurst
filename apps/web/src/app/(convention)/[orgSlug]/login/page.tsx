@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { portalSignOut } from "@/actions/portal-auth-actions";
-import { Button } from "@/components/ui/button";
 import { getPortalAccount } from "@/lib/portal-account";
 import { resolvePortalAuthPage } from "@/lib/portal-auth-page";
 import { safeReturnTo } from "@/lib/return-to";
 import { LoginForm } from "./login-form";
+import { SignOutForm } from "./sign-out-form";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +23,7 @@ export default async function PortalLoginPage({ params, searchParams }: {
         {account ? (
           <>
             <p>Signed in as {account.email}</p>
-            <form action={portalSignOut}>
-              <Button type="submit">Sign out</Button>
-            </form>
+            <SignOutForm />
           </>
         ) : (
           <>

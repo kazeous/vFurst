@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
+import { redirect } from "next/navigation";
 import type * as PortalAccountModule from "@/lib/portal-account";
 import type * as PortalRequestModule from "@/lib/portal-request";
 import type * as PortalSessionModule from "@/lib/portal-session";
@@ -111,13 +112,12 @@ describe("portal auth actions", () => {
   });
 
   it.each([[org, "/login"], [null, "/"]] as const)(
-    "always signs out and redirects for organization %j",
+    "always signs out and returns a destination for organization %j",
     async (requestOrg, path) => {
       mocks.getRequestPortalOrg.mockResolvedValue(requestOrg);
-      mocks.redirect.mockReturnValue(undefined);
-      await expect(portalSignOut(new FormData())).resolves.toBeUndefined();
+      await expect(portalSignOut({}, new FormData())).resolves.toEqual({ redirectTo: path });
       expect(mocks.endPortalSession).toHaveBeenCalledExactlyOnceWith();
-      expect(mocks.redirect).toHaveBeenCalledExactlyOnceWith(path);
+      expect(vi.mocked(redirect)).not.toHaveBeenCalled();
       expect(mocks.endPortalSession.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.getRequestPortalOrg.mock.invocationCallOrder[0]!
       );
@@ -134,13 +134,12 @@ describe("portal auth actions", () => {
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
-  it.each(["//evil.test", "/account"])("starts a session and safely redirects sign-in for %s", async (returnTo) => {
+  it.each(["//evil.test", "/register"])("starts a session and returns a safe sign-in destination for %s", async (returnTo) => {
     const target = returnTo === "//evil.test" ? "/" : returnTo;
-    await expect(portalSignIn({}, form({ returnTo }))).rejects.toThrow(`Redirect: ${target}`);
+    await expect(portalSignIn({}, form({ returnTo }))).resolves.toEqual({ redirectTo: target });
     expect(mocks.startPortalSession).toHaveBeenCalledExactlyOnceWith(account);
-    expect(mocks.redirect).toHaveBeenCalledExactlyOnceWith(target);
-    expect(mocks.startPortalSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.redirect.mock.invocationCallOrder[0]!);
-    expect(mocks.unstable_rethrow).toHaveBeenCalledOnce();
+    expect(vi.mocked(redirect)).not.toHaveBeenCalled();
+    expect(mocks.unstable_rethrow).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -210,14 +209,15 @@ describe("portal auth actions", () => {
     expect(mocks.startPortalSession).not.toHaveBeenCalled();
   });
 
-  it("sets the password with host-derived tenant and trimmed name, then signs in safely", async () => {
-    await expect(portalSetPassword({}, form({ returnTo: "//evil.test" }))).rejects.toThrow("Redirect: /");
+  it.each(["//evil.test", "/register"])("sets the password with host-derived tenant and trimmed name, then returns a safe destination for %s", async (returnTo) => {
+    const target = returnTo === "//evil.test" ? "/" : returnTo;
+    await expect(portalSetPassword({}, form({ returnTo }))).resolves.toEqual({ redirectTo: target });
     expect(mocks.setPortalAccountPassword).toHaveBeenCalledExactlyOnceWith({
       orgId: org.id, token: "setup-token", name: "User", password: "password123"
     });
     expect(mocks.startPortalSession).toHaveBeenCalledExactlyOnceWith(account);
-    expect(mocks.redirect).toHaveBeenCalledExactlyOnceWith("/");
-    expect(mocks.unstable_rethrow).toHaveBeenCalledOnce();
+    expect(vi.mocked(redirect)).not.toHaveBeenCalled();
+    expect(mocks.unstable_rethrow).not.toHaveBeenCalled();
   });
 
   it("rethrows framework control flow before expected-error mapping", async () => {

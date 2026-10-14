@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { portalSignUp, type PortalAuthFormState } from "@/actions/portal-auth-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,10 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
   const [state, formAction, pending] = useActionState(portalSignUp, initialState);
   const [email, setEmail] = useState("");
 
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
+
   return (
     <form action={formAction} className="vf-form">
       <input type="hidden" name="returnTo" value={returnTo} />
@@ -21,7 +25,7 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
       </FormLayout>
       {state.error ? <Alert variant="error">{state.error}</Alert> : null}
       {state.sent ? <Alert variant="success">Check your email. If this address can be used here, we sent a link that expires in one hour.</Alert> : null}
-      <Button type="submit" variant="primary" disabled={pending}>Create account</Button>
+      <Button type="submit" variant="primary" disabled={pending || Boolean(state.redirectTo)}>Create account</Button>
     </form>
   );
 }

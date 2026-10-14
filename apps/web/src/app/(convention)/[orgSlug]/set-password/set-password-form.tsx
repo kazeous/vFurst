@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { portalSetPassword, type PortalAuthFormState } from "@/actions/portal-auth-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ export function SetPasswordForm({ token, returnTo, name: initialName }: { token:
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
+
   return (
     <form action={formAction} className="vf-form">
       <input type="hidden" name="token" value={token} />
@@ -25,7 +29,7 @@ export function SetPasswordForm({ token, returnTo, name: initialName }: { token:
         <TextInput label="Confirm password" type="password" htmlName="confirmPassword" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={setConfirmPassword} isRequired />
       </FormLayout>
       {state.error ? <Alert variant="error">{state.error}</Alert> : null}
-      <Button type="submit" variant="primary" disabled={pending}>Save password</Button>
+      <Button type="submit" variant="primary" disabled={pending || Boolean(state.redirectTo)}>Save password</Button>
     </form>
   );
 }

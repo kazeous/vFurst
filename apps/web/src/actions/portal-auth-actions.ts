@@ -2,7 +2,7 @@
 
 import { normalizeIdentityEmail } from "@vfurst/auth/core";
 import { headers } from "next/headers";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { endPortalSession, startPortalSession } from "@/lib/portal-account";
 import {
@@ -16,7 +16,7 @@ import { publicActionErrorMessage } from "@/lib/public-action-error";
 import { assertAuthActionRateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { safeReturnTo } from "@/lib/return-to";
 
-export type PortalAuthFormState = { error?: string; sent?: boolean };
+export type PortalAuthFormState = { error?: string; sent?: boolean; redirectTo?: string };
 
 const noTenantError = "Open this page from the convention's portal address.";
 const invalidLinkError = "This link is invalid, expired, or has already been used.";
@@ -63,7 +63,7 @@ async function portalSignInInner(formData: FormData): Promise<PortalAuthFormStat
   if (!account) return { error: "Email or password is incorrect." };
 
   await startPortalSession(account);
-  redirect(safeReturnTo(field(formData, "returnTo"), "/"));
+  return { redirectTo: safeReturnTo(field(formData, "returnTo"), "/") };
 }
 
 export async function portalSignUp(_previousState: PortalAuthFormState, formData: FormData): Promise<PortalAuthFormState> {
@@ -148,12 +148,12 @@ async function portalSetPasswordInner(formData: FormData): Promise<PortalAuthFor
   if (!account) return { error: invalidLinkError };
 
   await startPortalSession(account);
-  redirect(safeReturnTo(field(formData, "returnTo"), "/"));
+  return { redirectTo: safeReturnTo(field(formData, "returnTo"), "/") };
 }
 
-export async function portalSignOut(formData: FormData): Promise<void> {
+export async function portalSignOut(_previousState: PortalAuthFormState, formData: FormData): Promise<PortalAuthFormState> {
   void formData;
   await endPortalSession();
   const org = await getRequestPortalOrg();
-  redirect(org ? "/login" : "/");
+  return { redirectTo: org ? "/login" : "/" };
 }

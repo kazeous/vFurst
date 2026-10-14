@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { portalRequestPasswordReset, type PortalAuthFormState } from "@/actions/portal-auth-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,10 @@ export function ForgotPasswordForm() {
   const [state, formAction, pending] = useActionState(portalRequestPasswordReset, initialState);
   const [email, setEmail] = useState("");
 
+  useEffect(() => {
+    if (state.redirectTo) window.location.replace(state.redirectTo);
+  }, [state.redirectTo]);
+
   return (
     <form action={formAction} className="vf-form">
       <FormLayout>
@@ -20,7 +24,7 @@ export function ForgotPasswordForm() {
       </FormLayout>
       {state.error ? <Alert variant="error">{state.error}</Alert> : null}
       {state.sent ? <Alert variant="success">Check your email. If this address can be used here, we sent a link that expires in one hour.</Alert> : null}
-      <Button type="submit" variant="primary" disabled={pending}>Send link</Button>
+      <Button type="submit" variant="primary" disabled={pending || Boolean(state.redirectTo)}>Send link</Button>
     </form>
   );
 }
