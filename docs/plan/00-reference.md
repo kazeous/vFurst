@@ -122,7 +122,7 @@ Every phase builds and verifies against the local stack — no cloud accounts un
 
 Stripe uses test mode + CLI webhook forwarding; SePay uses its Sandbox with HMAC-signed webhooks. Cloud migration must be an env-var change, not a code branch — if a phase needs "local vs cloud" branching, flag it in `PROGRESS.md`.
 
-**Environment files:** each runtime owns its env file; the repo-root `.env.local` is the editable source and `scripts/sync-app-env.mjs` derives the per-app files. The full ownership table, port map (web 3000; split 3200/3201 behind edge 3100), and sync/check commands live in `AGENTS.md` — that section is authoritative.
+**Environment files:** each runtime owns its env file; the repo-root `.env.local` is the editable source and `scripts/sync-app-env.mjs` derives the per-app files. The full ownership table, web port 3000 contract, and sync/check commands live in `AGENTS.md` — that section is authoritative.
 
 ## Database connection contract
 
@@ -181,6 +181,6 @@ packages/
   db/             # Prisma schema + client + backfill/preparation scripts
   email/          # providers (SES/SMTP) + built-in templates + override renderer
   auth/, contracts/, tenant-context/   # auth helpers (hashing, tokens, invitations, rate limit), queue/control-plane/webhook contracts, host classification
-scripts/          # env sync/check, e2e runner, load runner, readiness, split tooling
+scripts/          # env sync/check, e2e runner, load runner, readiness
 tests/            # Playwright e2e, visual, accessibility, k6
 ```
