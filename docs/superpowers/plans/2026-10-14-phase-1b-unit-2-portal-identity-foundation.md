@@ -718,10 +718,24 @@ Task 9's expectations do not change. Its sign-out, sign-in, and set-password cas
 
   Expected: `200 200 200 200 400`.
 
-- [ ] **Step 3: Run the full production E2E suite.**
+- [ ] **Step 3: Run the full production E2E suite on one worker.** *(Amended 2026-10-14.)*
 
-  Run: `E2E_PRODUCTION=1 npm run test:e2e`
-  Expected: 0 failed, 0 did not run. Record the totals: 118 previous plus the new spec. A known contention flake must pass on an isolated rerun and be reported as such, never silently.
+  The first attempt used Playwright's default of 4 workers and ended 56 passed / 18 failed / 53 not run. Every green full run recorded in `PROGRESS.md` used one worker, and the 4-worker runs are known to show contention: the registration-policy deadlock, and now the invitation write conflict, which passed 1/1 in isolation. Record the 4-worker result as contention evidence; it is not the gate.
+
+  Run: `E2E_PRODUCTION=1 npm run test:e2e -- --workers=1` against a freshly rebuilt web artifact (`BUILD_ID` present).
+  Expected: 0 failed, 0 did not run. Record the totals: the previous 118 plus the new spec.
+  - If it is green, continue to Step 4.
+  - If anything fails or does not run, do **not** fix anything. Continue to Step 3b.
+
+- [ ] **Step 3b (only if Step 3 is red): Classify the failures against the pre-1B.2 baseline.**
+
+  The last full green run (2026-07-29) predates four focused-only changes on `staging`: the credentials-login full-document navigation (#21), the organizer 403 screen (#19), the Sentry filter (#20), and product archive. The suspected `ERR_ABORTED` login-helper races may therefore be pre-existing. Prove it, do not assume it.
+  1. `git worktree add <scratch>/vfurst-e2e-baseline 504b30d` (the 1B.1 tip, which has no 1B.2 code), then run `npm ci` in it.
+  2. Create an isolated database: `docker compose exec -T postgres createdb -U postgres vfurst_e2e_baseline`. In the worktree, set `DATABASE_URL` and `DIRECT_DATABASE_URL` to `postgresql://postgres:postgres@localhost:5432/vfurst_e2e_baseline?schema=public` for every following command.
+  3. In the worktree, run `npm run prestart --workspace @vfurst/web`, then `npm run build --workspace @vfurst/web`, then `E2E_PRODUCTION=1 npm run test:e2e -- --workers=1`.
+  4. Build a table with one row per test that failed or did not run at HEAD, columns: test title | HEAD result | baseline result | classification. A test that also fails at the baseline is **pre-existing**; one that passes only at the baseline is a **1B.2 regression**.
+  5. Clean up: `docker compose exec -T postgres dropdb -U postgres vfurst_e2e_baseline`, then `git worktree remove` (stop its processes first).
+  6. **Stop and report** the table with evidence paths. Fix nothing. Pre-existing failures need a separate decision by the user, and regressions need a plan amendment.
 
 - [ ] **Step 4: Update the documents.**
   - In `docs/plan/phase-1b-identity.md`, set the 1B.2 Plan cell to this file's link.

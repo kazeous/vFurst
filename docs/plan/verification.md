@@ -24,12 +24,12 @@ Expected after Phase 1 unit 1.3: `200 200 200 200 400`.
 ## Full regression gate (before marking any phase complete)
 
 ```bash
-E2E_PRODUCTION=1 npm run test:e2e
+E2E_PRODUCTION=1 npm run test:e2e -- --workers=1
 npm run check:launch
 npm audit --audit-level=moderate
 ```
 
-Record exact counts in `PROGRESS.md`. **Never record a pass claim from a focused run** — a focused-run habit hid a red suite for nine days (TST-01). Because the E2E runner injects env (TST-02), phase completion additionally requires the manual walkthrough below under plain `npm run dev`.
+Run the full suite on **one worker**: every recorded green full run used `--workers=1`, and Playwright's default of 4 workers shows known contention failures (the registration-policy deadlock and the invitation write conflict). Record exact counts in `PROGRESS.md`. **Never record a pass claim from a focused run** — a focused-run habit hid a red suite for nine days (TST-01). Because the E2E runner injects env (TST-02), phase completion additionally requires the manual walkthrough below under plain `npm run dev`.
 
 ## Manual walkthrough (Phase 1B completion and later; plain `npm run dev`, no injected env)
 
