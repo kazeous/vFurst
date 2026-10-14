@@ -11,6 +11,15 @@ npx turbo run build
 
 All must pass. The BullMQ dynamic-dependency build warning is known; any **new** warning blocks. Commit per logical unit (conventional messages); update `PROGRESS.md` before ending the session.
 
+## Every session that touches deployment files
+
+When `Dockerfile`, `compose.prod.yaml`, `.dockerignore`, `scripts/validate-compose.mjs`, or an app `.env.example` changes:
+
+```bash
+npm run test:compose
+npm run compose:validate
+```
+
 ## Every session that touches routes, actions, or hosts
 
 With the local stack up (`docker compose up -d`, `npm run prestart --workspace @vfurst/web`) and the app running:

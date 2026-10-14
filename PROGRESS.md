@@ -29,6 +29,39 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-13 — Single Coolify Compose deployment (out-of-phase infrastructure, executed)
+
+- On `chore/coolify-compose-deploy`, added one shared `Dockerfile` with `web`, `worker`, and one-shot `migrate` targets; `compose.prod.yaml` starts PostgreSQL and Redis before the migration, then the two application services from the same source commit. The non-destructive DB `sync` script runs the schema preparation, push, and backfills. The Compose validator enforces the environment contract and generated service configuration. Four web reads now treat empty optional environment values as unset.
+- CI retains `verify` and adds a native `linux/arm64` production-image build on `ubuntu-24.04-arm`; the retired webhook deployment workflow was removed. The staging Coolify runbook, go-live checklist, agent instructions, and verification guide now describe the single-resource deployment and manual cutover.
+- Task 0 baseline: serial Turbo **37/37** (type-check 9, lint 9, test 9, build 10), **83 files / 541 tests**; boot-config PASS. Task 8: the same serial gates **37/37** (9/9/9/10), **84 files / 545 tests** (web 32 files / 194 tests), boot-config PASS, Compose tests **9/9**, and `compose:validate` passed with **web 54 / worker 26** environment keys. The K3 grep and the first two retired-reference sweeps were empty; the cutover-reference counts were **1/1**. No new warning was found against the baseline, including the exact cached Task 0 web-build output; the existing BullMQ, Next workspace-root, Serwist, and Webpack cache notices remain.
+- Per-suite Task 0 → Task 8 tests: web **190 → 194** (31 → 32 files); worker **41 → 41**; platform-manager **40 → 40**; tenant-web **54 → 54**; auth **67 → 67**; contracts **29 → 29**; db **52 → 52**; email **18 → 18**; tenant-context **50 → 50**.
+- Local cache-only builds of all three targets passed; worker and migrate reused cached `npm ci` and the shared build RUN. The synthetic Compose smoke from source commit `5088369f089444d2f15e04ceee76e22b0f2a7b44` had `migrate` exit 0 and PostgreSQL, Redis, web, and worker healthy. Web `/api/healthz` returned 200 with database and Redis `ok` and that exact commit; worker returned 200 with `ok:true` and five workers; the schema probe returned `t`. A second migration exited 0 on the synchronized schema, an intentional wrong-password migration exited 1, and smoke cleanup removed its project, volumes, three image tags, and scratch files. The image build logged the known BullMQ and Redis `ECONNREFUSED` noise while succeeding. The final actionlint run exited 0 with no findings after its YAML mapping fix.
+- Stop points and resolutions: an initial `npm ci` EPERM succeeded on an identical escalated retry; Task 0 Turbo/SWC filesystem denial stopped the run until the user instructed continuation, then the same gates passed with escalation. The user amended the original runbook/sweep contradiction in `764d2d8` and instructed continuation. Task 7 review's backup-evidence wording was corrected in its amended commit so the manual item is not presented as an automated check.
+- Final review corrected the staging recommendation for `NEXT_PUBLIC_ROOT_DOMAIN` to the canonical `vfurst.reyuugames.com` and clarified that `COPY . .` includes the two frozen split app sources in the shared build stage without building or deploying those apps. These documentation corrections did not change deployment files or runtime behavior.
+- No deployment, push, PR, or external settings were changed; existing non-smoke containers and volumes were untouched. The Phase 1B work remains separate.
+
+**Next:** the user pushes chore/coolify-compose-deploy, opens a pull request into staging, confirms both CI jobs are green, and follows docs/launch/staging-coolify-setup.md §2. Phase 1B continues on feat/identity-replatform with unit 1B.2; merge staging into it at the start of that unit.
+
+### 2026-10-13 — Single Coolify Compose deployment: design and plan (out-of-phase infrastructure; documentation only)
+
+- **What the user wants:**
+  - Replace the four staging Coolify resources (`postgresql-vfur`, `redis-vfur`, `v-furst:staging-web`, `v-furst:staging-worker`) with one Docker Compose resource, so web and worker always run the same commit.
+  - Build-check the production images natively on GitHub's `ubuntu-24.04-arm` runner, with no QEMU and no GHCR packages.
+- **What the user decided:**
+  - The arm64 job builds to the cache only; Coolify still builds on the host.
+  - Coolify deploys through its GitHub App auto-deploy, with no API token or webhook in GitHub.
+  - The CI gate becomes a `staging` ruleset that requires both checks.
+  - Staging data is test data, so the new PostgreSQL and Redis start empty.
+- **Findings:**
+  - The pipeline already stopped using QEMU and pushing to GHCR in PR #7/#8. The two GHCR packages are stale leftovers from PR #5/#6.
+  - The web image never ran the schema chain; the runbook had the operator run it by hand. A one-shot `migrate` service now runs it.
+  - Four web reads mishandle an empty optional value. They are fixed in the plan's Task 1.
+- **Documents on branch `chore/coolify-compose-deploy`** (cut from `origin/staging` at `97bc517`; worktree `.claude/worktrees/coolify-compose-deploy`; not pushed):
+  - spec `docs/superpowers/specs/2026-10-13-coolify-compose-deploy-design.md`;
+  - plan `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md`.
+- **What did not happen:** no code, configuration, workflow or Coolify setting changed, and no gate ran. Phase status is unchanged.
+- **Next session:** execute `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md` (Tasks 0–8) in that worktree. Phase 1B continues separately on `feat/identity-replatform` with unit 1B.2.
+
 ### 2026-10-13 — Dependency advisory remediation on `staging` (user-requested)
 
 - New advisories since the July closeout: the lockfile went from 0 to 21 findings (1 critical in Next.js). Next moved to 15.5.27, nodemailer to 10.1.0, and the sharp, PostCSS, `brace-expansion`, `fast-uri`, and `deepmerge-ts` overrides and vitest were raised; the remainder came from a non-forced `npm audit fix`.

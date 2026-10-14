@@ -5,7 +5,7 @@ const bucketName = process.env.S3_BUCKET_NAME;
 
 export const s3Client = new S3Client({
   region: process.env.AWS_REGION ?? "us-east-1",
-  endpoint: process.env.S3_ENDPOINT,
+  endpoint: process.env.S3_ENDPOINT || undefined,
   forcePathStyle: Boolean(process.env.S3_ENDPOINT),
   credentials:
     process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
