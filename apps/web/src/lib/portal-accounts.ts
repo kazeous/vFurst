@@ -42,18 +42,23 @@ async function issueAccountToken(input: AccountRequest & {
 }): Promise<void> {
   const now = input.now ?? new Date();
   const { token, tokenHash } = createHashedOpaqueToken();
-  await prisma.portalAccountToken.updateMany({
-    where: { portalAccountId: input.portalAccountId, purpose: input.purpose, consumedAt: null },
-    data: { consumedAt: now }
-  });
-  await prisma.portalAccountToken.create({
-    data: {
-      orgId: input.org.id,
-      portalAccountId: input.portalAccountId,
-      purpose: input.purpose,
-      tokenHash,
-      expiresAt: new Date(now.getTime() + PORTAL_ACCOUNT_TOKEN_TTL_MS)
-    }
+  await prisma.$transaction(async (tx) => {
+    // Lock the account before any token write, as password setting does below.
+    // This also serializes issuance when there are no existing token rows.
+    await tx.$queryRaw`SELECT id FROM portal_accounts WHERE id = ${input.portalAccountId}::uuid FOR UPDATE`;
+    await tx.portalAccountToken.updateMany({
+      where: { portalAccountId: input.portalAccountId, purpose: input.purpose, consumedAt: null },
+      data: { consumedAt: now }
+    });
+    await tx.portalAccountToken.create({
+      data: {
+        orgId: input.org.id,
+        portalAccountId: input.portalAccountId,
+        purpose: input.purpose,
+        tokenHash,
+        expiresAt: new Date(now.getTime() + PORTAL_ACCOUNT_TOKEN_TTL_MS)
+      }
+    });
   });
 
   const url = getPortalUrl(
@@ -131,6 +136,9 @@ export async function setPortalAccountPassword(input: {
     const token = await tx.portalAccountToken.findUnique({ where: { tokenHash: hashOpaqueToken(input.token) } });
     if (!token || token.consumedAt !== null || token.expiresAt <= now || token.orgId !== input.orgId) return null;
 
+    // Keep the account-before-token write order shared with issuance. The guard
+    // rechecks consumption after waiting for an issuer or another password write.
+    await tx.$queryRaw`SELECT id FROM portal_accounts WHERE id = ${token.portalAccountId}::uuid FOR UPDATE`;
     const consumed = await tx.portalAccountToken.updateMany({
       where: { id: token.id, consumedAt: null },
       data: { consumedAt: now }

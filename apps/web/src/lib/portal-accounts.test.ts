@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   portalAccountToken: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
   portalSession: { updateMany: vi.fn() },
   transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   sendOrgEmail: vi.fn(),
   getPortalUrl: vi.fn(),
   hashPassword: vi.fn(),
@@ -100,6 +101,7 @@ describe("portal accounts", () => {
     mocks.portalAccountToken.updateMany.mockResolvedValue({ count: 1 });
     mocks.portalSession.updateMany.mockResolvedValue({ count: 1 });
     mocks.transaction.mockImplementation(async (callback) => callback(mocks));
+    mocks.$queryRaw.mockResolvedValue([{ id: account.id }]);
     mocks.sendOrgEmail.mockResolvedValue(undefined);
     mocks.getPortalUrl.mockImplementation((_org, path) => `https://acme.example.com${path}`);
     mocks.hashPassword.mockResolvedValue("new-password-hash");
@@ -175,6 +177,63 @@ describe("portal accounts", () => {
       .toBeLessThan(mocks.portalAccountToken.create.mock.invocationCallOrder[0]);
   });
 
+  it("leaves only one usable link after concurrent requests for the same account and purpose", async () => {
+    // Stateful database double: statement execution yields; FOR UPDATE holds the
+    // account lock until the transaction exits. Assertions inspect stored rows
+    // and resolve delivered links through the public API, not mock call counts.
+    for (const claimed of [false, true]) {
+      const rows: Array<ReturnType<typeof usableToken>> = [];
+      let lockTail = Promise.resolve();
+      mocks.portalAccount.findUnique.mockResolvedValue({ ...account, passwordHash: claimed ? "hash" : null });
+      mocks.portalAccountToken.updateMany.mockImplementation(async ({ where, data }) => {
+        let count = 0;
+        for (const row of rows) {
+          if (row.portalAccountId === where.portalAccountId && row.purpose === where.purpose && row.consumedAt === null) {
+            Object.assign(row, data);
+            count += 1;
+          }
+        }
+        await Promise.resolve();
+        return { count };
+      });
+      mocks.portalAccountToken.create.mockImplementation(async ({ data }) => {
+        const row = { ...usableToken(), ...data, id: `token-${rows.length}` };
+        rows.push(row);
+        return row;
+      });
+      mocks.portalAccountToken.findUnique.mockImplementation(async ({ where }) =>
+        rows.find((row) => row.tokenHash === where.tokenHash) ?? null
+      );
+      mocks.transaction.mockImplementation(async (callback) => {
+        let release: (() => void) | undefined;
+        try {
+          return await callback({
+            ...mocks,
+            $queryRaw: async (query: TemplateStringsArray) => {
+              if (!query.join("").includes("FOR UPDATE")) throw new Error("Unsupported database query");
+              const prior = lockTail;
+              lockTail = new Promise<void>((resolve) => { release = resolve; });
+              await prior;
+              return [{ id: account.id }];
+            }
+          });
+        } finally {
+          release?.();
+        }
+      });
+      mocks.sendOrgEmail.mockClear();
+      const issue = claimed ? requestPortalPasswordReset : requestPortalAccountSetup;
+      await Promise.all([issue(request), issue(request)]);
+      const links = mocks.sendOrgEmail.mock.calls.map((call) => new URL(call[3].setupUrl ?? call[3].resetUrl));
+      const usable = await Promise.all(links.map((link) => findUsablePortalAccountToken({
+        token: link.searchParams.get("token")!, orgId: org.id, now
+      })));
+      expect(rows).toHaveLength(2);
+      expect(rows.filter((row) => row.consumedAt === null)).toHaveLength(1);
+      expect(usable.filter(Boolean)).toHaveLength(1);
+    }
+  });
+
   it("keeps setup responses identical if email delivery rejects and logs no recipient or token", async () => {
     const error = new Error("secret token and recipient in provider error");
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -220,7 +279,7 @@ describe("portal accounts", () => {
     expect(mocks.portalSession.updateMany).toHaveBeenCalledExactlyOnceWith({
       where: { portalAccountId: account.id, revokedAt: null }, data: { revokedAt: now }
     });
-    const ordered = [mocks.portalAccountToken.findUnique.mock.invocationCallOrder[0],
+    const ordered = [mocks.portalAccountToken.findUnique.mock.invocationCallOrder[0], mocks.$queryRaw.mock.invocationCallOrder[0],
       mocks.portalAccountToken.updateMany.mock.invocationCallOrder[0], mocks.portalAccount.update.mock.invocationCallOrder[0],
       mocks.portalAccountToken.updateMany.mock.invocationCallOrder[1], mocks.portalSession.updateMany.mock.invocationCallOrder[0]];
     expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
