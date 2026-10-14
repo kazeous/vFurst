@@ -418,6 +418,11 @@ They replace `requirePublicAccount()` and the direct `auth()` calls in:
 
 An action that operates on a stored resource also asserts `resource.orgId === account.orgId`. The composite foreign keys enforce the same rule underneath.
 
+**Navigation after a server action on a tenant host** *(added 2026-10-14 during unit 1B.2)*:
+- Never call `redirect()` to a relative path from a server action that runs on a tenant host. Next.js renders a server-action redirect target internally, without the middleware host rewrite, so `/login` resolves to the central route.
+- Portal actions instead return a validated same-host `redirectTo`, and the client performs one full-document `window.location.replace`. This is the pattern the 2026-07-29 credentials-login fix already uses.
+- Unit 1B.3 applies the same rule to every attendee action it moves to the portal host.
+
 ### 7.8 Portal account area
 
 `{portal}/account` provides:

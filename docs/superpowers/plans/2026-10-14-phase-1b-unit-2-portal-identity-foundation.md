@@ -421,12 +421,12 @@
   - `startPortalSession(account: { id: string; orgId: string; authVersion: number }): Promise<void>`. Revokes the session in the current cookie if there is one, creates a new session, and sets the cookie with `portalSessionCookieOptions`.
   - `endPortalSession(): Promise<void>`. Revokes the session and deletes the cookie.
 - Produces, in `portal-auth-actions.ts` (`"use server"`):
-  - `type PortalAuthFormState = { error?: string; sent?: boolean }`
+  - `type PortalAuthFormState = { error?: string; sent?: boolean; redirectTo?: string }`. *(Amended 2026-10-14: `redirectTo`; see Task 7B.)*
   - `portalSignIn(prev: PortalAuthFormState, formData: FormData): Promise<PortalAuthFormState>`. Fields: `email`, `password`, `returnTo`.
   - `portalSignUp(prev, formData)`. Fields: `email`, `returnTo`. Returns `{ sent: true }`.
   - `portalRequestPasswordReset(prev, formData)`. Fields: `email`. Returns `{ sent: true }`.
   - `portalSetPassword(prev, formData)`. Fields: `token`, `name`, `password`, `confirmPassword`, `returnTo`.
-  - `portalSignOut(formData: FormData): Promise<void>`. A plain form action, not used with `useActionState`. It always calls `endPortalSession()`, which is idempotent and touches only this host's cookie. It then redirects to `/login` when `getRequestPortalOrg()` returns an organization, and to `/` otherwise, because `/login` on the central host is the staff page. It never returns an error object.
+  - `portalSignOut(prev: PortalAuthFormState, formData: FormData): Promise<PortalAuthFormState>`. *(Amended 2026-10-14, Task 7B.)* It always calls `endPortalSession()` (idempotent; touches only this host's cookie). It returns `{ redirectTo: "/login" }` when `getRequestPortalOrg()` returns an organization, and `{ redirectTo: "/" }` otherwise. It never returns `error`.
 
 **Exact copy and rules:**
 - **No tenant host** (`getRequestPortalOrg()` returns `null`): the four state-returning actions (`portalSignIn`, `portalSignUp`, `portalRequestPasswordReset`, `portalSetPassword`) return `{ error: "Open this page from the convention's portal address." }`. `portalSignOut` is exempt; see its interface line. *(Clarified 2026-10-14 after the first execution stopped on this.)*
@@ -438,16 +438,16 @@
 - **Rate limits:** sign-in, sign-up, and reset each call `assertAuthActionRateLimit` twice, with `${org.id}:${ip}` and `${org.id}:${email}`, using `getClientIpFromHeaders(await headers())`. The message is `"Too many attempts. Please wait a minute and try again."`.
 - **Sign-in:**
   - failure → `{ error: "Email or password is incorrect." }`;
-  - success → `startPortalSession`, then `redirect(safeReturnTo(returnTo, "/"))`.
+  - success → `startPortalSession`, then return `{ redirectTo: safeReturnTo(returnTo, "/") }`. **No portal auth action calls `redirect()`** (Task 7B).
 - **Set-password:**
   - `null` result → `{ error: "This link is invalid, expired, or has already been used." }`;
-  - success → `startPortalSession`, then redirect as for sign-in.
+  - success → `startPortalSession`, then return `{ redirectTo }` as for sign-in.
 
 - [ ] **Step 1: Write the failing tests.**
   - Each of the four state-returning actions returns the no-tenant error when `getRequestPortalOrg` returns `null`.
-  - `portalSignOut` with a tenant organization calls `endPortalSession` and redirects to `/login`. With no tenant host, it still calls `endPortalSession` and redirects to `/`, and it does not throw.
+  - `portalSignOut` with a tenant organization calls `endPortalSession` and returns `{ redirectTo: "/login" }`. With no tenant host, it still calls `endPortalSession` and returns `{ redirectTo: "/" }`.
   - Sign-in with bad credentials returns the incorrect-credentials error and does not start a session.
-  - Sign-in success calls `startPortalSession` and redirects to `"/"` when `returnTo` is `//evil.test`.
+  - Sign-in success calls `startPortalSession` and returns `{ redirectTo: "/" }` when `returnTo` is `//evil.test`. `redirect` from `next/navigation` is never called by any portal auth action.
   - Sign-up and reset return `{ sent: true }` for any email, with the same object whatever the account state.
   - A thrown `RateLimitExceededError` comes back as `{ error: "Too many attempts. Please wait a minute and try again." }`.
   - Set-password mismatch returns `"Passwords do not match."`; a `null` result returns the invalid-link error.
@@ -489,9 +489,9 @@
 
 **Page rules:**
 - Every page sets `export const dynamic = "force-dynamic"`.
-- Forms use `useActionState`, keep entered values, disable submit while pending, and render errors in `<Alert variant="error">`.
+- Forms use `useActionState`, keep entered values, disable submit while pending, and render errors in `<Alert variant="error">`. When `state.redirectTo` is set, the form calls `window.location.replace(state.redirectTo)` in an effect and keeps the submit button disabled (Task 7B).
 - **`/login`:**
-  - Signed in (`getPortalAccount`) → shows `Signed in as {email}` and a `portalSignOut` form with the button "Sign out".
+  - Signed in (`getPortalAccount`) → shows `Signed in as {email}` and a client `sign-out-form.tsx` that submits `portalSignOut` through `useActionState`, with the button "Sign out".
   - Otherwise → labels "Email", "Password"; button "Sign in"; links "Create account" (`/signup?returnTo=…`) and "Forgot password?" (`/forgot-password`).
 - **`/signup`:** label "Email", button "Create account". After `sent`, show `<Alert variant="success">` with "Check your email. If this address can be used here, we sent a link that expires in one hour."
 - **`/forgot-password`:** label "Email", button "Send link", the same success copy.
@@ -557,6 +557,53 @@ The first execution stopped here, correctly. Spec §7.5 originally banned third-
   git add apps/web/next.config.ts
   git commit -m "fix(web): send no-referrer on portal set-password pages"
   ```
+
+---
+
+### Task 7B: Full-document navigation after portal actions (amendment 2026-10-14)
+
+The first execution stopped in Task 9, correctly. Sign-out revoked the session, but `redirect("/login")` inside the server action rendered the **central staff login** on the tenant host. Next.js renders a server-action redirect target internally, without running the middleware host rewrite, so `/login` resolves to `(auth)/login` instead of `(convention)/[orgSlug]/login`. The same applies to the sign-in and set-password redirects to `/`.
+
+The fix follows the pattern of the 2026-07-29 credentials-login fix: actions return a destination, and the browser performs one full-document navigation, which is a real request through the middleware.
+
+**Files:**
+- Modify:
+  - `apps/web/src/actions/portal-auth-actions.ts`
+  - `apps/web/src/actions/portal-auth-actions.test.ts`
+  - the four portal form components from Task 7
+- Create: `apps/web/src/app/(convention)/[orgSlug]/login/sign-out-form.tsx`
+
+**Interfaces:**
+- Produces the amended Task 6 interfaces: `PortalAuthFormState.redirectTo`, and `portalSignOut` returning state. No portal auth action imports or calls `redirect`.
+
+- [ ] **Step 1: Update the action tests.**
+  - Sign-in and set-password success return `{ redirectTo: "/" }` for `returnTo: "//evil.test"` and `{ redirectTo: "/register" }` for `returnTo: "/register"`.
+  - `portalSignOut` returns `{ redirectTo: "/login" }` with a tenant organization and `{ redirectTo: "/" }` without one.
+  - `vi.mocked(redirect)` is never called in any of these cases.
+
+- [ ] **Step 2: Run the tests to verify they fail.**
+
+  Run: `npx vitest run src/actions/portal-auth-actions.test.ts` in `apps/web`
+  Expected: FAIL.
+
+- [ ] **Step 3: Implement.**
+  - Replace every `redirect(...)` in the portal auth actions with the returned `redirectTo`. The value is always the output of `safeReturnTo(…, "/")` or a literal.
+  - Every portal auth form, including the new sign-out form, runs `useEffect(() => { if (state.redirectTo) window.location.replace(state.redirectTo); }, [state.redirectTo])` and keeps its button disabled once `redirectTo` is set.
+  - Keep the existing pending labels.
+
+- [ ] **Step 4: Run the tests and gates.**
+
+  Run: `npx vitest run src/actions/portal-auth-actions.test.ts` (in `apps/web`), then `npx turbo run type-check lint build --filter=@vfurst/web --concurrency=1`
+  Expected: PASS.
+
+- [ ] **Step 5: Commit.**
+
+  ```bash
+  git add apps/web/src/actions/portal-auth-actions* "apps/web/src/app/(convention)/[orgSlug]"
+  git commit -m "fix(web): navigate portal auth results with a full document load"
+  ```
+
+Task 9's expectations do not change. Its sign-out, sign-in, and set-password cases now prove the browser lands on the **portal** page.
 
 ---
 
