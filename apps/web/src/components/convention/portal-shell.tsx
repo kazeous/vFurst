@@ -35,7 +35,7 @@ export function ConventionPortalShell({ org, event, children }: { org: PortalOrg
             <span><strong>{event?.name ?? org.name}</strong><small>Official convention portal</small></span>
           </PortalLink>
           <div className="vf-actions">
-            <Link className="vf-portal-powered" href={getCentralAppUrl("/account")}>Account</Link>
+            <PortalLink className="vf-portal-powered" slug={org.slug} suffix="/account">Account</PortalLink>
             <Link className="vf-portal-powered" href={getCentralAppUrl("/")}>Powered by <strong>vFurst</strong></Link>
           </div>
         </div>

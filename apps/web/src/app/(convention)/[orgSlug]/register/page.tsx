@@ -1,7 +1,7 @@
 import { RegistrationFlow } from "@/app/(convention)/[orgSlug]/register/registration-flow";
 import { RegistrationStatusAlert } from "@/app/(convention)/[orgSlug]/register/registration-status-alert";
-import { PublicAccountGate } from "@/components/account/public-account-gate";
-import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
+import { PortalAccountGate } from "@/components/account/portal-account-gate";
+import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
 import { getScheduledPrice } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -48,16 +48,15 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
   const data = await getPublicRegistrationData(orgSlug);
   if (!data) notFound();
   const { event, org } = data;
-  const centralPath = getCentralPortalPath(org.subdomain, "/register");
 
   return (
     <main className="vf-public-page vf-registration-flow-page">
-      <header className="vf-public-header"><div><p className="vf-label">{org.name}</p><h1>Registration</h1><p className="vf-muted">Choose a ticket, add attendee details, and review before payment.</p></div><Button label="Account" href={getCentralAppUrl("/account")} /></header>
+      <header className="vf-public-header"><div><p className="vf-label">{org.name}</p><h1>Registration</h1><p className="vf-muted">Choose a ticket, add attendee details, and review before payment.</p></div><Button label="Account" href="/account" /></header>
       <Suspense fallback={null}>
         <RegistrationStatusAlert orgSlug={orgSlug} />
       </Suspense>
       {!event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
-        <PublicAccountGate loginHref={getCentralLoginUrl(centralPath)} registerHref={getCentralRegistrationUrl(centralPath)}>
+        <PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")}>
           <RegistrationFlow
             eventId={event.id}
             currency={event.currency}
@@ -70,7 +69,7 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
               addOns: type.addOns.map((addOn) => ({ id: addOn.id, name: addOn.name, price: addOn.price, isComplimentary: addOn.isComplimentary, maxQuantity: addOn.maxQuantity }))
             }))}
           />
-        </PublicAccountGate>
+        </PortalAccountGate>
       )}
     </main>
   );

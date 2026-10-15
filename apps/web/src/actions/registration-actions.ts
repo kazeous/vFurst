@@ -8,15 +8,15 @@ import {
 import { sendOrgEmail } from "@/lib/email";
 import { createRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 import { markOrderPaid } from "@/lib/fulfillment";
-import { getConventionPortalRootForRequest } from "@/lib/convention";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
-import { REGISTRATION_PLATFORM_FEE_CENTS, getBaseUrl, getStripe } from "@/lib/payments/stripe";
+import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
-import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
+import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 import {
   assertRegistrationCapacity,
   getRegistrationApprovalStatus,
@@ -27,7 +27,7 @@ import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function getVoucherRestrictions(value: unknown) {
@@ -56,6 +56,8 @@ async function getValidVoucher(event: { id: string; orgId: string }, code: strin
       }
     }
   });
+
+  if (voucher) assertPortalResourceOrg(voucher.orgId, { id: event.orgId });
 
   if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
     throw new PublicActionError("Voucher code was not found.");
@@ -94,6 +96,9 @@ export async function createRegistration(_previousState: PublicFormState, formDa
 }
 
 async function createRegistrationInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/register");
+  if (isPortalRedirect(context)) return context;
+
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -116,7 +121,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     return { error: parsed.error.issues[0]?.message ?? "Invalid registration." };
   }
 
-  const event = await prisma.event.findFirstOrThrow({
+  const event = await prisma.event.findFirst({
     where: {
       id: parsed.data.eventId,
       status: "PUBLISHED"
@@ -135,11 +140,11 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     }
   });
 
+  if (!event) return { error: "Registration is not available for this event." };
+  assertPortalResourceOrg(event.orgId, context.org);
   assertOrganizationActive(event.org.status);
-  const portalRoot = await getConventionPortalRootForRequest(event.org);
-  const attendee = await requirePublicAccount(`/${event.org.subdomain}/register`);
-  assertPublicAccountEmail(attendee, parsed.data.attendeeEmail);
-  const account = await syncPublicAccountName(attendee, parsed.data.attendeeName);
+  assertPortalAccountEmail(context.account, parsed.data.attendeeEmail);
+  const account = await syncPortalAccountName(context.account, parsed.data.attendeeName);
 
   await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${account.id}`);
 
@@ -165,6 +170,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
   const addOnTotal = selectedAddOns.reduce((sum, addOn) => sum + (addOn.isComplimentary ? 0 : addOn.price) * addOn.quantity, 0);
   const subtotal = registrationPrice + addOnTotal;
   const voucher = await getValidVoucher(event, parsed.data.voucherCode ?? null, type.id);
+  if (voucher) assertPortalResourceOrg(voucher.orgId, context.org);
   const { discount, total } = applyVoucherDiscount(subtotal, voucher);
   const platformFee = total > 0 ? (event.currency === "VND" ? (await getSePaySettings()).registrationFeeVnd : REGISTRATION_PLATFORM_FEE_CENTS) : 0;
 
@@ -181,7 +187,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
   const registration = await runRegistrationPolicyTransaction(async (tx) => {
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
-      userId: account.id,
+      portalAccountId: account.id,
       typeId: type.id
     });
 
@@ -189,7 +195,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       data: {
         orgId: event.orgId,
         eventId: event.id,
-        userId: account.id,
+        portalAccountId: account.id,
         typeId: type.id,
         status: "PENDING",
         approvalStatus: getRegistrationApprovalStatus(event.settings),
@@ -211,7 +217,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     type: "registration.created",
     data: {
       registrationId: registration.id,
-      userId: account.id,
+      portalAccountId: account.id,
       typeId: type.id,
       status: registration.status
     }
@@ -220,10 +226,11 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
   if (parsed.data.checkoutMode === "cart") {
     const buyerId = account.id;
 
-    await prisma.cart.upsert({
+    const cart = await prisma.cart.upsert({
       where: {
-        userId_eventId: {
-          userId: buyerId,
+        orgId: context.org.id,
+        portalAccountId_eventId: {
+          portalAccountId: buyerId,
           eventId: event.id
         }
       },
@@ -260,7 +267,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       create: {
         orgId: event.orgId,
         eventId: event.id,
-        userId: buyerId,
+        portalAccountId: buyerId,
         voucherId: voucher?.id,
         items: {
           create: [
@@ -292,14 +299,14 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       }
     });
 
-    revalidatePath(`${portalRoot}/store`);
-    redirect(`${portalRoot}/store`);
+    assertPortalResourceOrg(cart.orgId, context.org);
+    return { redirectTo: "/store" };
   }
 
   const order = await prisma.order.create({
     data: {
       orgId: event.orgId,
-      userId: account.id,
+      portalAccountId: account.id,
       eventId: event.id,
       total,
       platformFee,
@@ -330,15 +337,15 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
 
   if (total === 0) {
     await markOrderPaid(order.id);
-    redirect(`${portalRoot}/register?success=${registration.id}`);
+    return { redirectTo: `/register?success=${registration.id}` };
   }
 
   const checkout = await prepareOrderCheckout(
     order.id,
-    `/${event.org.subdomain}/register?success=${registration.id}`,
-    `/${event.org.subdomain}/register?cancelled=1`
+    `/register?success=${registration.id}`,
+    "/register?cancelled=1"
   );
-  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
+  return { redirectTo: checkout.checkoutPath };
 }
 
 export async function confirmRegistration(formData: FormData) {
