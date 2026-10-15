@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
+import { loginWithCredentials } from "./support/credentials-login";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -142,13 +143,7 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  await loginWithCredentials(page, email, password);
 }
 
 test("paid product fulfillment creates one weighted PURCHASED entry and is idempotent on webhook replay", async ({ page }) => {

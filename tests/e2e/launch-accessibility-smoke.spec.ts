@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHmac, randomUUID } from "node:crypto";
+import { loginWithCredentials } from "./support/credentials-login";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -165,25 +166,12 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginWithCredentials(page, adminEmail, password);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAsAttendee(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(attendeeEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  await loginWithCredentials(page, attendeeEmail, password, "/account");
 }
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {

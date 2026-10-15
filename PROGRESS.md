@@ -29,6 +29,20 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-15 — Full production E2E green again on `staging` (out-of-phase test repair)
+
+- **Problem.** The full production suite (`E2E_PRODUCTION=1 npm run test:e2e -- --workers=1`) was red on `staging`. The last full green run was 2026-07-29; the 2026-10-14 baseline on pre-identity code was 50 passed / 17 failed / 51 did not run. There were two root causes:
+  1. **Login helpers raced the post-login navigation.** Since PR #21, a successful credentials login ends with `window.location.replace(returnTo)`. Fifteen specs waited only for the `POST /login` response and then called `page.goto`, which the replacement aborted (`net::ERR_ABORTED`).
+  2. **The organizer 403 screen made the ISR registration page dynamic.** `app/forbidden.tsx` (#19) called `auth()`, which reads `headers()`. Next renders the root forbidden boundary into every page, and `/{slug}/register` is the only route generated on demand (`generateStaticParams` returns `[]`, `revalidate = 15`). Its runtime render therefore failed with "Page changed from static to dynamic at runtime … reason: headers", and the page returned 500.
+- **Fix:**
+  - New `tests/e2e/support/credentials-login.ts` exports `loginWithCredentials(page, email, password, returnTo = "/dashboard")`. It returns only after the browser has loaded `returnTo`. The fifteen specs' helpers delegate to it, and attendee-only helpers land on `/account`. No assertion changed.
+  - `app/forbidden.tsx` no longer reads the session on the server. The "Signed in as" line moved into the client component `AccessDeniedIdentity`, which uses `useSession()`. The 15-second ISR contract is unchanged.
+- **Verification:**
+  - Full production E2E on a fresh build, one worker: **118 passed / 0 failed / 0 did not run**.
+  - Before the fix, the focused reproduction failed with the same server error, `public-flow-errors` "a tier that sells out mid-flow…".
+  - `npx turbo run type-check lint test build --concurrency=1`: **37/37** tasks (web unit tests **194/194**; type-check, lint, and test ran fresh for web, and the other tasks replayed from the Turbo cache).
+- **Next:** after this merges, merge `staging` into `feat/identity-replatform`. The Phase 1B gate in unit 1B.5 starts from this green baseline.
+
 ### 2026-10-14 — Compose deployment cutover complete; cleanup (out-of-phase infrastructure)
 
 - **Cutover finished.** The user created the Coolify Compose resource, moved `vfurst.reyuugames.com`, and deployed `07f6f86` successfully. External smoke passed:
