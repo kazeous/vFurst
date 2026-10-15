@@ -1,4 +1,4 @@
-import { getPortalPageContext } from "@/lib/portal-context";
+import { requirePortalPageOrg } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 import { ArrowRight, BedDouble, ShoppingBag, TicketCheck, Users } from "lucide-react";
 import Link from "next/link";
@@ -12,7 +12,7 @@ const experiences = [
 
 export default async function ConventionHomePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
-  const { org } = await getPortalPageContext(orgSlug);
+  const org = await requirePortalPageOrg(orgSlug);
   const event = await prisma.event.findFirst({ where: { orgId: org.id, status: "PUBLISHED" }, orderBy: { startDate: "asc" } });
 
   return (

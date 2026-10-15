@@ -149,6 +149,16 @@ describe("portal accounts", () => {
     expect(mocks.portalAccount.update).not.toHaveBeenCalled();
   });
 
+  it("findOrCreatePortalAccount trims the name it creates and stores a blank name as null", async () => {
+    mocks.portalAccount.upsert.mockResolvedValue({ ...account, name: "Walk In" });
+    await findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "  Walk In  " });
+    expect(mocks.portalAccount.upsert.mock.calls[0]?.[0].create).toEqual({ orgId: org.id, email: "user@example.com", name: "Walk In" });
+    mocks.portalAccount.upsert.mockClear();
+    mocks.portalAccount.upsert.mockResolvedValue({ ...account, name: null });
+    await findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "   " });
+    expect(mocks.portalAccount.upsert.mock.calls[0]?.[0].create.name).toBeNull();
+  });
+
   it("findOrCreatePortalAccount fills a missing name but never overwrites one", async () => {
     mocks.portalAccount.upsert.mockResolvedValue({ ...account, name: null });
     mocks.portalAccount.update.mockResolvedValue({ ...account, name: "Walk In" });

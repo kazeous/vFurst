@@ -52,14 +52,14 @@ export default async function StoreOrdersPage({
       orders: {
         where: status === "ALL" ? undefined : { status: status as Exclude<(typeof statuses)[number], "ALL"> },
         include: {
-          portalAccount: true,
+          portalAccount: { select: { id: true, email: true, name: true } },
           voucher: true,
           items: {
             include: {
               storeProduct: true,
               registration: {
                 include: {
-                  portalAccount: true
+                  portalAccount: { select: { id: true, email: true, name: true } }
                 }
               }
             }

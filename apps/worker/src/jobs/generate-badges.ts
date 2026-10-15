@@ -386,7 +386,7 @@ async function loadBadges(data: GenerateBadgesJob) {
         include: {
           event: true,
           type: true,
-          portalAccount: true
+          portalAccount: { select: { email: true, name: true } }
         }
       },
       template: true

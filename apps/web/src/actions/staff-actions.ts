@@ -181,7 +181,7 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
       department: true,
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -486,7 +486,7 @@ export async function rejectApplication(formData: FormData) {
     include: {
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -536,7 +536,7 @@ export async function bulkReviewApplications(formData: FormData) {
       departmentId: true,
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -648,7 +648,7 @@ export async function massEmailDepartment(formData: FormData) {
               }
             },
             include: {
-              portalAccount: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             }
           }
         }

@@ -4,8 +4,11 @@ import type { PortalUrlOrganization } from "./portal-url";
 export type PortalHostOrganization = PortalUrlOrganization & { id: string };
 export const PORTAL_HOST_CACHE_TTL_MS = 15_000;
 export const PORTAL_HOST_CACHE_MAX_ENTRIES = 1_000;
+// A miss only skips the canonical redirect: the page still does its own
+// lookup. A short miss TTL bounds database work for unknown paths and hosts.
+export const PORTAL_HOST_MISS_TTL_MS = 5_000;
 
-const cache = new Map<string, { org: PortalHostOrganization; expiresAt: number }>();
+const cache = new Map<string, { org: PortalHostOrganization | null; expiresAt: number }>();
 
 export function clearPortalHostCache(): void {
   cache.clear();
@@ -25,9 +28,7 @@ export async function lookupPortalHostOrganization(key: string, now = Date.now()
       : { status: "ACTIVE", OR: [{ subdomain: normalized }, { slug: normalized }] },
     select: { id: true, subdomain: true, customDomain: true, customDomainStatus: true }
   });
-  if (!org) return null;
-
-  cache.set(normalized, { org, expiresAt: now + PORTAL_HOST_CACHE_TTL_MS });
+  cache.set(normalized, { org, expiresAt: now + (org ? PORTAL_HOST_CACHE_TTL_MS : PORTAL_HOST_MISS_TTL_MS) });
   if (cache.size > PORTAL_HOST_CACHE_MAX_ENTRIES) {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);

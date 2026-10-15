@@ -21,7 +21,7 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
         },
         include: {
           badges: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "asc"

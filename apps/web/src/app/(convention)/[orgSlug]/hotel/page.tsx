@@ -54,7 +54,7 @@ export default async function PublicHotelPage({
           },
           include: {
             block: true,
-            portalAccount: true
+            portalAccount: { select: { id: true, email: true, name: true } }
           }
         })
       : null;

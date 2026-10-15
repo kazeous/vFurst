@@ -4,7 +4,6 @@ import type { ActionFormState } from "@/lib/action-form-state";
 import { syncPortalAccountName } from "@/lib/portal-account";
 import { getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { publicActionErrorMessage } from "@/lib/public-action-error";
-import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
@@ -30,7 +29,5 @@ async function updatePortalProfileInner(formData: FormData): Promise<ActionFormS
   if (!name.success) return { error: "Enter your name." };
 
   await syncPortalAccountName(context.account, name.data);
-  revalidatePath("/account");
-  revalidatePath("/account/profile");
   return { success: "Profile saved." };
 }

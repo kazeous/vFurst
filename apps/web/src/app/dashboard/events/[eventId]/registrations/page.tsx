@@ -17,7 +17,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
         },
         include: {
           type: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         }
       }
     }

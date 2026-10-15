@@ -23,7 +23,7 @@ export default async function AccountTransfersPage({ params }: { params: Promise
     include: {
       event: true,
       org: true,
-      sourceRegistration: { include: { type: true, portalAccount: true } }
+      sourceRegistration: { include: { type: true, portalAccount: { select: { id: true, email: true, name: true } } } }
     },
     orderBy: { createdAt: "desc" }
   });

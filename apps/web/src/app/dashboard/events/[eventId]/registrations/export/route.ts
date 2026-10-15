@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     },
     include: {
       type: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     },
     orderBy: {
       createdAt: "asc"

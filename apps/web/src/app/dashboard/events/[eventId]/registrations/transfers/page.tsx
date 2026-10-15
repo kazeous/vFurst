@@ -18,11 +18,11 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         include: {
           transferredTo: {
             include: {
-              portalAccount: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             }
           },
           type: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"
@@ -46,8 +46,8 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
     where: { eventId: event.id, orgId: event.orgId },
     include: {
       requester: true,
-      recipient: true,
-      sourceRegistration: { include: { type: true, portalAccount: true } }
+      recipient: { select: { id: true, email: true, name: true } },
+      sourceRegistration: { include: { type: true, portalAccount: { select: { id: true, email: true, name: true } } } }
     },
     orderBy: { createdAt: "desc" }
   });

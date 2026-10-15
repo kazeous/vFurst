@@ -281,7 +281,7 @@ export async function approveVendor(formData: FormData) {
     include: {
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -336,7 +336,7 @@ export async function bulkReviewVendors(formData: FormData) {
     include: {
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -384,7 +384,7 @@ async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAIT
     include: {
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 

@@ -85,7 +85,7 @@ export async function markOrderPaidWithProvider(
       event: true,
       items: true,
       org: true,
-      portalAccount: true,
+      portalAccount: { select: { id: true, email: true, name: true } },
       voucher: true
     }
   });

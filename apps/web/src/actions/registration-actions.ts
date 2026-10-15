@@ -57,8 +57,6 @@ async function getValidVoucher(event: { id: string; orgId: string }, code: strin
     }
   });
 
-  if (voucher) assertPortalResourceOrg(voucher.orgId, { id: event.orgId });
-
   if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
     throw new PublicActionError("Voucher code was not found.");
   }
@@ -506,7 +504,7 @@ export async function resendRegistrationEmail(formData: FormData) {
     include: {
       event: true,
       org: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 

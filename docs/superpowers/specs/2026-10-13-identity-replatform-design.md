@@ -349,7 +349,7 @@ authentik 2025.10 sends `email_verified: false` by default. The runbook (§11.3)
   - The `/{slug}/register` page is 15-second ISR and cannot read the request host. A page-level redirect would also lose the query, and the central path and the subdomain host render the same ISR entry.
   - Only `GET` and `HEAD` are redirected. Other methods pass through unchanged, and the Server Actions Origin check still applies to them.
   - On the central host, a first path segment is a portal candidate only when it is not a central route. The list of central route segments is pinned by a unit test that reads `apps/web/src/app`.
-  - Organization lookups are cached in process for 15 seconds, the same window as the ISR. Only hits are cached.
+  - Organization lookups are cached in process for 15 seconds, the same window as the ISR. Misses are cached for 5 seconds *(amended 2026-10-15 after the 1B.3 review)*. A miss only skips the redirect, and the page still does its own lookup, so the short miss window bounds database work for unknown paths and hosts.
 
 ### 7.2 Account setup (email-first)
 

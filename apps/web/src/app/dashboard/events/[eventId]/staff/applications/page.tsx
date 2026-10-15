@@ -79,7 +79,7 @@ export default async function StaffApplicationsPage({
             }
           },
           reviewedBy: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"

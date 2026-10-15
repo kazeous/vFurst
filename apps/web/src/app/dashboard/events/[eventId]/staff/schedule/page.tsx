@@ -70,7 +70,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
               status: "APPROVED"
             },
             include: {
-              portalAccount: true,
+              portalAccount: { select: { id: true, email: true, name: true } },
               staffAssignments: true
             },
             orderBy: {
@@ -86,7 +86,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                   }
                 },
                 include: {
-                  portalAccount: true,
+                  portalAccount: { select: { id: true, email: true, name: true } },
                   volunteerApplication: true
                 }
               }

@@ -17,7 +17,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
         include: {
           bookings: {
             include: {
-              portalAccount: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             },
             orderBy: {
               createdAt: "desc"

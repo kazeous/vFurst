@@ -23,7 +23,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
         include: {
           entries: {
             include: {
-              portalAccount: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             }
           }
         },
@@ -32,7 +32,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
         }
       },
       raffleDrawResults: {
-        include: { raffle: true, winner: true },
+        include: { raffle: true, winner: { select: { id: true, email: true, name: true } } },
         orderBy: { drawnAt: "desc" }
       },
       registrationTypes: {

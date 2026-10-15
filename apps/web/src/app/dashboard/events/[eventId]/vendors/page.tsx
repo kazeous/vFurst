@@ -51,7 +51,7 @@ export default async function VendorsPage({
       vendorApplications: {
         where: status === "ALL" ? undefined : { status },
         include: {
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"

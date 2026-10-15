@@ -43,7 +43,7 @@ export default async function AccountTransferDecisionPage({
     include: {
       event: true,
       org: true,
-      sourceRegistration: { include: { type: true, portalAccount: true } }
+      sourceRegistration: { include: { type: true, portalAccount: { select: { id: true, email: true, name: true } } } }
     }
   });
 

@@ -28,14 +28,14 @@ export async function findOrCreatePortalAccount(
   input: { orgId: string; email: string; name: string | null }
 ): Promise<PortalAccountSummary> {
   const email = normalizeIdentityEmail(input.email);
+  const name = input.name?.trim() || null;
   const account = await client.portalAccount.upsert({
     where: { orgId_email: { orgId: input.orgId, email } },
     update: {},
-    create: { orgId: input.orgId, email, name: input.name },
+    create: { orgId: input.orgId, email, name },
     select: { id: true, orgId: true, email: true, name: true }
   });
 
-  const name = input.name?.trim();
   if (account.name !== null || !name) return account;
 
   return client.portalAccount.update({

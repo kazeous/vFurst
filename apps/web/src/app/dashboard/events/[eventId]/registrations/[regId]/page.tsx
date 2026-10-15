@@ -51,7 +51,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         }
       },
       type: true,
-      portalAccount: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 

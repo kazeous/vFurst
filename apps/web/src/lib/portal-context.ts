@@ -8,7 +8,8 @@ import type { PortalAccountSummary } from "@/lib/portal-session";
 
 export type PortalContext = { org: Organization; account: PortalAccountSummary };
 
-async function getPortalPageOrg(orgSlug: string): Promise<Organization> {
+/** The host-checked portal organization, without reading the portal session. */
+export async function requirePortalPageOrg(orgSlug: string): Promise<Organization> {
   const org = await getConventionOrg(orgSlug);
   if (!org) notFound();
 
@@ -21,12 +22,12 @@ async function getPortalPageOrg(orgSlug: string): Promise<Organization> {
 export async function getPortalPageContext(
   orgSlug: string
 ): Promise<{ org: Organization; account: PortalAccountSummary | null }> {
-  const org = await getPortalPageOrg(orgSlug);
+  const org = await requirePortalPageOrg(orgSlug);
   return { org, account: await getPortalAccount(org) };
 }
 
 export async function requirePortalPageContext(orgSlug: string, returnTo: string): Promise<PortalContext> {
-  const org = await getPortalPageOrg(orgSlug);
+  const org = await requirePortalPageOrg(orgSlug);
   return { org, account: await requirePortalAccount(org, returnTo) };
 }
 

@@ -869,7 +869,7 @@ async function drawRaffleWinnerInner(formData: FormData) {
     const raffle = await tx.raffle.findFirstOrThrow({
       where: { id: authorizedRaffle.id, orgId: event.orgId, eventId: event.id },
       include: {
-        entries: { where: { orgId: event.orgId, quantity: { gt: 0 } }, include: { portalAccount: true, orderItem: true } },
+        entries: { where: { orgId: event.orgId, quantity: { gt: 0 } }, include: { portalAccount: { select: { id: true, email: true, name: true } }, orderItem: true } },
         org: true,
         event: true
       }

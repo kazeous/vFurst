@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ findFirst: vi.fn() }));
 vi.mock("@vfurst/db", () => ({ prisma: { organization: { findFirst: mocks.findFirst } } }));
 
-import { clearPortalHostCache, lookupPortalHostOrganization, PORTAL_HOST_CACHE_MAX_ENTRIES, PORTAL_HOST_CACHE_TTL_MS } from "./portal-host-directory";
+import {
+  clearPortalHostCache,
+  lookupPortalHostOrganization,
+  PORTAL_HOST_CACHE_MAX_ENTRIES,
+  PORTAL_HOST_CACHE_TTL_MS,
+  PORTAL_HOST_MISS_TTL_MS
+} from "./portal-host-directory";
 
 const org = { id: "org-acme", subdomain: "acme", customDomain: null, customDomainStatus: null };
 beforeEach(() => {
@@ -22,10 +28,13 @@ describe("portal host directory", () => {
     expect(mocks.findFirst).toHaveBeenCalledTimes(2);
   });
 
-  it("does not cache a miss", async () => {
+  it("caches a miss only for the shorter miss TTL", async () => {
+    expect(PORTAL_HOST_MISS_TTL_MS).toBe(5_000);
     mocks.findFirst.mockResolvedValueOnce(null);
     expect(await lookupPortalHostOrganization("acme", 0)).toBeNull();
-    expect(await lookupPortalHostOrganization("acme", 1)).toEqual(org);
+    expect(await lookupPortalHostOrganization("acme", PORTAL_HOST_MISS_TTL_MS - 1)).toBeNull();
+    expect(mocks.findFirst).toHaveBeenCalledTimes(1);
+    expect(await lookupPortalHostOrganization("acme", PORTAL_HOST_MISS_TTL_MS)).toEqual(org);
     expect(mocks.findFirst).toHaveBeenCalledTimes(2);
   });
 

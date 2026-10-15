@@ -64,7 +64,7 @@ export async function createRegistrationTransferRequest(formData: FormData) {
 
   const emailContext = await prisma.registration.findUniqueOrThrow({
     where: { id: authorizedRegistration.id },
-    include: { event: true, org: true, portalAccount: true }
+    include: { event: true, org: true, portalAccount: { select: { id: true, email: true, name: true } } }
   });
 
   if (normalizeTransferEmail(emailContext.portalAccount.email) === recipientEmail) {
@@ -75,7 +75,7 @@ export async function createRegistrationTransferRequest(formData: FormData) {
   const request = await runRegistrationPolicyTransaction(async (tx) => {
     const source = await tx.registration.findUnique({
       where: { id: authorizedRegistration.id },
-      include: { event: true, portalAccount: true }
+      include: { event: true, portalAccount: { select: { id: true, email: true, name: true } } }
     });
 
     if (
@@ -184,7 +184,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
       include: {
         event: true,
         sourceRegistration: {
-          include: { addOns: true, badges: true, portalAccount: true }
+          include: { addOns: true, badges: true, portalAccount: { select: { id: true, email: true, name: true } } }
         }
       }
     });

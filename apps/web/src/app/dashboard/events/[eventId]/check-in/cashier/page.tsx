@@ -33,7 +33,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
             take: 1
           },
           type: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"

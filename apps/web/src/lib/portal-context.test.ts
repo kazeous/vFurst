@@ -22,7 +22,8 @@ import {
   getPortalActionContext,
   getPortalPageContext,
   isPortalRedirect,
-  requirePortalPageContext
+  requirePortalPageContext,
+  requirePortalPageOrg
 } from "./portal-context";
 
 const org = { id: "org-acme", slug: "acme" };
@@ -57,6 +58,14 @@ describe("portal context", () => {
     await expect(requirePortalPageContext("acme", "/account")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mocks.getPortalAccount).not.toHaveBeenCalled();
     expect(mocks.requirePortalAccount).not.toHaveBeenCalled();
+  });
+
+  it("page organization resolves the host-checked organization without reading the portal session", async () => {
+    await expect(requirePortalPageOrg("acme")).resolves.toEqual(org);
+    expect(mocks.getConventionOrg).toHaveBeenCalledWith("acme");
+    expect(mocks.getPortalAccount).not.toHaveBeenCalled();
+    mocks.getRequestPortalOrg.mockResolvedValueOnce({ id: "other-org" });
+    await expect(requirePortalPageOrg("acme")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
   it("page context returns the organization and a null account for a signed-out visitor", async () => {

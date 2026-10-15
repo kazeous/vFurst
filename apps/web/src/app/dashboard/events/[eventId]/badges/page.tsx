@@ -32,7 +32,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
             }
           },
           type: true,
-          portalAccount: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "asc"

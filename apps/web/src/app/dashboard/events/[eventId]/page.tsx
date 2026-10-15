@@ -31,7 +31,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
         include: {
           registrations: {
             include: {
-              portalAccount: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             },
             orderBy: {
               createdAt: "desc"
@@ -44,7 +44,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
           createdAt: "desc"
         },
         include: {
-          portalAccount: true,
+          portalAccount: { select: { id: true, email: true, name: true } },
           type: true
         }
       }
