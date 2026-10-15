@@ -281,11 +281,11 @@ export async function approveVendor(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: true
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
     eventName: application.event.name,
     businessName: application.businessName,
     status: "APPROVED",
@@ -336,7 +336,7 @@ export async function bulkReviewVendors(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: true
     }
   });
 
@@ -358,7 +358,7 @@ export async function bulkReviewVendors(formData: FormData) {
   });
 
   for (const application of applications) {
-    await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+    await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
       eventName: application.event.name,
       businessName: application.businessName,
       status,
@@ -384,11 +384,11 @@ async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAIT
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: true
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
     eventName: application.event.name,
     businessName: application.businessName,
     status,

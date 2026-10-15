@@ -17,7 +17,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
         include: {
           bookings: {
             include: {
-              user: true
+              portalAccount: true
             },
             orderBy: {
               createdAt: "desc"
@@ -149,7 +149,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                 {block.bookings.map((booking) => (
                   <div key={booking.id} className="vf-list-row">
                     <span>
-                      {booking.user.name ?? booking.user.email} - {booking.roomType}
+                      {booking.portalAccount.name ?? booking.portalAccount.email} - {booking.roomType}
                     </span>
                     <small>
                       {booking.checkIn.toLocaleDateString()} to {booking.checkOut.toLocaleDateString()} - {booking.confirmationCode ?? "Pending"}

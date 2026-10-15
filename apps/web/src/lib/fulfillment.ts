@@ -85,7 +85,7 @@ export async function markOrderPaidWithProvider(
       event: true,
       items: true,
       org: true,
-      user: true,
+      portalAccount: true,
       voucher: true
     }
   });
@@ -337,7 +337,7 @@ export async function markOrderPaidWithProvider(
     await fulfillPurchasedRaffleEntries(tx, {
       orgId: order.orgId,
       eventId: order.eventId,
-      userId: order.userId,
+      portalAccountId: order.portalAccountId,
       orderItemIds: order.items.filter((item) => item.itemType === "PRODUCT").map((item) => item.id)
     });
 
@@ -378,9 +378,9 @@ export async function markOrderPaidWithProvider(
 
   if (registrationItem) {
     try {
-      await sendOrgEmail(order.org, order.user.email, "registration-confirmation", {
+      await sendOrgEmail(order.org, order.portalAccount.email, "registration-confirmation", {
         eventName: order.event.name,
-        attendeeName: order.user.name
+        attendeeName: order.portalAccount.name
       }, order.event.id);
     } catch (error) {
       console.error("Registration confirmation email failed after payment fulfillment.", error);
@@ -389,9 +389,9 @@ export async function markOrderPaidWithProvider(
 
   if (hotelItem) {
     try {
-      await sendOrgEmail(order.org, order.user.email, "hotel-booking-confirmation", {
+      await sendOrgEmail(order.org, order.portalAccount.email, "hotel-booking-confirmation", {
         eventName: order.event.name,
-        attendeeName: order.user.name
+        attendeeName: order.portalAccount.name
       }, order.event.id);
     } catch (error) {
       console.error("Hotel confirmation email failed after payment fulfillment.", error);
@@ -399,9 +399,9 @@ export async function markOrderPaidWithProvider(
   }
 
   try {
-    await sendOrgEmail(order.org, order.user.email, "payment-receipt", {
+    await sendOrgEmail(order.org, order.portalAccount.email, "payment-receipt", {
       eventName: order.event.name,
-      attendeeName: order.user.name,
+      attendeeName: order.portalAccount.name,
       orderTotal: formatCurrency(order.total, order.currency),
       orderCurrency: order.currency
     }, order.event.id);
@@ -415,7 +415,7 @@ export async function markOrderPaidWithProvider(
     type: "order.paid",
     data: {
       orderId: order.id,
-      userId: order.userId,
+      userId: order.portalAccountId,
       total: order.total,
       platformFee: order.platformFee,
       paymentProvider: paymentProvider ?? order.paymentProvider,

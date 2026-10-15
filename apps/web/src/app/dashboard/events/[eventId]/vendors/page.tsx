@@ -51,7 +51,7 @@ export default async function VendorsPage({
       vendorApplications: {
         where: status === "ALL" ? undefined : { status },
         include: {
-          user: true
+          portalAccount: true
         },
         orderBy: {
           createdAt: "desc"
@@ -122,7 +122,7 @@ export default async function VendorsPage({
             <div key={application.id} className="vf-section">
               <div className="vf-page-header">
                 <div>
-                  <p className="vf-label">{application.user.email}</p>
+                  <p className="vf-label">{application.portalAccount.email}</p>
                   <h2>{application.businessName}</h2>
                   <p className="vf-muted">
                     {application.tableType ?? "No table type"} - {formatCurrency(application.boothPrice, event.currency)} - Booth{" "}
@@ -134,11 +134,11 @@ export default async function VendorsPage({
               <dl className="vf-details">
                 <div>
                   <dt>Contact</dt>
-                  <dd>{application.contactName ?? application.user.name ?? application.user.email}</dd>
+                  <dd>{application.contactName ?? application.portalAccount.name ?? application.portalAccount.email}</dd>
                 </div>
                 <div>
                   <dt>Email</dt>
-                  <dd>{application.contactEmail ?? application.user.email}</dd>
+                  <dd>{application.contactEmail ?? application.portalAccount.email}</dd>
                 </div>
                 <div>
                   <dt>Website</dt>

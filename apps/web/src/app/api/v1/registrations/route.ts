@@ -31,7 +31,7 @@ export async function GET(request: Request) {
           }
         },
         type: true,
-        user: {
+        portalAccount: {
           select: {
             id: true,
             email: true,
@@ -49,5 +49,5 @@ export async function GET(request: Request) {
     })
   ]);
 
-  return withRateHeaders(Response.json(paginated(data, total, page, pageSize)), context);
+  return withRateHeaders(Response.json(paginated(data.map(({ portalAccountId, portalAccount, ...record }) => ({ ...record, userId: portalAccountId, user: portalAccount })), total, page, pageSize)), context);
 }

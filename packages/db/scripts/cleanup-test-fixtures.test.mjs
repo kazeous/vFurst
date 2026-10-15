@@ -94,6 +94,10 @@ describe("test fixture cleanup policy", () => {
       },
       deleted: { organizations: 1, users: 2, outboxEvents: 1 }
     });
+    expect(client.user.findMany).toHaveBeenNthCalledWith(2, {
+      where: { OR: [{ orgMemberships: { some: { orgId: { in: [fixtureOrgId] } } } }] },
+      select: { id: true, email: true }
+    });
     expect(tx.organization.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [fixtureOrgId] } } });
     expect(tx.controlPlaneOutboxEvent.count).toHaveBeenCalledWith({
       where: { id: { in: [eventId] }, organizationId: null }

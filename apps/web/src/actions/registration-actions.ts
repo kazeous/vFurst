@@ -506,13 +506,13 @@ export async function resendRegistrationEmail(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: true
     }
   });
 
-  await sendOrgEmail(registration.org, registration.user.email, "registration-confirmation", {
+  await sendOrgEmail(registration.org, registration.portalAccount.email, "registration-confirmation", {
     eventName: registration.event.name,
-    attendeeName: registration.user.name
+    attendeeName: registration.portalAccount.name
   }, registration.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/${authorizedRegistration.id}`);
@@ -525,7 +525,7 @@ export async function upgradeTier(formData: FormData) {
   await runRegistrationPolicyTransaction(async (tx) => {
     const current = await tx.registration.findUnique({
       where: { id: registration.id },
-      select: { id: true, eventId: true, orgId: true, userId: true, status: true }
+      select: { id: true, eventId: true, orgId: true, portalAccountId: true, status: true }
     });
 
     if (!current || current.eventId !== event.id || current.orgId !== event.orgId || ["CANCELLED", "TRANSFERRED"].includes(current.status)) {
@@ -534,7 +534,7 @@ export async function upgradeTier(formData: FormData) {
 
     const targetType = await assertRegistrationCapacity(tx, {
       eventId: event.id,
-      userId: current.userId,
+      portalAccountId: current.portalAccountId,
       typeId,
       excludeRegistrationId: current.id,
       enforceUserLimit: false

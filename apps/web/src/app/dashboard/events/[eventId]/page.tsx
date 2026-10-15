@@ -31,7 +31,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
         include: {
           registrations: {
             include: {
-              user: true
+              portalAccount: true
             },
             orderBy: {
               createdAt: "desc"
@@ -44,7 +44,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
           createdAt: "desc"
         },
         include: {
-          user: true,
+          portalAccount: true,
           type: true
         }
       }
@@ -128,7 +128,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
         <div className="vf-list">
           {event.registrations.slice(0, 8).map((registration) => (
             <a key={registration.id} className="vf-list-row" href={`/dashboard/events/${event.id}/registrations/${registration.id}`}>
-              <span>{registration.user.name ?? registration.user.email}</span>
+              <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
               <small>
                 {registration.type.name} - {registration.status}
               </small>

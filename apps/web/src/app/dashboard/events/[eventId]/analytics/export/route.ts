@@ -42,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
       },
       include: {
         type: true,
-        user: true
+        portalAccount: true
       },
       orderBy: {
         createdAt: "asc"
@@ -88,8 +88,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     ["Registration ID", "Attendee", "Email", "Type", "Status", "Created", "Checked in"],
     ...registrations.map((registration) => [
       registration.id,
-      registration.user.name ?? "",
-      registration.user.email,
+      registration.portalAccount.name ?? "",
+      registration.portalAccount.email,
       registration.type.name,
       registration.status,
       registration.createdAt.toISOString(),

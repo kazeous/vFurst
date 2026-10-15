@@ -33,7 +33,7 @@ export default async function VendorBoothsPage({ params }: { params: Promise<{ e
           status: "APPROVED"
         },
         include: {
-          user: true
+          portalAccount: true
         },
         orderBy: {
           businessName: "asc"

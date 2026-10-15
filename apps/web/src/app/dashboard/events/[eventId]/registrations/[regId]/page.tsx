@@ -51,7 +51,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         }
       },
       type: true,
-      user: true
+      portalAccount: true
     }
   });
 
@@ -67,7 +67,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
       <header className="vf-page-header">
         <div>
           <p className="vf-label">Registration detail</p>
-          <h1>{registration.user.name ?? registration.user.email}</h1>
+          <h1>{registration.portalAccount.name ?? registration.portalAccount.email}</h1>
           <p className="vf-muted">
             {registration.type.name} - payment {registration.status} - approval {registration.approvalStatus}
           </p>
@@ -109,7 +109,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           <h2>Attendee info</h2>
           <dl className="vf-details">
             <dt>Email</dt>
-            <dd>{registration.user.email}</dd>
+            <dd>{registration.portalAccount.email}</dd>
             <dt>Tier</dt>
             <dd>{registration.type.name}</dd>
             <dt>Created</dt>

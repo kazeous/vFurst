@@ -115,7 +115,7 @@ async function getRegistrationTenant(registrationId: string) {
       orgId: true,
       eventId: true,
       typeId: true,
-      userId: true,
+      portalAccountId: true,
       status: true,
       approvalStatus: true,
       type: {
@@ -426,7 +426,7 @@ async function getVolunteerApplicationTenant(applicationId: string) {
       orgId: true,
       eventId: true,
       departmentId: true,
-      userId: true,
+      portalAccountId: true,
       status: true,
       department: {
         select: {
@@ -455,7 +455,7 @@ async function getStaffAssignmentTenant(assignmentId: string) {
       id: true,
       orgId: true,
       roleId: true,
-      userId: true,
+      portalAccountId: true,
       volunteerApplicationId: true,
       status: true,
       role: {
@@ -491,7 +491,7 @@ async function getVendorApplicationTenant(applicationId: string) {
       id: true,
       orgId: true,
       eventId: true,
-      userId: true,
+      portalAccountId: true,
       status: true,
       boothPrice: true,
       boothAssignment: true,

@@ -23,7 +23,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
         include: {
           entries: {
             include: {
-              user: true
+              portalAccount: true
             }
           }
         },
