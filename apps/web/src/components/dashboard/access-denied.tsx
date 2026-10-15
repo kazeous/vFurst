@@ -4,12 +4,9 @@
 import { Button } from "@/components/ui/button";
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { AccessDeniedIdentity } from "./access-denied-identity";
 
-type DashboardAccessDeniedProps = {
-  email?: string | null;
-};
-
-export function DashboardAccessDenied({ email }: DashboardAccessDeniedProps) {
+export function DashboardAccessDenied() {
   return (
     <main className="vf-access-denied" data-testid="dashboard-access-denied">
       <div className="vf-access-denied-shell">
@@ -31,11 +28,7 @@ export function DashboardAccessDenied({ email }: DashboardAccessDeniedProps) {
               <p>
                 You’re signed in, but this account hasn’t been added to an organizer workspace.
               </p>
-              {email ? (
-                <p className="vf-access-denied-identity">
-                  Signed in as <strong>{email}</strong>
-                </p>
-              ) : null}
+              <AccessDeniedIdentity />
             </div>
           </div>
 
