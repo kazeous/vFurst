@@ -1,5 +1,6 @@
 import { acceptRegistrationTransfer, declineRegistrationTransfer } from "@/actions/registration-transfer-actions";
 import { Alert } from "@/components/ui/alert";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import {
@@ -89,16 +90,16 @@ export default async function AccountTransferDecisionPage({
       </dl>
       {status === "PENDING" ? (
         <div className="vf-actions">
-          <form action={acceptRegistrationTransfer}>
+          <ActionStateForm action={acceptRegistrationTransfer}>
             <input type="hidden" name="requestId" value={request.id} />
             <input type="hidden" name="token" value={token} />
             <Button label="Accept transfer" type="submit" variant="primary" />
-          </form>
-          <form action={declineRegistrationTransfer}>
+          </ActionStateForm>
+          <ActionStateForm action={declineRegistrationTransfer}>
             <input type="hidden" name="requestId" value={request.id} />
             <input type="hidden" name="token" value={token} />
             <Button label="Decline transfer" type="submit" variant="destructive" />
-          </form>
+          </ActionStateForm>
         </div>
       ) : (
         <p className="vf-muted">This invitation can no longer be used.</p>

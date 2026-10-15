@@ -99,6 +99,7 @@ export function renderEmailTemplate(template: EmailTemplateName, data: Record<st
       });
     case "registration-transfer":
       return registrationTransferTemplate({
+        organizationName: typeof data.organizationName === "string" ? data.organizationName : "this organization",
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",
         sourceName: typeof data.sourceName === "string" ? data.sourceName : "Another attendee",
         recipientName: typeof data.recipientName === "string" ? data.recipientName : null,

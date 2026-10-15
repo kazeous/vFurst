@@ -18,11 +18,11 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         include: {
           transferredTo: {
             include: {
-              user: true
+              portalAccount: true
             }
           },
           type: true,
-          user: true
+          portalAccount: true
         },
         orderBy: {
           createdAt: "desc"
@@ -47,7 +47,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
     include: {
       requester: true,
       recipient: true,
-      sourceRegistration: { include: { type: true, user: true } }
+      sourceRegistration: { include: { type: true, portalAccount: true } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -70,7 +70,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.user.name ?? registration.user.email} - {registration.type.name}
+                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -90,7 +90,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.user.name ?? registration.user.email} - {registration.type.name}
+                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -114,10 +114,10 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             const status = request.status;
             return (
               <div key={request.id} className="vf-list-row">
-                <span>{request.sourceRegistration.user.name ?? request.sourceRegistration.user.email} → {request.recipientEmail}</span>
+                <span>{request.sourceRegistration.portalAccount.email} → {request.recipientEmail}</span>
                 <small>
                   {request.sourceRegistration.type.name} · {status} · expires {request.expiresAt.toLocaleString()}
-                  {request.recipient ? ` · claimed by ${request.recipient.name ?? request.recipient.email}` : ""}
+                  {request.recipient ? ` · claimed by ${request.recipient.email}` : ""}
                 </small>
                 {request.status === "PENDING" ? (
                   <form action={cancelRegistrationTransferRequest}>
@@ -137,10 +137,10 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         <div className="vf-list">
           {transferred.map((registration) => (
             <div key={registration.id} className="vf-list-row">
-              <span>{registration.user.name ?? registration.user.email}</span>
+              <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
               <small>
                 {registration.type.name} - {registration.status}
-                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.user.name ?? item.user.email).join(", ")}` : ""}
+                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.portalAccount.name ?? item.portalAccount.email).join(", ")}` : ""}
               </small>
             </div>
           ))}

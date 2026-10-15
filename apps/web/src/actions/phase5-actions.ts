@@ -13,6 +13,7 @@ import {
   requireRegistrationTypeAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { findOrCreatePortalAccount } from "@/lib/portal-accounts";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
@@ -653,10 +654,10 @@ export async function adminTransferRegistration(formData: FormData) {
       throw new Error("This registration is no longer eligible for transfer.");
     }
 
-    const attendee = await findOrCreateUser(attendeeEmail, attendeeName, tx);
+    const attendee = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: attendeeEmail, name: attendeeName });
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: current.typeId,
       excludeRegistrationId: current.id
     });
@@ -679,7 +680,7 @@ export async function adminTransferRegistration(formData: FormData) {
       data: {
         orgId: event.orgId,
         eventId: event.id,
-        userId: attendee.id,
+        portalAccountId: attendee.id,
         typeId: current.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
@@ -734,7 +735,6 @@ export async function adminTransferRegistration(formData: FormData) {
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
-  revalidatePath(`/account/registrations/${result.registrationId}`);
 }
 
 export async function createRaffle(formData: FormData) {
