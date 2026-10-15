@@ -110,6 +110,7 @@
 - **Relations that remain on `User`:**
   - `Account`, `Session`, `OrgMember`.
   - `OrgInvitation` (invitedBy / acceptedBy / revokedBy).
+  - `RegistrationTransferRequest.requester` (the staff member who started the transfer; see the §5.3 amendment).
   - `Organization` audit fields (statusUpdatedBy, customDomainVerifiedBy, customDomainActivatedBy).
   - `Department.lead`, `VolunteerApplication.reviewedBy`, `AttendeeNote.author`, `EmailDelivery.replayedBy`.
   - `PaymentProviderConfig.updatedBy`, `PaymentException.resolvedBy`, `OrganizerPayout.createdBy`, `PaymentRefund.createdBy`.
@@ -193,7 +194,9 @@ model PortalAccountToken {
 | `StaffAssignment` | `userId` | `portalAccountId` |
 | `RaffleEntry` | `userId`, `@@index([raffleId, userId])` | `portalAccountId`, `@@index([raffleId, portalAccountId])` |
 | `RaffleDrawResult` | `winnerUserId`, `@@unique([raffleId, winnerUserId])` | `winnerAccountId`, `@@unique([raffleId, winnerAccountId])` |
-| `RegistrationTransferRequest` | `requesterUserId`, `recipientUserId?` | `requesterAccountId`, `recipientAccountId?` (`recipientEmail` stays) |
+| `RegistrationTransferRequest` | `recipientUserId?` | `recipientAccountId?` (`recipientEmail` stays; `requesterUserId` stays on `User`, see below) |
+
+**Amended 2026-10-15 (unit 1B.3 plan):** `RegistrationTransferRequest.requesterUserId` is **not** an attendee column. Staff create every transfer request from the dashboard (`createRegistrationTransferRequest` takes the requester from `requireRegistrationAccess`, and the E2E fixtures seed the organization owner). The column therefore keeps its name and its relation to `User`, like the other staff audit fields in §5.1. Only the recipient moves to `PortalAccount`.
 
 Every relation in the table, plus `PortalSession` and `PortalAccountToken`, is a **composite** foreign key:
 
@@ -342,6 +345,11 @@ authentik 2025.10 sends `email_verified: false` by default. The runbook (§11.3)
   - subdomain URLs → the active custom domain.
 - **Scope:** every attendee interaction happens on the canonical host: sign-in, account, checkout, email links, and payment return URLs. The central host serves no attendee identity.
 - **Local development:** `{slug}.localhost:3000` already resolves to loopback.
+- **Where the redirects run** *(amended 2026-10-15, unit 1B.3 plan)*: in the middleware, switched to the Node.js runtime (stable in Next.js 15.5) so that it can read the organization.
+  - The `/{slug}/register` page is 15-second ISR and cannot read the request host. A page-level redirect would also lose the query, and the central path and the subdomain host render the same ISR entry.
+  - Only `GET` and `HEAD` are redirected. Other methods pass through unchanged, and the Server Actions Origin check still applies to them.
+  - On the central host, a first path segment is a portal candidate only when it is not a central route. The list of central route segments is pinned by a unit test that reads `apps/web/src/app`.
+  - Organization lookups are cached in process for 15 seconds, the same window as the ISR. Only hits are cached.
 
 ### 7.2 Account setup (email-first)
 
@@ -410,7 +418,13 @@ authentik 2025.10 sends `email_verified: false` by default. The runbook (§11.3)
 - `getPortalAccount(org)`: memoized per request; returns `{ id, orgId, email, name } | null`.
 - `requirePortalAccount(org, returnTo)`: redirects to the portal's `/login?returnTo=…` when there is no session.
 
-They replace `requirePublicAccount()` and the direct `auth()` calls in:
+They replace `requirePublicAccount()` and the direct `auth()` calls in the places listed below.
+
+**Static pages and route handlers** *(amended 2026-10-15, unit 1B.3 plan)*:
+- The ISR `/register` page cannot read cookies. Its account gate reads `GET /api/portal/session` instead. That endpoint is private and no-store, and returns only the signed-in account's email and name, following the ISR contract in `docs/plan/00-reference.md`.
+- The middleware sets the tenant headers (`x-vfurst-org-host`, `x-vfurst-org-slug`, `x-vfurst-domain-mode`) on tenant-host `/api/*` requests too, without rewriting them. This lets portal route handlers resolve the organization from the host.
+
+The call sites:
 
 - the attendee actions: registration, cart, voucher, hotel, volunteer, vendor, transfer, account, and the Stripe checkout start;
 - the portal pages;
@@ -441,7 +455,7 @@ The existing `app/account/*` pages move to `(convention)/[orgSlug]/account/*`, a
 ### 7.9 Related flows
 
 - **Cashier walk-in:** `findOrCreatePortalAccount(tx, orgId, email, name)` replaces the creation of a password-less `User`. The person can claim the account later through `/signup`.
-- **Transfers:** only within the tenant. The email to the recipient links to the canonical portal host. Acceptance requires a signed-in portal account whose email equals `recipientEmail`. Because every account with a password has a verified email, this match is trustworthy.
+- **Transfers:** only within the tenant. The email to the recipient links to the canonical portal host. *(Amended 2026-10-15: the link goes straight to `{portal}/account/transfers/{id}?token=…`, and the central `/transfer/[requestId]` landing page is deleted with the central `/account`.)* Acceptance requires a signed-in portal account whose email equals `recipientEmail`. Because every account with a password has a verified email, this match is trustworthy.
 - **Volunteer, vendor, raffle, and hotel records** belong to the `PortalAccount`. Staff-assignment emails go to `portalAccount.email`.
 
 ### 7.10 Organization lifecycle
@@ -474,6 +488,8 @@ The existing `app/account/*` pages move to `(convention)/[orgSlug]/account/*`, a
 
 - New `apps/web/src/lib/portal-url.ts` with `getPortalOrigin(org)` and `getPortalUrl(org, path)`. It is aware of custom domains and built on the existing `buildTenantUrl` and host policy.
 - `getCentralLoginUrl`, `getCentralRegistrationUrl`, and `getCentralPortalPath` are removed. The portal pages' "Account", "Log in", and "Create account" links become portal paths.
+- *(Amended 2026-10-15)* `getConventionPortalRoot()` and `getConventionPortalRootForRequest()` are removed too. After the canonical-host redirects, a portal page always renders on its portal host, so the portal root is always `""`.
+- *(Amended 2026-10-15)* The central sign-in, sign-up, and password-reset pages fall back to `/dashboard` instead of the deleted central `/account`, until 1B.4 replaces them.
 - "Privacy" and "Powered by vFurst" keep pointing to the central host, and so do staff invitation links.
 
 ### 8.3 Email
