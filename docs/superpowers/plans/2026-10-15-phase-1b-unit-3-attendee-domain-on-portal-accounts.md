@@ -80,6 +80,7 @@
 | F2 | Task 10's raffle test had no ownership field to rename | Task 10 Step 1 renames the three raffle-policy inputs and adds one ownership-query test |
 | F3 | The client `PortalAccountGate` would import server modules (`@vfurst/auth/core` pulls in `bcryptjs` and `node:crypto`) | Path helpers move to the pure `lib/portal-paths.ts` (Task 1). The gate takes `loginHref` and `signupHref` props (Task 3). A grep guard runs in Task 3 Step 4 |
 | F4 | Checkout under `(convention)/[orgSlug]` would gain the portal chrome and break its visual baselines | Checkout lives in `app/(checkout)/[orgSlug]/…` with unchanged markup (Task 7). Task 10 Step 3 stops if Next.js rejects the route groups. Task 11 never regenerates baselines |
+| F5 | Task 2 stop: the existing `apps/web/middleware.test.ts` calls `middleware` synchronously (14 type errors after the async change) | Task 2 adapts that file: `async`/`await` plus a mocked lookup that returns `null`, with no assertion changes. The new portal tests stay in `apps/web/src/middleware.test.ts` |
 
 **Decisions recorded in the spec on 2026-10-15** (read them; do not re-derive):
 
@@ -229,7 +230,9 @@
 - Create:
   - `apps/web/src/lib/portal-canonical.ts` (pure);
   - `apps/web/src/lib/portal-host-directory.ts` (cached lookup).
-- Modify: `apps/web/src/middleware.ts`
+- Modify:
+  - `apps/web/src/middleware.ts`;
+  - `apps/web/middleware.test.ts`, the existing Phase 1 host-safety tests (amendment F5). Each test becomes `async` and `await`s `middleware(...)`. The file adds `vi.mock("./src/lib/portal-host-directory", () => ({ lookupPortalHostOrganization: vi.fn().mockResolvedValue(null) }))`, so tenant requests take the unchanged rewrite path. Every existing assertion stays as it is.
 - Test (create):
   - `apps/web/src/lib/portal-canonical.test.ts`
   - `apps/web/src/lib/portal-host-directory.test.ts`
