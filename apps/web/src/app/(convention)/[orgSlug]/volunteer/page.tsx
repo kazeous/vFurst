@@ -1,10 +1,8 @@
 import { VolunteerForm } from "./volunteer-form";
-import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
-import { auth } from "@/lib/auth";
+import { getPortalPageContext } from "@/lib/portal-context";
+import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +34,8 @@ export default async function PublicVolunteerPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string }>;
 }) {
-  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
-  const org = await getConventionOrg(orgSlug);
-
-  if (!org) {
-    notFound();
-  }
-  const portalRoot = await getConventionPortalRootForRequest(org);
-  const centralPath = getCentralPortalPath(org.subdomain, "/volunteer");
+  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const { org, account } = await getPortalPageContext(orgSlug);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -63,8 +55,8 @@ export default async function PublicVolunteerPage({
   });
   const selectedDepartment = event?.departments[0] ?? null;
   const fields = selectedDepartment ? parseSchema(selectedDepartment.formSchema) : [];
-  const successApplication = query.success && session?.user?.id && event
-    ? await prisma.volunteerApplication.findFirst({ where: { id: query.success, orgId: org.id, userId: session.user.id, eventId: event.id } })
+  const successApplication = query.success && account && event
+    ? await prisma.volunteerApplication.findFirst({ where: { id: query.success, orgId: org.id, portalAccountId: account.id, eventId: event.id } })
     : null;
 
   return (
@@ -75,9 +67,9 @@ export default async function PublicVolunteerPage({
           <h1>Volunteer</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`${portalRoot}/register`} />
-          <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
-          <Button label="Account" href={getCentralAppUrl("/account")} />
+          <Button label="Register" href="/register" />
+          <Button label="Vendor apply" href="/vendor-apply" />
+          <Button label="Account" href="/account" />
         </div>
       </header>
 
@@ -98,12 +90,12 @@ export default async function PublicVolunteerPage({
           <h2>No departments yet</h2>
           <p className="vf-muted">Volunteer applications will open once departments are configured.</p>
         </section>
-      ) : !session?.user?.id ? (
+      ) : !account ? (
         <section className="vf-section">
           <p className="vf-label">Public account required</p>
           <h2>Sign in before applying</h2>
-          <p className="vf-muted">Your application status and approved shifts will be saved to your central vFurst account.</p>
-          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
+          <p className="vf-muted">Your application status and approved shifts will be saved to your account for this convention.</p>
+          <div className="vf-actions"><Button label="Log in" href={portalLoginPath("/volunteer")} variant="primary" /><Button label="Create account" href={portalSignupPath("/volunteer")} /></div>
         </section>
       ) : (
         <VolunteerForm
@@ -112,8 +104,8 @@ export default async function PublicVolunteerPage({
           eventDescription={event.description ?? "Tell the team where you can help."}
           departments={event.departments.map((department) => ({ id: department.id, name: department.name }))}
           fields={fields}
-          defaultApplicantName={session.user.name ?? ""}
-          applicantEmail={session.user.email ?? ""}
+          defaultApplicantName={account.name ?? ""}
+          applicantEmail={account.email ?? ""}
         />
       )}
     </main>

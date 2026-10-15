@@ -3,6 +3,7 @@
 import { submitApplication } from "@/actions/vendor-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
 
@@ -28,6 +29,8 @@ export function VendorApplyForm({
   contactEmail: string;
 }) {
   const [state, formAction, isPending] = useActionState(submitApplication, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const busy = isPending || Boolean(state.redirectTo);
   const [contactName, setContactName] = useState(defaultContactName);
   const [businessName, setBusinessName] = useState("");
   const [website, setWebsite] = useState("");
@@ -169,7 +172,7 @@ export function VendorApplyForm({
           </label>
         </div>
       </section>
-      <Button label={isPending ? "Submitting..." : "Submit vendor application"} type="submit" variant="primary" isDisabled={isPending} />
+      <Button label={busy ? "Submitting..." : "Submit vendor application"} type="submit" variant="primary" isDisabled={busy} />
     </form>
   );
 }

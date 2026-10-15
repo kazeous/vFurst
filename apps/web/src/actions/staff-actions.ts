@@ -1,6 +1,7 @@
 "use server";
 
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { getConventionOrg } from "@/lib/convention";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import {
   requireDepartmentAccess,
   requireEventAccess,
@@ -12,9 +13,9 @@ import { sendOrgEmail } from "@/lib/email";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
-import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
+import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const formFieldSchema = z.object({
@@ -353,6 +354,8 @@ export async function submitVolunteerApplication(
 }
 
 async function submitVolunteerApplicationInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/volunteer");
+  if (isPortalRedirect(context)) return context;
   const parsed = z
     .object({
       orgSlug: z.string().trim().min(1),
@@ -376,6 +379,7 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
   if (!org) {
     throw new PublicActionError("Organization not found.");
   }
+  assertPortalResourceOrg(org.id, context.org);
 
   const event = await prisma.event.findFirstOrThrow({
     where: {
@@ -393,6 +397,8 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
       eventId: event.id
     }
   });
+  assertPortalResourceOrg(event.orgId, context.org);
+  assertPortalResourceOrg(department.orgId, context.org);
   const schema = z.array(formFieldSchema).parse(department.formSchema);
   const responses: Record<string, string | boolean> = {};
 
@@ -418,22 +424,20 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
     .filter(Boolean)
     .join(" > ");
 
-  const volunteer = await requirePublicAccount(`/${org.subdomain}/volunteer`);
-  assertPublicAccountEmail(volunteer, parsed.data.applicantEmail);
-  const account = await syncPublicAccountName(volunteer, parsed.data.applicantName);
+  assertPortalAccountEmail(context.account, parsed.data.applicantEmail);
+  const account = await syncPortalAccountName(context.account, parsed.data.applicantName);
   const application = await prisma.volunteerApplication.create({
     data: {
       orgId: org.id,
       eventId: event.id,
       departmentId: department.id,
-      userId: account.id,
+      portalAccountId: account.id,
       formResponses: responses,
       availability: availabilityFromForm(formData)
     }
   });
 
-  const portalRoot = await getConventionPortalRootForRequest(org);
-  redirect(`${portalRoot}/volunteer?success=${application.id}`);
+  return { redirectTo: `/volunteer?success=${application.id}` };
 }
 
 export async function approveApplication(formData: FormData) {

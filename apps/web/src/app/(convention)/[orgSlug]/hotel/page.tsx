@@ -1,11 +1,9 @@
 import { HotelBookingForm } from "./booking-form";
-import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
-import { auth } from "@/lib/auth";
+import { getPortalPageContext } from "@/lib/portal-context";
+import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +14,10 @@ export default async function PublicHotelPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string; cancelled?: string }>;
 }) {
-  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
-  const org = await getConventionOrg(orgSlug);
-
-  if (!org) {
-    notFound();
-  }
-  const portalRoot = await getConventionPortalRootForRequest(org);
-  const centralPath = getCentralPortalPath(org.subdomain, "/hotel");
-  const loginHref = getCentralLoginUrl(centralPath);
-  const registerHref = getCentralRegistrationUrl(centralPath);
+  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const { org, account } = await getPortalPageContext(orgSlug);
+  const loginHref = portalLoginPath("/hotel");
+  const registerHref = portalSignupPath("/hotel");
 
   const event = await prisma.event.findFirst({
     where: {
@@ -48,11 +40,12 @@ export default async function PublicHotelPage({
   });
 
   const successBooking =
-    query.success && session?.user?.id
+    query.success && account
       ? await prisma.hotelBooking.findFirst({
           where: {
             id: query.success,
-            userId: session.user.id,
+            orgId: org.id,
+            portalAccountId: account.id,
             block: {
               event: {
                 orgId: org.id
@@ -61,7 +54,7 @@ export default async function PublicHotelPage({
           },
           include: {
             block: true,
-            user: true
+            portalAccount: true
           }
         })
       : null;
@@ -74,19 +67,19 @@ export default async function PublicHotelPage({
           <h1>Hotel</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`${portalRoot}/register`} />
-          <Button label="Store" href={`${portalRoot}/store`} />
-          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
-          <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
-          <Button label="Account" href={getCentralAppUrl("/account")} />
+          <Button label="Register" href="/register" />
+          <Button label="Store" href="/store" />
+          <Button label="Volunteer" href="/volunteer" />
+          <Button label="Vendor apply" href="/vendor-apply" />
+          <Button label="Account" href="/account" />
         </div>
       </header>
 
-      {!session?.user?.id ? (
+      {!account ? (
         <section className="vf-section">
           <p className="vf-label">Public account required</p>
           <h2>Sign in before booking a room</h2>
-          <p className="vf-muted">Your reservation and confirmation will be saved to your central vFurst account.</p>
+          <p className="vf-muted">Your reservation and confirmation will be saved to your account for this convention.</p>
           <div className="vf-actions"><Button label="Log in" href={loginHref} variant="primary" /><Button label="Create account" href={registerHref} /></div>
         </section>
       ) : null}
@@ -95,7 +88,7 @@ export default async function PublicHotelPage({
         <section className="vf-section">
           <h2>Hotel booking confirmed</h2>
           <p>
-            {successBooking.user.name ?? successBooking.user.email} booked {successBooking.roomType} at{" "}
+            {successBooking.portalAccount.name ?? successBooking.portalAccount.email} booked {successBooking.roomType} at{" "}
             {successBooking.block.hotelName}.
           </p>
         </section>
@@ -118,7 +111,7 @@ export default async function PublicHotelPage({
           {event.hotelBlocks.map((block) => {
             const roomTypes = parseRoomTypes(block.roomTypes);
 
-            return session?.user?.id ? (
+            return account ? (
               <HotelBookingForm
                 key={block.id}
                 eventId={event.id}
@@ -134,8 +127,8 @@ export default async function PublicHotelPage({
                     soldOut: booked >= roomType.totalRooms
                   };
                 })}
-                defaultGuestName={session.user.name ?? ""}
-                guestEmail={session.user.email ?? ""}
+                defaultGuestName={account.name ?? ""}
+                guestEmail={account.email ?? ""}
               />
             ) : null;
           })}
