@@ -213,7 +213,8 @@ test("member role cannot enter owner-admin organization or event-management rout
   await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
   await expect(page.getByText(memberEmail)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open my account" })).toHaveAttribute("href", "/account");
+  await expect(page.getByRole("link", { name: "Return to vFurst" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Open my account" })).toHaveCount(0);
   expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
   expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(403);
   expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);

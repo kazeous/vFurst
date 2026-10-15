@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -107,6 +108,8 @@ test.beforeAll(async () => {
     })
   ]);
 
+  const ownerAAttendee = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: ownerAEmail, name: "Store Owner A", password });
+  const ownerBAttendee = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: ownerBEmail, name: "Store Owner B", password });
   eventAId = orgA.events[0]!.id;
   eventBId = orgB.events[0]!.id;
 
@@ -139,7 +142,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgA.id,
         eventId: eventAId,
-        userId: ownerA.id,
+        portalAccountId: ownerAAttendee.id,
         total: 0,
         platformFee: 0,
         currency: "VND",
@@ -150,7 +153,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgB.id,
         eventId: eventBId,
-        userId: ownerB.id,
+        portalAccountId: ownerBAttendee.id,
         total: 0,
         platformFee: 0,
         currency: "USD",
@@ -166,7 +169,7 @@ test.beforeAll(async () => {
     data: {
       orgId: orgA.id,
       eventId: eventAId,
-      userId: ownerA.id,
+      portalAccountId: ownerAAttendee.id,
       items: {
         create: {
           orgId: orgA.id,
@@ -184,7 +187,7 @@ test.beforeAll(async () => {
     data: {
       orgId: orgA.id,
       eventId: eventBId,
-      userId: ownerA.id,
+      portalAccountId: ownerAAttendee.id,
       items: {
         create: {
           orgId: orgA.id,
@@ -243,7 +246,7 @@ async function navigateAfterRejectedAction(page: Page, pathname: string) {
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate((formElement, name) => {
     const form = formElement as HTMLFormElement;
@@ -265,7 +268,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -346,7 +349,7 @@ test("product catalog actions derive tenant and currency from the stored event o
   await submitAction(page, storePath, archiveCreatedForm, "Archive");
 
   await expect.poll(async () => (await prisma.storeProduct.findUniqueOrThrow({ where: { id: created.id } })).archivedAt).not.toBeNull();
-  await page.goto(`/${orgASlug}/store`);
+  await page.goto(`${portalOrigin(orgASlug)}/store`);
   await expect(page.getByRole("heading", { name: validCreateName })).toHaveCount(0);
 });
 
@@ -381,7 +384,8 @@ test("full and partial refunds reject an order from another tenant", async ({ pa
 
 test("checkout rejects a user-owned cart whose tenant does not match its event", async ({ page }) => {
   await loginAsOwnerA(page);
-  const storePath = `/${orgASlug}/store`;
+  await loginAsAttendee(page, { subdomain: orgASlug }, ownerAEmail, { password });
+  const storePath = `${portalOrigin(orgASlug)}/store`;
   await page.goto(storePath);
   const checkoutForm = page.getByRole("button", { name: "Checkout" }).locator("xpath=ancestor::form");
   await submitTamperedAction(page, storePath, checkoutForm, "Checkout", "cartId", poisonedCartId);

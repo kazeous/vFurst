@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -53,12 +54,9 @@ test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
   const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, attendeeA, attendeeA2, attendeeB] = await Promise.all([
+  const [ownerA, ownerB] = await Promise.all([
     prisma.user.create({ data: { email: ownerAEmail, name: "Badge Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "Badge Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeAEmail, name: attendeeAName } }),
-    prisma.user.create({ data: { email: attendeeA2Email, name: attendeeA2Name } }),
-    prisma.user.create({ data: { email: attendeeBEmail, name: "Badge Attendee B" } })
+    prisma.user.create({ data: { email: ownerBEmail, name: "Badge Owner B", passwordHash } })
   ]);
 
   const [orgA, orgB] = await Promise.all([
@@ -106,6 +104,11 @@ test.beforeAll(async () => {
   ]);
 
   eventAId = orgA.events[0]!.id;
+
+  const attendeeA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: attendeeAEmail, name: attendeeAName, password });
+  const attendeeA2 = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: attendeeA2Email, name: attendeeA2Name, password });
+  const attendeeB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: attendeeBEmail, name: "Badge Attendee B", password });
+
   eventBId = orgB.events[0]!.id;
 
   const [tierA, tierB] = await Promise.all([
@@ -157,13 +160,13 @@ test.beforeAll(async () => {
 
   const [registrationA, registrationA2, registrationB] = await Promise.all([
     prisma.registration.create({
-      data: { orgId: orgA.id, eventId: eventAId, userId: attendeeA.id, typeId: tierA.id, status: "CONFIRMED" }
+      data: { orgId: orgA.id, eventId: eventAId, portalAccountId: attendeeA.id, typeId: tierA.id, status: "CONFIRMED" }
     }),
     prisma.registration.create({
-      data: { orgId: orgA.id, eventId: eventAId, userId: attendeeA2.id, typeId: tierA.id, status: "CONFIRMED" }
+      data: { orgId: orgA.id, eventId: eventAId, portalAccountId: attendeeA2.id, typeId: tierA.id, status: "CONFIRMED" }
     }),
     prisma.registration.create({
-      data: { orgId: orgB.id, eventId: eventBId, userId: attendeeB.id, typeId: tierB.id, status: "CONFIRMED" }
+      data: { orgId: orgB.id, eventId: eventBId, portalAccountId: attendeeB.id, typeId: tierB.id, status: "CONFIRMED" }
     })
   ]);
   registrationAId = registrationA.id;
@@ -359,7 +362,8 @@ test("cashier rejects a foreign tier before creating attendee or commerce record
   await submitTamperedAction(page, pathname, form, "Complete registration", "typeId", tierBId);
 
   expect(await prisma.user.count({ where: { email: rejectedWalkInEmail } })).toBe(0);
-  expect(await prisma.order.count({ where: { eventId: eventAId, user: { email: rejectedWalkInEmail } } })).toBe(0);
+  expect(await prisma.portalAccount.count({ where: { orgId: (await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId, email: rejectedWalkInEmail } })).toBe(0);
+  expect(await prisma.order.count({ where: { eventId: eventAId, portalAccount: { email: rejectedWalkInEmail } } })).toBe(0);
 });
 
 test("cashier records VND card-terminal collection atomically and leaves printing pending", async ({ page }) => {
@@ -377,9 +381,9 @@ test("cashier records VND card-terminal collection atomically and leaves printin
     form.getByRole("button", { name: "Complete registration" }).click()
   ]);
 
-  const attendee = await prisma.user.findUniqueOrThrow({ where: { email: validWalkInEmail } });
+  const attendee = await prisma.portalAccount.findUniqueOrThrow({ where: { orgId_email: { orgId: (await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId, email: validWalkInEmail } } });
   const registration = await prisma.registration.findFirstOrThrow({
-    where: { eventId: eventAId, userId: attendee.id },
+    where: { eventId: eventAId, portalAccountId: attendee.id },
     include: { badges: true, orderItems: { include: { order: true } } }
   });
   const order = registration.orderItems[0]!.order;

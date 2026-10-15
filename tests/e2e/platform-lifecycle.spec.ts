@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
+import { createPortalAccountFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -65,11 +66,12 @@ test.beforeAll(async () => {
     },
     include: { events: true }
   });
+  const ownerAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: ownerEmail, name: "Lifecycle Owner", password });
   await prisma.order.create({
     data: {
       orgId: org.id,
       eventId: org.events[0]!.id,
-      userId: owner.id,
+      portalAccountId: ownerAttendee.id,
       total: 10_000,
       platformFee: 500,
       currency: "USD",

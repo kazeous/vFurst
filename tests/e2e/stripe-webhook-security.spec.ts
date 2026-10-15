@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import Stripe from "stripe";
+import { createPortalAccountFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const signer = new Stripe("sk_test_e2e_webhook_signer");
@@ -11,7 +12,7 @@ const webhookPath = "/api/webhooks/stripe";
 
 let eventId: string;
 let orgId: string;
-let userId: string;
+let portalAccountId: string;
 let unsignedOrderId: string;
 let invalidOrderId: string;
 let checkoutOrderId: string;
@@ -64,7 +65,7 @@ async function createPendingOrder(paymentReference: string) {
     data: {
       orgId,
       eventId,
-      userId,
+      portalAccountId,
       total: 12_500,
       platformFee: 500,
       currency: "USD",
@@ -97,8 +98,6 @@ test.beforeAll(async () => {
     create: { provider: "STRIPE", enabled: false }
   });
 
-  const user = await prisma.user.create({ data: { email: userEmail, name: "Stripe Webhook Attendee" } });
-  userId = user.id;
   const org = await prisma.organization.create({
     data: {
       name: "Stripe Webhook Organization",
@@ -120,6 +119,7 @@ test.beforeAll(async () => {
   });
   orgId = org.id;
   eventId = org.events[0]!.id;
+  portalAccountId = (await createPortalAccountFixture(prisma, { orgId: org.id, email: userEmail, name: "Payment Attendee" })).id;
 
   const [unsignedOrder, invalidOrder, checkoutOrder, intentOrder] = await Promise.all([
     createPendingOrder(`cs_unsigned_${runId}`),
@@ -136,7 +136,7 @@ test.beforeAll(async () => {
     data: {
       orgId,
       eventId,
-      userId,
+      portalAccountId,
       total: 15_000,
       platformFee: 500,
       currency: "USD",
@@ -175,7 +175,7 @@ test.beforeAll(async () => {
     data: {
       orgId,
       eventId,
-      userId,
+      portalAccountId,
       total: 9_000,
       platformFee: 400,
       currency: "USD",
@@ -190,7 +190,6 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { email: userEmail } });
   if (stripeConfigExisted) {
     await prisma.paymentProviderConfig.update({
       where: { provider: "STRIPE" },
@@ -333,7 +332,7 @@ test("a Stripe capture after another provider paid is recorded as a payment exce
     data: {
       orgId,
       eventId,
-      userId,
+      portalAccountId,
       total: 18_000,
       platformFee: 500,
       currency: "USD",

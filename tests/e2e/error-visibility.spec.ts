@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -46,6 +47,7 @@ test.beforeAll(async () => {
     },
     include: { events: true }
   });
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: userEmail, name: "Error Visibility User", password });
   await prisma.registrationType.create({
     data: { orgId: org.id, eventId: org.events[0]!.id, name: "Error Visibility Ticket", price: 0 }
   });
@@ -113,9 +115,9 @@ test("a wrong password stays on /login with an accessible message and no 500", a
 });
 
 test("an invalid voucher renders inline, keeps entered values, and allows retry", async ({ page }) => {
-  await login(page, "/account");
+  await loginAsAttendee(page, { subdomain: orgSlug }, userEmail, { password });
 
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel(/Voucher code/).fill(`INVALID-${runId}`);

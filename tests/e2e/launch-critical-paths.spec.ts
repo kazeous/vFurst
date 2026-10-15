@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
 import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -17,6 +18,7 @@ const checkoutSecret = process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-
 const sepayWebhookSecret = process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret";
 
 let orgId: string;
+let adminAttendeeId: string;
 let eventId: string;
 let memberOnlyOrgId: string;
 let memberOnlyEventId: string;
@@ -37,22 +39,6 @@ test.beforeAll(async () => {
     }
   });
 
-  await prisma.user.create({
-    data: {
-      email: vendorEmail,
-      name: "Launch Vendor",
-      passwordHash: await bcrypt.hash(password, 12)
-    }
-  });
-
-  await prisma.user.create({
-    data: {
-      email: attendeeEmail,
-      name: "Launch Attendee",
-      passwordHash: await bcrypt.hash(password, 12)
-    }
-  });
-
   const org = await prisma.organization.create({
     data: {
       name: "Launch Test Convention",
@@ -68,6 +54,10 @@ test.beforeAll(async () => {
       }
     }
   });
+
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Launch Attendee", password });
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: vendorEmail, name: "Launch Vendor", password });
+  adminAttendeeId = (await createPortalAccountFixture(prisma, { orgId: org.id, email: adminEmail, name: "Launch Admin", password })).id;
 
   const event = await prisma.event.create({
     data: {
@@ -167,7 +157,7 @@ async function login(page: Page) {
 }
 
 async function loginAsPublic(page: Page, email: string) {
-  await loginWithCredentials(page, email, password, "/account");
+  await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
 }
 
 async function ensureConfirmedRegistration() {
@@ -175,24 +165,13 @@ async function ensureConfirmedRegistration() {
     return;
   }
 
-  const attendee = await prisma.user.upsert({
-    where: {
-      email: attendeeEmail
-    },
-    update: {
-      name: "Launch Attendee"
-    },
-    create: {
-      email: attendeeEmail,
-      name: "Launch Attendee"
-    }
-  });
+  const attendee = await prisma.portalAccount.findUniqueOrThrow({ where: { orgId_email: { orgId, email: attendeeEmail } } });
 
   const registration = await prisma.registration.create({
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: registrationTypeId,
       status: "CONFIRMED"
     }
@@ -202,7 +181,7 @@ async function ensureConfirmedRegistration() {
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       total: 0,
       platformFee: 0,
       status: "PAID",
@@ -240,7 +219,7 @@ test("marketing and legal launch pages render", async ({ page }) => {
 
 test("public registration completes and creates a paid zero-dollar order", async ({ page }) => {
   await loginAsPublic(page, attendeeEmail);
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name").fill("Launch Attendee");
@@ -251,7 +230,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   await expect.poll(
     async () => {
       const result = await prisma.registration.findFirst({
-        where: { eventId, user: { email: attendeeEmail } },
+        where: { eventId, portalAccount: { email: attendeeEmail } },
         include: { orderItems: { include: { order: true } } }
       });
       return result?.status === "CONFIRMED" && result.orderItems.some((item) => item.order.status === "PAID");
@@ -262,7 +241,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   const registration = await prisma.registration.findFirstOrThrow({
     where: {
       eventId,
-      user: {
+      portalAccount: {
         email: attendeeEmail
       }
     },
@@ -275,7 +254,7 @@ test("public registration completes and creates a paid zero-dollar order", async
     }
   });
 
-  await page.goto(`/${orgSlug}/register?success=${registration.id}`);
+  await page.goto(`${portalOrigin(orgSlug)}/register?success=${registration.id}`);
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
 
   registrationId = registration.id;
@@ -291,7 +270,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 10_000,
       platformFee: 1_000,
       currency: "USD",
@@ -316,7 +295,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
     }
   });
 
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&returned=stripe`);
+  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&returned=stripe`);
   await expect(page.getByText("Stripe returned you to vFurst. We are confirming the payment before showing the next step.")).toBeVisible();
   await expect(page.getByText("Waiting for Stripe confirmation. This page checks automatically every three seconds.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue active payment" })).toHaveCount(0);
@@ -324,7 +303,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
 
 test("public vendor application submits for organizer review", async ({ page }) => {
   await loginAsPublic(page, vendorEmail);
-  await page.goto(`/${orgSlug}/vendor-apply`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
   await page.getByLabel("Contact name").fill("Launch Vendor");
   await expect(page.getByLabel("Contact email")).toHaveValue(vendorEmail);
   await page.getByLabel("Business name").fill("Launch Vendor Studio");
@@ -343,7 +322,7 @@ test("public vendor application submits for organizer review", async ({ page }) 
     }
   });
 
-  await page.goto(`/${orgSlug}/vendor-apply?success=${application.id}`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply?success=${application.id}`);
   await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
 
   expect(application.status).toBe("PENDING");
@@ -505,7 +484,7 @@ test("a SePay exception atomically replaces a newer provider lock with review", 
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 150000,
       platformFee: 25000,
       currency: "VND",
@@ -626,7 +605,7 @@ test("embedded SePay QR fulfills through a signed webhook after the provider and
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 150000,
       platformFee: 25000,
       currency: "VND",
@@ -637,13 +616,13 @@ test("embedded SePay QR fulfills through a signed webhook after the provider and
     }
   });
 
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}`);
+  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}`);
   await page.getByRole("button", { name: "Show QR" }).click();
   await expect.poll(
     () => prisma.paymentAttempt.count({ where: { orderId: order.id, provider: "SEPAY" } }),
     { timeout: 30_000 }
   ).toBe(1);
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
+  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
   await expect(page.getByRole("heading", { name: "Complete bank transfer" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("img", { name: /SePay QR code/ })).toBeVisible();
   const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });

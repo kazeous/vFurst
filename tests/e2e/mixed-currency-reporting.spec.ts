@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createPortalAccountFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -74,6 +75,7 @@ test.beforeAll(async () => {
     }
   });
 
+  const ownerAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: ownerEmail, name: "Currency Report Owner", password });
   orgId = org.id;
   usdEventId = org.events.find((event) => event.currency === "USD")!.id;
   vndEventId = org.events.find((event) => event.currency === "VND")!.id;
@@ -83,7 +85,7 @@ test.beforeAll(async () => {
       data: {
         orgId,
         eventId: usdEventId,
-        userId: owner.id,
+        portalAccountId: ownerAttendee.id,
         total: 10_000,
         platformFee: 100,
         currency: "USD",
@@ -103,7 +105,7 @@ test.beforeAll(async () => {
       data: {
         orgId,
         eventId: vndEventId,
-        userId: owner.id,
+        portalAccountId: ownerAttendee.id,
         total: 1_000_000,
         platformFee: 10_000,
         currency: "VND",

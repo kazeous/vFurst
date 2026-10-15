@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -13,6 +14,7 @@ const transferToken = `public-flow-transfer-token-${runId}-0123456789abcdef`;
 
 let attendeeId: string;
 let fillerId: string;
+let requesterId: string;
 let orgId: string;
 let eventId: string;
 let raceTierId: string;
@@ -25,12 +27,8 @@ test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
   const passwordHash = await bcrypt.hash(password, 12);
-  const [attendee, filler] = await Promise.all([
-    prisma.user.create({ data: { email: attendeeEmail, name: "Public Flow Attendee", passwordHash } }),
-    prisma.user.create({ data: { email: fillerEmail, name: "Public Flow Filler", passwordHash } })
-  ]);
-  attendeeId = attendee.id;
-  fillerId = filler.id;
+  const filler = await prisma.user.create({ data: { email: fillerEmail, name: "Public Flow Filler", passwordHash } });
+  requesterId = filler.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -54,6 +52,8 @@ test.beforeAll(async () => {
   });
   orgId = org.id;
   eventId = org.events[0]!.id;
+  attendeeId = (await createPortalAccountFixture(prisma, { orgId, email: attendeeEmail, name: "Public Flow Attendee", password })).id;
+  fillerId = (await createPortalAccountFixture(prisma, { orgId, email: fillerEmail, name: "Public Flow Filler", password })).id;
 
   const [raceTier, transferTier] = await Promise.all([
     prisma.registrationType.create({
@@ -88,14 +88,14 @@ test.beforeAll(async () => {
   ]);
 
   const sourceRegistration = await prisma.registration.create({
-    data: { orgId, eventId, userId: filler.id, typeId: transferTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, typeId: transferTierId, status: "CONFIRMED" }
   });
   const transferRequest = await prisma.registrationTransferRequest.create({
     data: {
       orgId,
       eventId,
       sourceRegistrationId: sourceRegistration.id,
-      requesterUserId: filler.id,
+      requesterUserId: requesterId,
       recipientEmail: attendeeEmail,
       status: "PENDING",
       tokenHash: createHash("sha256").update(transferToken).digest("hex"),
@@ -107,29 +107,22 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { id: { in: [attendeeId, fillerId] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [requesterId] } } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page) {
-  await page.goto("/login?returnTo=%2Faccount");
-  await page.getByLabel("Email").fill(attendeeEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.waitForURL((url) => url.pathname.startsWith("/account"));
+  await loginAsAttendee(page, { subdomain: orgSlug }, attendeeEmail, { password });
 }
 
 test("a tier that sells out mid-flow reports the capacity error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await page.locator(".vf-public-tier-list label").filter({ hasText: "Race Ticket" }).click();
 
   await prisma.registration.create({
-    data: { orgId, eventId, userId: fillerId, typeId: raceTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, typeId: raceTierId, status: "CONFIRMED" }
   });
 
   await page.getByRole("button", { name: "Continue" }).click();
@@ -142,7 +135,7 @@ test("a tier that sells out mid-flow reports the capacity error inline", async (
 
 test("raising a cart quantity above stock reports the inventory error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/store`);
+  await page.goto(`${portalOrigin(orgSlug)}/store`);
   await page.getByRole("button", { name: "Add to cart" }).click();
   await expect(page.getByRole("heading", { name: "Cart", exact: true })).toBeVisible();
 
@@ -157,7 +150,7 @@ test("raising a cart quantity above stock reports the inventory error inline", a
 
 test("booking past the hotel cutoff reports the cutoff error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/hotel`);
+  await page.goto(`${portalOrigin(orgSlug)}/hotel`);
   await expect(page.getByRole("heading", { name: "Cutoff Hotel" })).toBeVisible();
   await page.locator('input[name="checkIn"]').fill("2028-06-01");
   await page.locator('input[name="checkOut"]').fill("2028-06-03");
@@ -169,7 +162,7 @@ test("booking past the hotel cutoff reports the cutoff error inline", async ({ p
 
 test("a required volunteer field left blank reports the field error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/volunteer`);
+  await page.goto(`${portalOrigin(orgSlug)}/volunteer`);
   await expect(page.getByRole("heading", { name: "Volunteer application" })).toBeVisible();
   await page.getByLabel("Experience summary").fill(" ");
   await page.getByRole("button", { name: "Submit application" }).click();
@@ -181,7 +174,7 @@ test("a required volunteer field left blank reports the field error inline", asy
 
 test("a too-short vendor product description reports the validation error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/vendor-apply`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
   await expect(page.getByRole("heading", { name: "Apply for dealer space" })).toBeVisible();
   await page.getByLabel("Business name").fill("Public Flow Business");
   await page.getByLabel("Product description").fill("short");
@@ -199,7 +192,7 @@ test("a double-submitted transfer decision shows the refreshed request state, no
 
   try {
     await login(pageA);
-    const decisionUrl = `/account/transfers/${transferRequestId}?token=${encodeURIComponent(transferToken)}`;
+    const decisionUrl = `${portalOrigin(orgSlug)}/account/transfers/${transferRequestId}?token=${encodeURIComponent(transferToken)}`;
     await pageA.goto(decisionUrl);
     await pageB.goto(decisionUrl);
     await expect(pageA.getByRole("button", { name: "Accept transfer" })).toBeVisible();

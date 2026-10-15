@@ -169,18 +169,16 @@ test("platform admin owns domain activation and global payment operations", asyn
   expect(customRegistrationHtml).toContain('href="/register"');
   expect(customRegistrationHtml).not.toContain(`href="/${orgSlug}/register"`);
 
-  const centralRegistrationResponse = await page.request.get(`/${orgSlug}/register`);
-  expect(centralRegistrationResponse.status()).toBe(200);
-  const centralRegistrationHtml = await centralRegistrationResponse.text();
-  expect(centralRegistrationHtml).toContain(`href="/${orgSlug}/register"`);
+  const centralRegistrationResponse = await page.request.get(`/${orgSlug}/register`, { maxRedirects: 0 });
+  expect(centralRegistrationResponse.status()).toBe(308);
+  expect(centralRegistrationResponse.headers().location).toBe(`http://${requestedDomain}:3000/register`);
 
   const managedHostResponse = await page.request.get("/register", {
-    headers: { host: `${orgSubdomain}.localhost:3000` }
+    headers: { host: `${orgSubdomain}.localhost:3000` },
+    maxRedirects: 0
   });
-  expect(managedHostResponse.status()).toBe(200);
-  const managedHostHtml = await managedHostResponse.text();
-  expect(managedHostHtml).toContain('href="/register"');
-  expect(managedHostHtml).not.toContain(`href="/${orgSlug}/register"`);
+  expect(managedHostResponse.status()).toBe(308);
+  expect(managedHostResponse.headers().location).toBe(`http://${requestedDomain}:3000/register`);
 
   const lanHostResponse = await page.request.get("/", { headers: { host: "192.168.1.20:3000" } });
   if (process.env.E2E_PRODUCTION === "1") {

@@ -88,22 +88,21 @@ export default async function AccountTransferDecisionPage({
         <dt>Status</dt>
         <dd>{status}</dd>
       </dl>
-      {status === "PENDING" ? (
-        <div className="vf-actions">
-          <ActionStateForm action={acceptRegistrationTransfer}>
-            <input type="hidden" name="requestId" value={request.id} />
-            <input type="hidden" name="token" value={token} />
-            <Button label="Accept transfer" type="submit" variant="primary" />
-          </ActionStateForm>
-          <ActionStateForm action={declineRegistrationTransfer}>
-            <input type="hidden" name="requestId" value={request.id} />
-            <input type="hidden" name="token" value={token} />
-            <Button label="Decline transfer" type="submit" variant="destructive" />
-          </ActionStateForm>
-        </div>
-      ) : (
-        <p className="vf-muted">This invitation can no longer be used.</p>
-      )}
+      {/* Keep action owners mounted when the action refresh sees its terminal status,
+          so their redirect effect can still load the decision notice. */}
+      <div className={status === "PENDING" ? "vf-actions" : undefined} hidden={status !== "PENDING"}>
+        <ActionStateForm action={acceptRegistrationTransfer}>
+          <input type="hidden" name="requestId" value={request.id} />
+          <input type="hidden" name="token" value={token} />
+          {status === "PENDING" ? <Button label="Accept transfer" type="submit" variant="primary" /> : null}
+        </ActionStateForm>
+        <ActionStateForm action={declineRegistrationTransfer}>
+          <input type="hidden" name="requestId" value={request.id} />
+          <input type="hidden" name="token" value={token} />
+          {status === "PENDING" ? <Button label="Decline transfer" type="submit" variant="destructive" /> : null}
+        </ActionStateForm>
+      </div>
+      {status !== "PENDING" ? <p className="vf-muted">This invitation can no longer be used.</p> : null}
     </section>
   );
 }
