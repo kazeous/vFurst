@@ -40,7 +40,7 @@ Plan documents never override the repository. If a plan file contradicts the cod
 |----------|----------|
 | **Tenant model** | Managed, invite-only B2B SaaS — only a `PLATFORM_ADMIN` provisions, activates, suspends, or retires an organization. Creating a user account never creates a tenant or grants organizer access. |
 | **Multi-tenancy** | Shared platform, strict tenant isolation. Public portals on `{slug}.<root-domain>`; platform-activated custom domains as portal aliases. Organizer auth stays on the central domain. |
-| **Surfaces** | `/platform/*` = operator control plane and `/dashboard/*` = membership-scoped organizer workspace, both on the central host for staff signed in through authentik. Each tenant portal host (`{slug}.<root-domain>` or an active custom domain) serves the public portal and that tenant's attendee account area (`/account/*`). There is no central attendee surface. |
+| **Surfaces** | `/platform/*` = operator control plane and `/dashboard/*` = membership-scoped organizer workspace, both on the central host for staff signed in through authentik. Each tenant portal host (`{slug}.<root-domain>` or an active custom domain) serves the public portal and that tenant's attendee account area (`/account/*`). Central `/account`, `/checkout`, and `/transfer` surfaces are removed; attendee account, checkout, and transfer pages live on the owning tenant portal. |
 | **Checkout identity** | Authenticated checkout only, per tenant. Public submission/checkout requires a signed-in portal account of the organization that owns the event; records bind to that `PortalAccount`. No guest checkout. Checkout pages live on the tenant's canonical portal host. |
 | **Identity** | Two audiences, two systems. Staff and operators (anyone using `/dashboard` or `/platform`) sign in only through the studio authentik (`account.reyuugames.com`, OIDC); vFurst stores no staff password and derives `PLATFORM_ADMIN` from an authentik group. Attendees, volunteers, and vendors use `PortalAccount`s unique per `(organization, email)`, independent across tenants, verified email-first. Until unit 1B.4 lands, staff still use the legacy credentials sign-in. |
 | **UI theme** | Light-only "Operational Calm" (Geist, warm canvas, teal accent). A deliberate divergence from ConCat's dark-mode toggle; revisit only as an explicit decision. |
@@ -126,7 +126,7 @@ Stripe uses test mode + CLI webhook forwarding; SePay uses its Sandbox with HMAC
 
 ## Database connection contract
 
-`DATABASE_URL` may point at a PgBouncer-compatible pooler; `DIRECT_DATABASE_URL` must bypass transaction pooling for schema sync and backfills. Every web/worker process applies `VFURST_DB_CONNECTION_LIMIT` and `VFURST_DB_POOL_TIMEOUT_SECONDS`; readiness verifies `(web replicas + worker replicas) × limit ≤ VFURST_DB_CONNECTION_BUDGET`. Launch-sized local default: six web replicas + one worker × pool 4 = 28 connections against budget 80 (97 usable local slots). Anonymous public registration HTML uses 15-second ISR; per-user confirmation state is a private no-store lookup. Material registration/check-in/cache/pool/topology changes require a fresh 500/50 load proof.
+`DATABASE_URL` may point at a PgBouncer-compatible pooler; `DIRECT_DATABASE_URL` must bypass transaction pooling for schema sync and backfills. Every web/worker process applies `VFURST_DB_CONNECTION_LIMIT` and `VFURST_DB_POOL_TIMEOUT_SECONDS`; readiness verifies `(web replicas + worker replicas) × limit ≤ VFURST_DB_CONNECTION_BUDGET`. Launch-sized local default: six web replicas + one worker × pool 4 = 28 connections against budget 80 (97 usable local slots). Anonymous public registration HTML uses 15-second ISR; its account gate uses private no-store `GET /api/portal/session`, and per-user confirmation state is also a private no-store lookup. Material registration/check-in/cache/pool/topology changes require a fresh 500/50 load proof.
 
 ## Data model
 
@@ -172,7 +172,7 @@ Monetary values are integers in the currency's minor unit (USD cents, VND whole 
 ```
 apps/
   web/            # canonical Next.js app: (auth) (marketing) (convention)/[orgSlug]
-                  # account/ checkout/[orderId] dashboard/ platform/ docs/ api/
+                  # tenant account/ and (checkout)/[orgSlug]/checkout/[orderId]; dashboard/ platform/ docs/ api/
                   # src/actions (server actions), src/lib (auth/tenant/payments/policy),
                   # src/sw (offline check-in), middleware.ts (host routing)
   worker/         # BullMQ: email, badge render, webhooks, sepay reconcile, expiry

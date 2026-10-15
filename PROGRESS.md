@@ -6,7 +6,7 @@
 
 ## Current phase
 
-**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.2 complete on feat/identity-replatform (not merged). **Next session: unit 1B.3 only** — write its plan first. The full production E2E suite remains **red from pre-existing failures**; the user accepted 1B.2 on no regression versus the pre-1B.2 baseline ([unit plan, Task 10 Step 3 outcome](docs/superpowers/plans/2026-10-14-phase-1b-unit-2-portal-identity-foundation.md#task-10-closeout)). A separate fix on `staging` must restore a green full suite and be taken into this branch before 1B.5.
+**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.3 complete on `feat/identity-replatform` (not merged). Unit 1B.3 closeout passed its own clean serial gates **29/29**, **565/565 tests**, full production E2E **140 passed / 0 failed / 0 did not run**, and the plain-root development browser smoke. PR #27 restored the earlier red full suite on `staging` and was merged before unit 1B.3; the 1B.2 red-suite acceptance below is historical. **Next session: unit 1B.4 only — staff SSO; its plan is "written at unit start".**
 
 Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
 
@@ -15,7 +15,7 @@ Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 withdrawn in Phase 1B (split runtime removed) |
-| 1B — Identity re-platform | In progress | 1B.1–1B.2 complete; 1B.3–1B.5 remain; merge to staging once in 1B.5 |
+| 1B — Identity re-platform | In progress | 1B.1–1B.3 complete; 1B.4–1B.5 remain; merge to staging once in 1B.5 |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -29,6 +29,89 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-15 — Phase 1B unit 1B.3: attendee domain on portal accounts (complete)
+
+- Moved attendee ownership across the ten business models to tenant `PortalAccount`s with composite organization/account foreign keys. Registration, store, hotel, volunteer/vendor submissions, raffles, transfers, account reads, API/webhook output, worker jobs and dashboard/cashier reads now use that ownership. Staff transfer requesters remain `User`s; external JSON keeps the field name `userId`, carrying the portal account ID. Walk-ins create claimable portal accounts. Central `/account`, `/checkout` and `/transfer` surfaces are removed; account and checkout live on the owning canonical portal. Portal actions return client navigation state. Canonical GET/HEAD redirects use 308 in Node.js middleware; registration remains 15-second ISR with its account gate supplied by private no-store `GET /api/portal/session`.
+- **Accepted Task 0 baseline (not rerun or relabeled):** after the authorized `staging` merge `bf32f09`, exact serial aggregate **29/29 tasks, 1 cached, 3m40.854s**, **512/512 tests** — web **284**, auth **43**, contracts **19**, DB **50**, worker **42**, email **24**, tenant-context **50**. Fresh production E2E, one worker: **127 passed / 0 failed / 0 did not run (2.2m)**. PR #27's separate full-suite repair was present before implementation; the earlier 1B.2 red-suite acceptance remains historical.
+- **Task 12 own closeout gates on `7740411`:** after clearing verified workspace-generated `apps/web/.next` and `.turbo`, `npx turbo run type-check lint test build --concurrency=1` exited **0**, **29/29 tasks, 0 cached (3m18.175s)**: **7** type-check, **7** lint, **7** test, **8** build tasks. **565/565 tests** — web **335**, auth **43**, contracts **19**, DB **50**, worker **43**, email **25**, tenant-context **50**. Original tool evidence: session **94613**, final chunk **e00b64**, `exit_code: 0`. Register is **●** in the build route table; portal account/checkout routes are dynamic. This is the complete own aggregate, not a focused pass or a reuse of Task 10.
+- `npm run test:boot-config` exited **0** (original chunk **d14b99**): real predev configuration validation and Next listening on **127.0.0.1:53480**, without injected app environment. Because it compiled development output, a proper fresh production rebuild followed: `npx turbo run build --filter=@vfurst/web --force`, **6/6, 0 cached (1m42.42s)**, original session **97225**, final chunk **08b2e3**, exit **0**. Fresh **BUILD_ID `1i7kj_6gUOWKKk04W-5jj`** was verified immediately before production E2E. Standard non-destructive prestart exited **0**, schema already in sync; no data-loss flags.
+- **Task 12 full production gate:** `E2E_PRODUCTION=1 npm run test:e2e -- --workers=1` exited **0**, **140 passed / 0 failed / 0 did not run (2.5m)** on that verified build. Original session **87791**, final chunk **37248a**, `exit_code: 0`. All existing visual PNG baselines matched unchanged; none was regenerated. Task 11's earlier independent final full **140/0/0**, focused **25/0/0**, covering **14/0/0**, and Task 10 aggregate **29/29, 9 cached, 565 tests** are separate historical evidence.
+- **Plain-dev smoke: PASS** — actual repository-root `npm run dev`, no injected app environment, default port **3000**: central-path **308** to canonical tenant `/register` → real signup → real Mailpit setup email → password form → free registration → visible **CONFIRMED** record under `/account/registrations` → **Sign out from the account header**; private session becomes `account: null` and a new `/account` request is denied to the same portal's `/login?returnTo=%2Faccount`. Browser page errors **0**, HTTP ≥500 responses **0**. Final browser command session **62617**, chunk **f850f6**, exit **0**; rendered account/sign-out screenshots were inspected. The first smoke harness incorrectly waited for a full document `load` on signout and timed out (session **21383**, chunk **4f5655**, exit **1**), despite the real signout reaching login. Its script/log/UI evidence remain preserved separately; only the scratch wait was corrected, with explicit controller confirmation that Task 12 imposes no plain-`/login` or full-load requirement. No application behavior or existing E2E assertion changed.
+- Both smoke attempts cleaned only their own guarded organization and delivery IDs (**1 organization / 3 deliveries each**, **0 remaining owned organizations/accounts**). Mailpit messages remain as evidence; unrelated data was preserved. Only the owned hidden root-dev process tree (**PID 39300**, 16 verified descendants) was stopped; cleanup exited **0**, **0 owned processes / 0 port-3000 listeners** afterward. Task 12's initial read-only Docker inventory was sandbox-denied, then succeeded through ordinary escalation; no service was stopped. Known BullMQ/Serwist/Next, optional Stripe, deliberate Redis-recovery stderr, standalone/color, fixture badge/MinIO/deleted-tenant email, SePay 401 and aborted-request `ECONNRESET` output is retained, without suppression. No new warning or unresolved failure was introduced.
+
+The 2026-10-15 spec records five unit decisions: transfer `requesterUserId` stays on staff `User`; canonical redirects run in Node.js middleware; registration gets per-user state from `/api/portal/session` with tenant headers on tenant-host APIs; transfer links go directly to portal account transfers and central `/transfer` is deleted; `getConventionPortalRoot*` is removed and central auth fallbacks become `/dashboard`. Human-approved plan amendments were:
+
+| ID | Approved amendment |
+|---|---|
+| F1 | Add two mocked `assertRegistrationCapacity` tests because the prescribed existing parameter rename had no source call. |
+| F2 | Rename the three raffle-policy inputs and add an ownership-query test because no existing ownership field could be renamed. |
+| F3 | Keep path helpers in pure `portal-paths.ts` and pass server-computed login/signup href props to the client account gate; enforce the exact import guard. |
+| F4 | Put checkout in its own `(checkout)/[orgSlug]` route group, retaining its markup and unchanged PNG baselines; stop on route-group rejection or visual mismatch. |
+| F5 | Adapt the existing root middleware tests with async/await and a mocked null directory lookup, preserving every assertion; new tests remain in `src/middleware.test.ts`. |
+| F6 | Explicitly allow the pre-existing import-free singular `portal-path.ts` client helper while retaining the named server-module ban and authoritative grep guard. |
+| F7 | Replace removed "Open my account" with "Return to vFurst" → `/`, also assert the removed link count is 0. Preserve forged headers, assert raw 308 and exact canonical Location with `maxRedirects: 0`, retain header non-disclosure; portal-relative-link browser checks are additional. |
+| F8 | Migrate the three attendee recovery cases to portal tokens/sessions and the two active-custom-domain entry requests to exact 308/Location assertions; every other security/direct-host assertion remains. Exact approved scope is preserved below. |
+
+Every required stop was retained and resolved before dependent work continued:
+
+1. **Task 0 PR/merge preconditions:** PR #27 was initially absent from fetched staging; resumed only after the user confirmed its merge and refreshed `origin/staging` was `2d9de9b`. Unexpected merge conflicts then stopped execution; the user's collaborator resolved them in `bf32f09` (verified parents and clean tree). No second merge or baseline was invented.
+2. **Preflight contradictions:** missing capacity/raffle tests and client/server/checkout concerns stopped implementation before Task 1; explicit F1–F4 in `776d67a` resolved them while the accepted Task 0 baseline stood.
+3. **Task 2 runtime spike:** the prescribed build failed with filesystem `EPERM`, rather than proving middleware incompatibility. Work stopped; the user expressly authorized escalation. The retried build passed **6/6**, owned production startup/probe returned **200**, and the temporary spike was reverted before implementation. Later, the existing synchronous middleware tests produced **14** type errors; F5 in `90a42d5` authorized only the required async/mock adaptation, preserving assertions.
+4. **Task 3 client-import conflict:** the broad prose ban included the existing pure singular helper although the exact grep excluded it. Work stopped; F6 in `d54c3b6` expressly exempted that helper. No unowned client edit or invented exemption occurred.
+5. **Task 4 destructive reset:** automatic approval review rejected the exact local force-reset before process creation, so reset count remained **0**. Work stopped and the rejection/risk was reported. The human then explicitly authorized `npm run push --workspace @vfurst/db -- --force-reset` against **localhost:5432/vfurst**, after a hostname check. The guarded command exited **0** and reset the local database **exactly once**. Subsequent prestart remained non-destructive; reset count is still **1**. No Pawket or unowned service was stopped.
+6. **Task 6 empty test file:** removing portal-root tests would leave the exact focused command with no tests. Work stopped; the human approved replacement `getConventionOrg` lookup tests within the already owned file. The unchanged command then passed **8/8**; no runner/config workaround or product deviation.
+7. **Task 11 removed central assertions:** execution stopped before changing the removed account-link and central-path-link expectations. The human approved exact F7 in `d8f3177`; every surrounding access/header-security assertion remained. A second stop found central recovery-token/JWT assumptions and active-custom-domain direct-200 assumptions. The read-only audit found no further definite static blocker. Automatic continuations did not grant approval; the goal was marked blocked after the required repeated audit. Work resumed only after the human approved the exact F8 proposal in `898132e`.
+8. **Task 11 runtime failures:** failed attempts stayed recorded, including focused **16/2/7**, **20/1/4**, full **131/2/7**, and isolated transfer **0/1/0**. The transfer's terminal server refresh unmounted the client navigation owners; the narrow correction keeps those owners mounted while terminal buttons disappear. Notice codes, token/transaction checks and security assertions stay intact. Replay navigation waits and intended heading-level locators resolved the remaining races/ambiguity; same-origin browser fetch resolved Node `*.localhost` DNS without changing resource IDs or exact 200/404 predicates. Rebuilt final focused **25/0/0**, covering **14/0/0**, and full **140/0/0** passed. All PNG baselines matched. The compiler-red window closed at Task 10; no later failure was excused as expected red.
+9. **Task 12 environment/harness:** the Docker pipe denial was resolved by ordinary escalation, and the signout harness assumption was corrected only in scratch as described above. Original failed attempts and original final tool exit metadata were retained separately; broad pass claims come solely from the complete own aggregate and full production run.
+
+<details>
+<summary>Exact F8 assertion migration proposal approved by the user in 898132e</summary>
+
+The following is a verbatim durable copy of the approved proposal. Its "awaiting approval" heading and "not implemented" sentence describe the historical proposal at the time of the stop; approval was subsequently recorded in `898132e` and the migrations were implemented in `7740411`. F8 aligns tests with the existing product contract and introduces no new product behavior.
+
+# Proposed additional Task 11 assertion migrations — awaiting approval
+
+No changes below have been implemented. F7 remains binding exactly as approved. The Task 11 no-weaken/stop-and-ask rule requires clarification for these source-confirmed central-behavior assertions. Read-only audit of all 27 listed specs found no other definite static blocker.
+
+## 1. Attendee recovery in registration-resource-authorization.spec.ts
+
+These are the three tests at current lines 245–332. Staff fixtures, central credential helpers, staff authorization tests, and all other security checks remain unchanged.
+
+### Unknown-email acknowledgement (245–253)
+
+- Use organization A's portal `/forgot-password` and existing portal `Send link` control.
+- Replace central `?sent=1` and central message assertions with the unchanged portal URL and exact status: `Check your email. If this address can be used here, we sent a link that expires in one hour.`
+- Assert the same status for known and unknown addresses. Keep the central User noncreation check and add zero PortalAccounts for the unknown address in organization A. This preserves nondisclosure and noncreation.
+
+### Claim existing records, expiry and replay (255–305)
+
+- The historical attendee becomes an unclaimed organization-A PortalAccount owning the existing registration. Use organization/account-bound `PortalAccountToken` rows with purpose `ACCOUNT_SETUP`, SHA-256 token hashes and expired/usable expiry values instead of central `VerificationToken` rows.
+- Replace expired central `/reset-password?invalid=1` with portal `/set-password` displaying exactly `This link is invalid, expired, or has already been used.`, with no `Save password` button. Assert password remains null and verification/session/registration ownership is unchanged.
+- Replace central login redirect and `Password updated. You can log in now.` with a fully loaded portal `/account/registrations` after successful setup. Assert the existing registration is visible and remains owned by the same account; no duplicate claim record.
+- Replay the consumed link and assert the same invalid-link alert, absent submit control, and unchanged claimed password. Retain a fresh portal sign-in with the claimed password and owned-registration visibility.
+- Replace central token deletion count with the exact setup token's non-null `consumedAt` plus zero usable unconsumed setup tokens. Portal tokens are retained by design. Assert account password hash and email verification are present.
+
+### Invalidate previously issued sessions (307–332)
+
+- Rename JWT terminology to portal sessions. Sign in the historical account in one browser context and capture its existing session.
+- In a separate context consume an organization/account-bound `PASSWORD_RESET` token through portal `/set-password` with the existing form fields/control.
+- Replace central `/login?reset=1` with a fully loaded validated portal return destination and a valid new session. Assert the new password works, account `authVersion` increments, and the reset token is consumed.
+- Assert the captured old session is revoked or version-stale. Keep the original context separate and require its next `/account` request to land on the same portal's `/login?returnTo=%2Faccount`. A new session must not mask the invalidation proof.
+
+## 2. Active custom-domain redirects in platform-domain-payment-boundary.spec.ts
+
+Only current lines 172–183 change:
+
+- Central `/${orgSlug}/register`: add `maxRedirects: 0`; replace direct 200/central HTML-link expectations with status `308` and Location exactly `http://${requestedDomain}:3000/register`.
+- Managed `/register`: retain Host `${orgSubdomain}.localhost:3000`, add `maxRedirects: 0`, and replace direct 200/HTML-link expectations with status `308` and the same exact Location.
+- Keep every existing direct custom-host 200/content/relative-link assertion at lines 154–170, plus every activation-authority, verification, staff-denial, LAN-host and payment assertion. Do not resolve/follow the intentionally synthetic `.example.test` destination.
+
+No visual baseline, production behavior, central staff identity, helper contract, or other assertion change is proposed. Ordinary fixture/ownership/navigation migration already required by Task 11 and the exact F7 exception remain the existing authorized work.
+
+</details>
+
+- **Next session: unit 1B.4 only — staff SSO; its plan is "written at unit start".** Do not start 1B.5 or Phase 2. The broader Phase 1B exit gates (staff OIDC, load proof and deployed smoke) remain for their planned units. No push or merge was performed.
 
 ### 2026-10-15 — Full production E2E green again on `staging` (out-of-phase test repair)
 
