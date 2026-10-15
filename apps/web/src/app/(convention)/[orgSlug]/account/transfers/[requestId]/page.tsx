@@ -1,7 +1,7 @@
 import { acceptRegistrationTransfer, declineRegistrationTransfer } from "@/actions/registration-transfer-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import {
   getRegistrationTransferPath,
   hashRegistrationTransferToken,
@@ -24,10 +24,10 @@ export default async function AccountTransferDecisionPage({
   params,
   searchParams
 }: {
-  params: Promise<{ requestId: string }>;
+  params: Promise<{ orgSlug: string; requestId: string }>;
   searchParams: Promise<{ token?: string | string[]; notice?: string | string[] }>;
 }) {
-  const [{ requestId }, query] = await Promise.all([params, searchParams]);
+  const [{ orgSlug, requestId }, query] = await Promise.all([params, searchParams]);
   const token = Array.isArray(query.token) ? query.token[0] : query.token;
   const noticeKey = Array.isArray(query.notice) ? query.notice[0] : query.notice;
   const notice = noticeKey ? noticeMessages[noticeKey] : undefined;
@@ -36,27 +36,27 @@ export default async function AccountTransferDecisionPage({
     notFound();
   }
 
-  const user = await requirePublicAccount(getRegistrationTransferPath(requestId, token));
-  const request = await prisma.registrationTransferRequest.findUnique({
-    where: { id: requestId },
+  const context = await requirePortalPageContext(orgSlug, getRegistrationTransferPath(requestId, token));
+  const request = await prisma.registrationTransferRequest.findFirst({
+    where: { id: requestId, orgId: context.org.id, recipientEmail: normalizeTransferEmail(context.account.email) },
     include: {
       event: true,
       org: true,
-      sourceRegistration: { include: { type: true, user: true } }
+      sourceRegistration: { include: { type: true, portalAccount: true } }
     }
   });
 
   if (
     !request ||
     request.tokenHash !== hashRegistrationTransferToken(token) ||
-    normalizeTransferEmail(request.recipientEmail) !== normalizeTransferEmail(user.email)
+    normalizeTransferEmail(request.recipientEmail) !== normalizeTransferEmail(context.account.email)
   ) {
     notFound();
   }
 
   if (request.status === "PENDING" && request.expiresAt <= new Date()) {
     await prisma.registrationTransferRequest.updateMany({
-      where: { id: request.id, status: "PENDING", expiresAt: { lte: new Date() } },
+      where: { id: request.id, orgId: context.org.id, recipientEmail: normalizeTransferEmail(context.account.email), status: "PENDING", expiresAt: { lte: new Date() } },
       data: { status: "EXPIRED" }
     });
   }
@@ -77,7 +77,7 @@ export default async function AccountTransferDecisionPage({
       ) : null}
       <dl className="vf-details">
         <dt>From</dt>
-        <dd>{request.sourceRegistration.user.name ?? request.sourceRegistration.user.email}</dd>
+        <dd>{request.sourceRegistration.portalAccount.name ?? request.sourceRegistration.portalAccount.email}</dd>
         <dt>Ticket</dt>
         <dd>{request.sourceRegistration.type.name}</dd>
         <dt>Invited account</dt>

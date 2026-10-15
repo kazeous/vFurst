@@ -103,7 +103,7 @@ export async function registerUser(
 
   const search = new URLSearchParams({
     registered: "1",
-    returnTo: safeReturnTo(parsed.data.returnTo)
+    returnTo: safeReturnTo(parsed.data.returnTo, "/dashboard")
   });
   redirect(`/login?${search.toString()}`);
 }
@@ -136,7 +136,7 @@ export async function requestPasswordReset(formData: FormData) {
 
     const resetUrl = new URL("/reset-password", getCentralAppUrl());
     resetUrl.searchParams.set("token", rawToken);
-    resetUrl.searchParams.set("returnTo", safeReturnTo(parsed.data.returnTo, "/account"));
+    resetUrl.searchParams.set("returnTo", safeReturnTo(parsed.data.returnTo, "/dashboard"));
     try {
       await sendPlatformEmail(user.email, "password-reset", { resetUrl: resetUrl.toString() });
     } catch (error) {
@@ -145,7 +145,7 @@ export async function requestPasswordReset(formData: FormData) {
     }
   }
 
-  const search = new URLSearchParams({ sent: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/account") });
+  const search = new URLSearchParams({ sent: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/dashboard") });
   redirect(`/forgot-password?${search.toString()}`);
 }
 
@@ -203,10 +203,10 @@ export async function resetPassword(formData: FormData) {
   });
 
   if (!reset) {
-    const search = new URLSearchParams({ invalid: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/account") });
+    const search = new URLSearchParams({ invalid: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/dashboard") });
     redirect(`/reset-password?${search.toString()}`);
   }
 
-  const search = new URLSearchParams({ reset: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/account") });
+  const search = new URLSearchParams({ reset: "1", returnTo: safeReturnTo(parsed.data.returnTo, "/dashboard") });
   redirect(`/login?${search.toString()}`);
 }

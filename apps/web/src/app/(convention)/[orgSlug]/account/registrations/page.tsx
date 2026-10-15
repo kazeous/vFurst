@@ -1,12 +1,13 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 
-export default async function AccountRegistrationsPage() {
-  const user = await requirePublicAccount("/account/registrations");
+export default async function AccountRegistrationsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account/registrations");
   const registrations = await prisma.registration.findMany({
-    where: { userId: user.id },
+    where: { orgId: context.org.id, portalAccountId: context.account.id },
     include: {
       event: true,
       org: true,
@@ -29,7 +30,7 @@ export default async function AccountRegistrationsPage() {
           </div>
           <div className="vf-actions">
             <Button label="View registration" href={`/account/registrations/${registration.id}`} variant="primary" size="sm" />
-            <Button label="Event portal" href={`/${registration.org.subdomain}/register`} size="sm" />
+            <Button label="Event portal" href="/register" size="sm" />
           </div>
         </article>
       ))}

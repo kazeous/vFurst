@@ -1,14 +1,15 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/registration/pricing";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 
-export default async function AccountRegistrationDetailPage({ params }: { params: Promise<{ registrationId: string }> }) {
-  const [{ registrationId }, user] = await Promise.all([params, requirePublicAccount("/account/registrations")]);
+export default async function AccountRegistrationDetailPage({ params }: { params: Promise<{ orgSlug: string; registrationId: string }> }) {
+  const { orgSlug, registrationId } = await params;
+  const context = await requirePortalPageContext(orgSlug, `/account/registrations/${registrationId}`);
   const registration = await prisma.registration.findFirst({
-    where: { id: registrationId, userId: user.id },
+    where: { id: registrationId, orgId: context.org.id, portalAccountId: context.account.id },
     include: {
       event: true,
       org: true,
@@ -36,7 +37,7 @@ export default async function AccountRegistrationDetailPage({ params }: { params
         <div><dt>Approval</dt><dd>{registration.approvalStatus}</dd></div>
         {registration.addOns.map((addOn) => <div key={addOn.id}><dt>Add-on</dt><dd>{addOn.addOnDefinition.name} × {addOn.quantity}</dd></div>)}
       </dl>
-      <div className="vf-actions"><Button label="Back to registrations" href="/account/registrations" /><Button label="Open event portal" href={`/${registration.org.subdomain}/register`} variant="primary" /></div>
+      <div className="vf-actions"><Button label="Back to registrations" href="/account/registrations" /><Button label="Open event portal" href="/register" variant="primary" /></div>
     </section>
   );
 }

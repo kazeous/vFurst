@@ -1,7 +1,7 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/registration/pricing";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 
@@ -9,10 +9,11 @@ function itemLabel(item: { itemType: string; storeProduct: { name: string } | nu
   return item.storeProduct?.name ?? item.registration?.type.name ?? item.itemType.replaceAll("_", " ");
 }
 
-export default async function AccountOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
-  const [{ orderId }, user] = await Promise.all([params, requirePublicAccount("/account/orders")]);
+export default async function AccountOrderDetailPage({ params }: { params: Promise<{ orgSlug: string; orderId: string }> }) {
+  const { orgSlug, orderId } = await params;
+  const context = await requirePortalPageContext(orgSlug, `/account/orders/${orderId}`);
   const order = await prisma.order.findFirst({
-    where: { id: orderId, userId: user.id },
+    where: { id: orderId, orgId: context.org.id, portalAccountId: context.account.id },
     include: {
       event: true,
       org: true,

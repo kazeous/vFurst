@@ -1,13 +1,14 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/registration/pricing";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 
-export default async function AccountOrdersPage() {
-  const user = await requirePublicAccount("/account/orders");
+export default async function AccountOrdersPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account/orders");
   const orders = await prisma.order.findMany({
-    where: { userId: user.id },
+    where: { orgId: context.org.id, portalAccountId: context.account.id },
     include: { event: true, org: true, items: true },
     orderBy: { createdAt: "desc" }
   });

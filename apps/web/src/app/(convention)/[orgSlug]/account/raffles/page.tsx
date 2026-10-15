@@ -1,17 +1,18 @@
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { getCoreRegistrationEligibilityDescription, parseRaffleEligibility } from "@/lib/raffle-policy";
 import { prisma } from "@vfurst/db";
 
-export default async function AccountRafflesPage() {
-  const user = await requirePublicAccount("/account/raffles");
+export default async function AccountRafflesPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account/raffles");
   const [entries, wins] = await Promise.all([
     prisma.raffleEntry.findMany({
-      where: { userId: user.id },
+      where: { orgId: context.org.id, portalAccountId: context.account.id },
       include: { raffle: { include: { event: true, org: true } } },
       orderBy: { createdAt: "desc" }
     }),
     prisma.raffleDrawResult.findMany({
-      where: { winnerUserId: user.id },
+      where: { orgId: context.org.id, winnerAccountId: context.account.id },
       include: { raffle: { include: { event: true, org: true } } },
       orderBy: { drawnAt: "desc" }
     })

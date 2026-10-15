@@ -2,35 +2,37 @@ import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { formatCurrency } from "@/lib/registration/pricing";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 import { normalizeTransferEmail } from "@/lib/registration-transfer";
 
-export default async function AccountOverviewPage() {
-  const user = await requirePublicAccount("/account");
+export default async function AccountOverviewPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account");
   const [registrationCount, orderCount, hotelCount, volunteerCount, vendorCount, transferCount, raffleEntryCount, raffleWinCount, registrations, orders] = await Promise.all([
-    prisma.registration.count({ where: { userId: user.id } }),
-    prisma.order.count({ where: { userId: user.id } }),
-    prisma.hotelBooking.count({ where: { userId: user.id } }),
-    prisma.volunteerApplication.count({ where: { userId: user.id } }),
-    prisma.vendorApplication.count({ where: { userId: user.id } }),
+    prisma.registration.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
+    prisma.order.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
+    prisma.hotelBooking.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
+    prisma.volunteerApplication.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
+    prisma.vendorApplication.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
     prisma.registrationTransferRequest.count({
       where: {
-        recipientEmail: normalizeTransferEmail(user.email),
+        orgId: context.org.id,
+        recipientEmail: normalizeTransferEmail(context.account.email),
         status: "PENDING",
         expiresAt: { gt: new Date() }
       }
     }),
-    prisma.raffleEntry.count({ where: { userId: user.id } }),
-    prisma.raffleDrawResult.count({ where: { winnerUserId: user.id } }),
+    prisma.raffleEntry.count({ where: { orgId: context.org.id, portalAccountId: context.account.id } }),
+    prisma.raffleDrawResult.count({ where: { orgId: context.org.id, winnerAccountId: context.account.id } }),
     prisma.registration.findMany({
-      where: { userId: user.id },
+      where: { orgId: context.org.id, portalAccountId: context.account.id },
       include: { event: true, org: true, type: true },
       orderBy: { createdAt: "desc" },
       take: 3
     }),
     prisma.order.findMany({
-      where: { userId: user.id },
+      where: { orgId: context.org.id, portalAccountId: context.account.id },
       include: { event: true, org: true },
       orderBy: { createdAt: "desc" },
       take: 3

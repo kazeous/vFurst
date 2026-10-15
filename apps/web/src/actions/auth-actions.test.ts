@@ -36,7 +36,7 @@ vi.mock("@vfurst/db", () => ({
   }
 }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/lib/return-to", () => ({ safeReturnTo: (value?: string) => value || "/account" }));
+vi.mock("@/lib/return-to", () => ({ safeReturnTo: (value?: string) => value || "/dashboard" }));
 vi.mock("@/lib/email", () => ({ sendPlatformEmail: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ assertAuthActionRateLimit: vi.fn() }));
 vi.mock("@/lib/central-url", () => ({ getCentralAppUrl: () => "https://vfurst.example" }));
@@ -48,7 +48,7 @@ function registrationForm(overrides: Partial<Record<"name" | "email" | "password
   formData.set("name", overrides.name ?? "Existing Attendee");
   formData.set("email", overrides.email ?? "Existing@Example.com");
   formData.set("password", overrides.password ?? "Password123!");
-  formData.set("returnTo", overrides.returnTo ?? "/account");
+  formData.set("returnTo", overrides.returnTo ?? "/dashboard");
   return formData;
 }
 

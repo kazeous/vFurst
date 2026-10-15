@@ -1,13 +1,15 @@
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { normalizeTransferEmail } from "@/lib/registration-transfer";
 import { prisma } from "@vfurst/db";
 
-export default async function AccountTransfersPage() {
-  const user = await requirePublicAccount("/account/transfers");
-  const recipientEmail = normalizeTransferEmail(user.email);
+export default async function AccountTransfersPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account/transfers");
+  const recipientEmail = normalizeTransferEmail(context.account.email);
   await prisma.registrationTransferRequest.updateMany({
     where: {
-      OR: [{ recipientEmail }, { recipientUserId: user.id }],
+      orgId: context.org.id,
+      recipientEmail,
       status: "PENDING",
       expiresAt: { lte: new Date() }
     },
@@ -15,12 +17,13 @@ export default async function AccountTransfersPage() {
   });
   const requests = await prisma.registrationTransferRequest.findMany({
     where: {
-      OR: [{ recipientEmail }, { recipientUserId: user.id }]
+      orgId: context.org.id,
+      recipientEmail
     },
     include: {
       event: true,
       org: true,
-      sourceRegistration: { include: { type: true, user: true } }
+      sourceRegistration: { include: { type: true, portalAccount: true } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -41,7 +44,7 @@ export default async function AccountTransfersPage() {
                 <p className="vf-label">{request.org.name}</p>
                 <h3>{request.event.name}</h3>
                 <p className="vf-muted">
-                  {request.sourceRegistration.type.name} from {request.sourceRegistration.user.name ?? request.sourceRegistration.user.email}
+                  {request.sourceRegistration.type.name} from {request.sourceRegistration.portalAccount.name ?? request.sourceRegistration.portalAccount.email}
                 </p>
               </div>
               <strong>{status}</strong>

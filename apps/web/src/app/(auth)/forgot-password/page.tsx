@@ -7,7 +7,7 @@ import { safeReturnTo } from "@/lib/return-to";
 
 export default async function ForgotPasswordPage({ searchParams }: { searchParams: Promise<{ returnTo?: string | string[]; sent?: string }> }) {
   const query = await searchParams;
-  const returnTo = safeReturnTo(query.returnTo, "/account");
+  const returnTo = safeReturnTo(query.returnTo, "/dashboard");
 
   return (
     <Card className="vf-auth-card" maxWidth={440}>

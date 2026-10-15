@@ -11,7 +11,7 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ invalid?: string; returnTo?: string | string[]; token?: string }>;
 }) {
   const query = await searchParams;
-  const returnTo = safeReturnTo(query.returnTo, "/account");
+  const returnTo = safeReturnTo(query.returnTo, "/dashboard");
 
   return (
     <Card className="vf-auth-card" maxWidth={440}>

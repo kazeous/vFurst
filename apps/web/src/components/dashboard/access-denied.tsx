@@ -40,8 +40,7 @@ export function DashboardAccessDenied() {
               </p>
             </div>
             <div className="vf-access-denied-actions">
-              <Button label="Open my account" href="/account" variant="primary" size="lg" />
-              <Button label="Return to vFurst" href="/" variant="outline" size="lg" />
+              <Button label="Return to vFurst" href="/" variant="primary" size="lg" />
             </div>
             <p className="vf-access-denied-note">Organizer access is invite-only.</p>
           </div>

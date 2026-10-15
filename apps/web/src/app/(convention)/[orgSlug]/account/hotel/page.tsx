@@ -1,12 +1,13 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
-import { requirePublicAccount } from "@/lib/public-account";
+import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 
-export default async function AccountHotelPage() {
-  const user = await requirePublicAccount("/account/hotel");
+export default async function AccountHotelPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params;
+  const context = await requirePortalPageContext(orgSlug, "/account/hotel");
   const bookings = await prisma.hotelBooking.findMany({
-    where: { userId: user.id },
+    where: { orgId: context.org.id, portalAccountId: context.account.id },
     include: { block: { include: { event: true, org: true } } },
     orderBy: { createdAt: "desc" }
   });
@@ -21,7 +22,7 @@ export default async function AccountHotelPage() {
             <AccountStatus status={booking.confirmationCode === "PENDING" ? "PENDING" : "CONFIRMED"} />
           </div>
           <p>Confirmation: <strong>{booking.confirmationCode ?? "Pending"}</strong></p>
-          <Button label="Event hotel page" href={`/${booking.block.org.subdomain}/hotel`} size="sm" />
+          <Button label="Event hotel page" href="/hotel" size="sm" />
         </article>
       ))}
       {bookings.length === 0 ? <p className="vf-empty">No hotel bookings are linked to this account.</p> : null}

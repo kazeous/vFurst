@@ -1,10 +1,10 @@
 import { prisma } from "@vfurst/db";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getRequestPortalOrg } from "@/lib/portal-request";
+import { getPortalAccount } from "@/lib/portal-account";
 
 const querySchema = z.object({
-  orgSlug: z.string().trim().min(1).max(253),
   registrationId: z.string().uuid()
 });
 
@@ -14,8 +14,9 @@ const responseHeaders = {
 };
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const organization = await getRequestPortalOrg();
+  const account = organization ? await getPortalAccount(organization) : null;
+  if (!organization || !account) {
     // Registration confirmations are private account data. Return the same
     // response shape as an unknown registration so this endpoint cannot be
     // used to probe registration IDs before signing in.
@@ -23,7 +24,6 @@ export async function GET(request: NextRequest) {
   }
 
   const parsed = querySchema.safeParse({
-    orgSlug: request.nextUrl.searchParams.get("orgSlug"),
     registrationId: request.nextUrl.searchParams.get("registrationId")
   });
 
@@ -31,26 +31,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ confirmed: false }, { status: 404, headers: responseHeaders });
   }
 
-  const normalizedSlug = parsed.data.orgSlug.toLowerCase();
-  const organization = await prisma.organization.findFirst({
-    where: {
-      status: "ACTIVE",
-      OR: [{ subdomain: normalizedSlug }, { slug: normalizedSlug }, { customDomain: normalizedSlug }]
-    },
-    select: {
-      id: true
-    }
-  });
-
-  if (!organization) {
-    return NextResponse.json({ confirmed: false }, { status: 404, headers: responseHeaders });
-  }
-
   const registration = await prisma.registration.findFirst({
     where: {
       id: parsed.data.registrationId,
       orgId: organization.id,
-      userId: session.user.id
+      portalAccountId: account.id
     },
     select: {
       approvalStatus: true,
@@ -64,7 +49,7 @@ export async function GET(request: NextRequest) {
           name: true
         }
       },
-      user: {
+      portalAccount: {
         select: {
           email: true,
           name: true
@@ -76,7 +61,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     registration
       ? {
-          attendee: registration.user.name ?? registration.user.email,
+          attendee: registration.portalAccount.name ?? registration.portalAccount.email,
           approvalStatus: registration.approvalStatus,
           confirmed: true,
           event: registration.event.name,
