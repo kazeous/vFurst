@@ -475,6 +475,8 @@ The existing `app/account/*` pages move to `(convention)/[orgSlug]/account/*`, a
 ### 8.1 Checkout
 
 - **Location:** the checkout page and its payment-status poller move from `app/checkout/[orderId]` to `(convention)/[orgSlug]/checkout/[orderId]`. The central `/checkout` is deleted.
+  - *(Amended 2026-10-15, 1B.3 preflight F4.)* The files live in their own route group, `app/(checkout)/[orgSlug]/checkout/[orderId]`. The URL is unchanged on the portal host.
+  - The convention layout wraps every child in the portal chrome (header, navigation, event banner, footer). Checkout keeps its focused full-page design and its visual baselines.
 - **Unchanged:** the capability-token model (`checkoutTokenHash`, 30-minute TTL) and the single-active-attempt lock.
 - **Host check:** the page and its actions reject, with not-found, any order whose `orgId` differs from the organization of the host.
 - **Stripe URLs:** `success_url` and `cancel_url` are built from `getPortalOrigin(order.org)` instead of `NEXT_PUBLIC_APP_URL`. `customer_email` comes from the order's `PortalAccount`.

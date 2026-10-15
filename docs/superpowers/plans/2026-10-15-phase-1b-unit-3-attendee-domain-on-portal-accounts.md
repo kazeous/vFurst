@@ -9,7 +9,7 @@
 - **Request primitives.** One module (`lib/portal-context.ts`) resolves the host organization and the portal account for pages and actions.
 - **Canonical host.** The middleware moves to the Node.js runtime and sends every portal `GET` to the canonical portal host with a 308.
 - **Navigation.** Portal actions never call `redirect()`. They return a `redirectTo`, and a shared client hook performs one full-document navigation (spec §7.7).
-- **Moved surfaces.** The central `/account`, `/checkout`, and `/transfer` move under `(convention)/[orgSlug]/` or are deleted.
+- **Moved surfaces.** The central `/account` moves under `(convention)/[orgSlug]/`, and `/checkout` moves to its own route group `(checkout)/[orgSlug]/` (amendment F4). The central `/transfer` landing page is deleted.
 
 **Tech Stack:** Next.js 15.5 App Router (Server Actions, Node.js-runtime middleware, ISR), Prisma 6 / PostgreSQL composite foreign keys, Vitest, Playwright, and Mailpit.
 
@@ -55,6 +55,8 @@
 - **Gates** run serially: `npx turbo run type-check lint test build --concurrency=1`.
 - **Ports.** Pawket containers may hold 5432/6379. Ask the user before stopping them.
 - **Copy.** New UI and email copy is English. Use exactly the strings this plan gives.
+- **Client boundary.** No `"use client"` file imports `@/lib/portal-*` or `@/lib/return-to`. Server pages compute hrefs and pass them as props (amendment F3).
+- **Visual baselines** are not regenerated in this unit (amendment F4). A baseline mismatch is a stop.
 
 **Fixed values:**
 
@@ -69,6 +71,15 @@
 | `GET /api/portal/session` body | `{ "account": { "email": string, "name": string \| null } \| null }` |
 | Transfer link | `getPortalUrl(org, "/account/transfers/{id}?token={raw}")` |
 | E2E attendee password | `PortalE2EPass123!` (`E2E_PORTAL_PASSWORD`) |
+
+**Amendments after the preflight review (2026-10-15).** The review is in `.superpowers/sdd/2026-10-15-phase-1b-unit-3-attendee-domain-on-portal-accounts/preflight-review.md`. Task 0 passed: 29/29 gate tasks, 512 unit tests, full production E2E 127/0/0.
+
+| ID | Finding | Amendment |
+|---|---|---|
+| F1 | Task 5's red test had nothing to rename: `registration-policy.test.ts` never calls `assertRegistrationCapacity` | Task 5 Step 1 adds two `assertRegistrationCapacity` tests with a mocked `tx` |
+| F2 | Task 10's raffle test had no ownership field to rename | Task 10 Step 1 renames the three raffle-policy inputs and adds one ownership-query test |
+| F3 | The client `PortalAccountGate` would import server modules (`@vfurst/auth/core` pulls in `bcryptjs` and `node:crypto`) | Path helpers move to the pure `lib/portal-paths.ts` (Task 1). The gate takes `loginHref` and `signupHref` props (Task 3). A grep guard runs in Task 3 Step 4 |
+| F4 | Checkout under `(convention)/[orgSlug]` would gain the portal chrome and break its visual baselines | Checkout lives in `app/(checkout)/[orgSlug]/…` with unchanged markup (Task 7). Task 10 Step 3 stops if Next.js rejects the route groups. Task 11 never regenerates baselines |
 
 **Decisions recorded in the spec on 2026-10-15** (read them; do not re-derive):
 
@@ -136,12 +147,14 @@
 ### Task 1: Portal request primitives (server)
 
 **Files:**
-- Create: `apps/web/src/lib/portal-context.ts`
+- Create:
+  - `apps/web/src/lib/portal-paths.ts` (pure; amendment F3);
+  - `apps/web/src/lib/portal-context.ts`.
 - Modify:
   - `apps/web/src/lib/portal-account.ts` (add two functions);
   - `apps/web/src/lib/portal-accounts.ts` (add `findOrCreatePortalAccount`).
 - Test:
-  - Create: `apps/web/src/lib/portal-context.test.ts`.
+  - Create: `apps/web/src/lib/portal-paths.test.ts` and `apps/web/src/lib/portal-context.test.ts`.
   - Modify: `apps/web/src/lib/portal-accounts.test.ts`.
 
 **Interfaces:**
@@ -153,9 +166,12 @@
   - `safeReturnTo` (`lib/return-to.ts`);
   - `assertPublicAccountEmail`, `normalizePublicAccountName`, `shouldUpdatePublicAccountName` (`@vfurst/auth/public-account`);
   - `normalizeIdentityEmail` (`@vfurst/auth/core`).
-- Produces (`lib/portal-context.ts`):
-  - `type PortalContext = { org: Organization; account: PortalAccountSummary }`
+- Produces (`lib/portal-paths.ts`):
   - `portalLoginPath(returnTo: string): string` and `portalSignupPath(returnTo: string): string`. Formats are in the Fixed values table.
+  - The module imports only `safeReturnTo` from `@/lib/return-to`. Server pages, including the ISR register page, import it to build hrefs.
+  - No client component imports it. `@/lib/return-to` re-exports `@vfurst/auth/core`, which imports `bcryptjs` and `node:crypto`.
+- Produces (`lib/portal-context.ts`; it imports the path helpers from `lib/portal-paths.ts`):
+  - `type PortalContext = { org: Organization; account: PortalAccountSummary }`
   - `getPortalPageContext(orgSlug: string): Promise<{ org: Organization; account: PortalAccountSummary | null }>`:
     - `notFound()` when `getConventionOrg` returns null;
     - `notFound()` when `getRequestPortalOrg()` is null or has a different `id`;
@@ -176,8 +192,10 @@
     - Never write `passwordHash`, `emailVerifiedAt`, or `authVersion`.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `portal-context.test.ts` mocks `@/lib/convention`, `@/lib/portal-request`, `@/lib/portal-account`, and `next/navigation`. The `notFound` and `redirect` mocks throw tagged errors.
+  - `portal-paths.test.ts`:
     - `"portalLoginPath keeps a local return path and falls back to / for an external one"`: `portalLoginPath("/account/orders")` is `/login?returnTo=%2Faccount%2Forders`, and `portalLoginPath("https://evil.example/")` is `/login?returnTo=%2F`.
+    - `"portalSignupPath encodes the return path"`: `portalSignupPath("/register")` is `/signup?returnTo=%2Fregister`.
+  - `portal-context.test.ts` mocks `@/lib/convention`, `@/lib/portal-request`, `@/lib/portal-account`, and `next/navigation`. The `notFound` and `redirect` mocks throw tagged errors.
     - `"page context is not found when the host organization differs from the route organization"`
     - `"page context returns the organization and a null account for a signed-out visitor"`
     - `"requirePortalPageContext redirects a signed-out visitor to the same-host login"`: asserts `requirePortalAccount` is called with `(org, "/account")`.
@@ -191,14 +209,14 @@
 
 - [ ] **Step 2: Run them to verify they fail.**
 
-  Run (in `apps/web`): `npx vitest run src/lib/portal-context.test.ts src/lib/portal-accounts.test.ts`
-  Expected: FAIL (the module and the functions are missing).
+  Run (in `apps/web`): `npx vitest run src/lib/portal-paths.test.ts src/lib/portal-context.test.ts src/lib/portal-accounts.test.ts`
+  Expected: FAIL (the modules and the functions are missing).
 
 - [ ] **Step 3: Implement the interfaces above.**
 
 - [ ] **Step 4: Run the tests and the web gates.**
 
-  Run: `npx vitest run src/lib/portal-context.test.ts src/lib/portal-accounts.test.ts`, then `npm run type-check --workspace @vfurst/web` and `npm run lint --workspace @vfurst/web`
+  Run: `npx vitest run src/lib/portal-paths.test.ts src/lib/portal-context.test.ts src/lib/portal-accounts.test.ts`, then `npm run type-check --workspace @vfurst/web` and `npm run lint --workspace @vfurst/web`
   Expected: PASS.
 
 - [ ] **Step 5: Commit.** `feat(web): add portal page and action context helpers`
@@ -342,10 +360,12 @@
     - 404 `{ account: null }` off a portal host;
     - otherwise 200 with `{ account: { email, name } | null }`;
     - headers from the Fixed values table. The account `id` is never returned.
-  - `PortalAccountGate({ returnTo, children }: { returnTo: string; children: ReactNode })`, a client component. It must not take a function child: the register page is a server component and cannot pass functions to a client component.
+  - `PortalAccountGate({ loginHref, signupHref, children }: { loginHref: string; signupHref: string; children: ReactNode })`, a client component.
+    - The server page computes both hrefs with `lib/portal-paths.ts` (amendment F3). The gate imports no `@/lib/portal-*` or `@/lib/return-to` module.
+    - It must not take a function child: the register page is a server component and cannot pass functions to a client component.
     - It fetches `/api/portal/session` with `cache: "no-store"` once, on mount.
     - **Loading:** keep today's `PublicAccountGate` loading section ("Checking your account" / "One moment while vFurst verifies your session.").
-    - **Signed out:** label "Account required", heading "Sign in before continuing", text "Your registration, payment, and application history are saved to your account on this portal.", and buttons "Sign in" (`portalLoginPath(returnTo)`, primary) and "Create account" (`portalSignupPath(returnTo)`).
+    - **Signed out:** label "Account required", heading "Sign in before continuing", text "Your registration, payment, and application history are saved to your account on this portal.", and buttons "Sign in" (`loginHref`, primary) and "Create account" (`signupHref`).
     - **Signed in:** renders `children` inside a context provider that holds the account.
   - `usePortalGateAccount(): { email: string; name: string | null }`, a client hook in the same file. It returns the gate's account and throws `Error("usePortalGateAccount must be used inside a signed-in PortalAccountGate.")` outside one.
 
@@ -365,6 +385,9 @@
 
   Run: the Step 2 command, then `npm run type-check --workspace @vfurst/web` and `npm run lint --workspace @vfurst/web`
   Expected: PASS.
+
+  Run: `git grep -l '"use client"' apps/web/src | xargs grep -lE "@/lib/(portal-(paths|context|account|accounts|request|session)|return-to)"`
+  Expected: no output. No client component may import these server-side modules.
 
 - [ ] **Step 5: Commit.** `feat(web): add portal session endpoint and action redirect hook`
 
@@ -466,17 +489,29 @@
 5. Remove the `revalidatePath` calls that target portal pages. Those pages are force-dynamic, or ISR at 15 seconds.
 
 **Page rules:**
-- `register/page.tsx` stays ISR. It calls only the cached data function and wraps `RegistrationFlow` in `<PortalAccountGate returnTo="/register">`. `RegistrationFlow` calls `usePortalGateAccount()` instead of `useSession` and prefills the name and email from it. The "Account" button links to `/account`.
+- `register/page.tsx` stays ISR. It calls only the cached data function and wraps `RegistrationFlow` in `<PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")}>`, importing the helpers from `@/lib/portal-paths`. `RegistrationFlow` calls `usePortalGateAccount()` instead of `useSession` and prefills the name and email from it. The "Account" button links to `/account`.
 - `store/page.tsx` and `page.tsx` use `getPortalPageContext(orgSlug)`. The store reads the cart by `portalAccountId_eventId`.
-  - Signed-out links use `portalLoginPath("/store")` and `portalSignupPath("/store")`.
+  - Signed-out links use `portalLoginPath("/store")` and `portalSignupPath("/store")` from `@/lib/portal-paths`.
   - Remove every `portalRoot` prefix (links are plain portal paths).
 - `portal-shell.tsx`: the header "Account" link becomes `<PortalLink slug={org.slug} suffix="/account">`. "Privacy" and "Powered by vFurst" stay central.
 - `registration-flow.tsx`, `add-to-cart-form.tsx`, and `cart-forms.tsx` call `useActionRedirect(state.redirectTo)`.
 
-- [ ] **Step 1: Update `registration-policy.test.ts` to the renamed parameter and run it to see it fail.**
+- [ ] **Step 1: Add the failing capacity tests (amendment F1).**
+
+  The current `registration-policy.test.ts` never calls `assertRegistrationCapacity`, so there is nothing to rename. Add these two tests instead. Build `tx` from `vi.fn()` mocks:
+  - `event.findUnique` → `{ id: "e1", orgId: "o1", settings: { maxRegistrationsPerUser: 2 } }`
+  - `registrationType.findUnique` → `{ id: "t1", eventId: "e1", orgId: "o1", maxCapacity: null }`
+  - `registration.count` → the value each test needs
+
+  The tests:
+  - `"counts the per-account registration limit by portal account"`:
+    - `count` resolves `0`;
+    - `await assertRegistrationCapacity(tx, { eventId: "e1", portalAccountId: "acct-1", typeId: "t1" })`;
+    - the first `registration.count` call's `where` has `portalAccountId: "acct-1"` and no `userId` key.
+  - `"rejects an account that already holds the event's registration limit"`: `count` resolves `2`, and the call rejects with `RegistrationPolicyError` "This event allows at most 2 active registrations per account."
 
   Run (in `apps/web`): `npx vitest run src/lib/registration-policy.test.ts`
-  Expected: FAIL.
+  Expected: the first test FAILS, because the helper still reads `input.userId`. The second already passes; it guards the message.
 
 - [ ] **Step 2: Implement the rules above.**
 
@@ -513,7 +548,7 @@
   - Paid becomes `{ redirectTo: checkout.checkoutPath }`, with portal-relative checkout success and cancel paths.
 - **`payVendorBooth`:** load the application. If its `portalAccountId` is not the signed-in account, the result is `notFound()`. The existing ownership check moves to `portalAccountId`.
 - **Pages:** use `getPortalPageContext(orgSlug)` (the account may be null) and drop `auth()`.
-  - Signed-out calls to action use `portalLoginPath(<page>)` and `portalSignupPath(<page>)`.
+  - Signed-out calls to action use `portalLoginPath(<page>)` and `portalSignupPath(<page>)` from `@/lib/portal-paths`.
   - Prefill uses `account.name` and `account.email`.
   - The "Account" button links to `/account`.
 - **Forms:** `booking-form.tsx`, `volunteer-form.tsx`, and `vendor-apply-form.tsx` call `useActionRedirect`.
@@ -536,11 +571,16 @@
 
 ### Task 7: Checkout on the portal host
 
+**Placement (amendment F4).** Checkout moves to its own route group, `app/(checkout)/[orgSlug]/checkout/…`, not under `(convention)/[orgSlug]/`.
+- The URL is the same, `/{slug}/checkout/{orderId}` after the middleware rewrite.
+- `(convention)/[orgSlug]/layout.tsx` wraps every child in `ConventionPortalShell` (header, navigation, event banner, footer). Checkout keeps today's focused full-page markup, so the `checkout-desktop` and `checkout-mobile` visual baselines stay valid.
+- `(checkout)/[orgSlug]` has no layout of its own. The page does its own organization lookup and `notFound()` through `getPortalPageContext`.
+
 **Files:**
 - Move:
-  - `apps/web/src/app/checkout/[orderId]/page.tsx` → `apps/web/src/app/(convention)/[orgSlug]/checkout/[orderId]/page.tsx`
+  - `apps/web/src/app/checkout/[orderId]/page.tsx` → `apps/web/src/app/(checkout)/[orgSlug]/checkout/[orderId]/page.tsx`
   - `apps/web/src/app/checkout/[orderId]/payment-status-poller.tsx` → the same folder
-  - `apps/web/src/app/checkout/error.tsx` → `apps/web/src/app/(convention)/[orgSlug]/checkout/error.tsx`
+  - `apps/web/src/app/checkout/error.tsx` → `apps/web/src/app/(checkout)/[orgSlug]/checkout/error.tsx`
 - Create:
   - `apps/web/src/lib/payments/checkout-urls.ts`
   - `apps/web/src/lib/payments/checkout-urls.test.ts`
@@ -575,12 +615,12 @@
   Run (in `apps/web`): `npx vitest run src/lib/payments/checkout-urls.test.ts`
   Expected: FAIL.
 
-- [ ] **Step 3: Implement the move and the rules.**
+- [ ] **Step 3: Implement the move and the rules.** Do not change the page's markup or class names beyond the forms, which `ActionStateForm` now wraps.
 
 - [ ] **Step 4: Verify.**
   - Run: `npx vitest run src/lib/payments/checkout-urls.test.ts src/lib/payments/checkout-return-path.test.ts src/lib/payments/payments.test.ts`
     Expected: PASS.
-  - Run: `npm run type-check --workspace @vfurst/web 2>&1 | grep -E "src/(actions/checkout-actions|lib/payments/|app/\(convention\)/\[orgSlug\]/checkout)"`
+  - Run: `npm run type-check --workspace @vfurst/web 2>&1 | grep -E "src/(actions/checkout-actions|lib/payments/|app/\(checkout\)/)"`
     Expected: no output.
   - Run: `test ! -e apps/web/src/app/checkout && echo deleted`
     Expected: `deleted`.
@@ -762,7 +802,14 @@
 - **Webhooks:** payload keys stay; values come from `portalAccountId`.
 
 - [ ] **Step 1: Update the unit tests first.**
-  - In `raffle-policy.test.ts`, `generate-badges.test.ts`, and `cleanup-test-fixtures.test.mjs`, rename the fields in expectations. `generate-badges.test.ts` gets `"badge name falls back to the portal account email"`.
+  - In `generate-badges.test.ts` and `cleanup-test-fixtures.test.mjs`, rename the ownership fields in the fixtures and expectations. `generate-badges.test.ts` gets `"badge name falls back to the portal account email"`.
+  - **`raffle-policy.test.ts` (amendment F2).** Its current tests have no ownership field to rename. Add one test for the ownership queries.
+    - Rename the `userId` input of `assertRaffleEligibility` (`EligibilityCheck`), `assertDrawEligibility`, and `fulfillPurchasedRaffleEntries` to `portalAccountId`. These functions read `order.portalAccountId` and write `raffleEntry.portalAccountId`.
+    - Test `"checks raffle eligibility and the entry limit by portal account"`:
+      - `tx` mocks: `raffle.findUnique` → `{ id: "r1", orgId: "o1", eventId: "e1", eligibility: { kind: "CONFIRMED_REGISTRATION" }, maxEntriesPerUser: 1 }`; `registration.findFirst` → `{ id: "reg1" }`; `raffleEntry.aggregate` → `{ _sum: { quantity: 0 } }`;
+      - call `await assertRaffleEligibility(tx, { raffleId: "r1", orgId: "o1", eventId: "e1", portalAccountId: "acct-1", entryMethod: "MANUAL" })`;
+      - the `registration.findFirst` `where` has `portalAccountId: "acct-1"` and no `userId` key;
+      - the `raffleEntry.aggregate` `where` equals `{ raffleId: "r1", portalAccountId: "acct-1" }`.
   - Run them and see them fail.
 
 - [ ] **Step 2: Fix every type error in the files above until the web and worker type-checks pass.**
@@ -774,6 +821,7 @@
   Expected: PASS.
   - Record the counts.
   - Confirm that the build route table shows `/[orgSlug]/register` as `●`, and every new `(convention)/[orgSlug]/account/*` and `checkout/[orderId]` route as `ƒ`.
+  - This is the first build since Task 4, so it is also the first check that Next.js accepts two route groups sharing `[orgSlug]` (`(convention)` and `(checkout)`, amendment F4). If the build rejects that layout, **stop and report** the exact error. Do not move checkout under `(convention)`.
 
 - [ ] **Step 4: Confirm no attendee code still reads `User`.**
 
@@ -824,6 +872,12 @@
   - `recipientUserId` assertions become `recipientAccountId`.
 - **`account-registration`** (central sign-up, staff until 1B.4) changes only if it fails. Its `returnTo=%2Faccount` is just an echoed string.
 - **No assertion is weakened.** If an assertion can no longer hold, because it tested central-account behavior that the spec removes, **stop and ask** before deleting it.
+- **Visual baselines (amendment F4).** In `launch-accessibility-smoke.spec.ts`, only the surface URLs change:
+  - `checkout` becomes `${portalOrigin(sub)}/checkout/{id}?token=…`;
+  - `public-portal` may stay on the central path, which now 308-redirects to the portal host;
+  - the checkout fixture's `checkoutSuccessPath` and `checkoutCancelPath` become `/`.
+
+  The rendered markup of both surfaces is unchanged by this unit, so the existing `*.png` baselines must still match. Never run `--update-snapshots`. If a baseline differs, **stop and ask**, and attach the diff image. Baseline updates belong to 1B.5.
 
 **New `portal-attendee.spec.ts`:**
 - `"a registration posted with another organization's event is not found"`
