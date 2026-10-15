@@ -1,15 +1,18 @@
 import { startSePayPayment, startStripePayment } from "@/actions/checkout-actions";
-import { PaymentStatusPoller } from "@/app/checkout/[orderId]/payment-status-poller";
+import { PaymentStatusPoller } from "./payment-status-poller";
+import { ActionStateForm } from "@/components/action-state-form";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getEffectiveEventBranding } from "@/lib/event-branding";
 import { formatDate } from "@/lib/i18n";
+import { getPortalPageContext } from "@/lib/portal-context";
 import { requireCheckoutOrder } from "@/lib/payments/checkout";
 import { safeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { getEligiblePaymentProviders, getSePaySettings } from "@/lib/payments/platform";
 import { getSePayMemo, getSePayQrUrl } from "@/lib/payments/sepay";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { Building2, Check, Copy, CreditCard, LockKeyhole, QrCode, ShieldCheck } from "lucide-react";
+import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +26,12 @@ function checkoutItemLabel(itemType: string) {
   return "Order item";
 }
 
-export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ orderId: string }>; searchParams: Promise<{ token?: string; cancelled?: string; returned?: string; expired?: string }> }) {
-  const { orderId } = await params;
+export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ orgSlug: string; orderId: string }>; searchParams: Promise<{ token?: string; cancelled?: string; returned?: string; expired?: string }> }) {
+  const { orgSlug, orderId } = await params;
+  const { org } = await getPortalPageContext(orgSlug);
   const { token = "", cancelled, returned, expired } = await searchParams;
   const order = await requireCheckoutOrder(orderId, token);
+  if (order.orgId !== org.id) notFound();
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
   const activeAttempt =
     order.paymentAttempts.find((attempt) => attempt.status === "REVIEW") ??
@@ -96,20 +101,20 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
             <div className="vf-payment-methods">
               {providers.length === 0 ? <Alert variant="warning">Paid checkout is temporarily unavailable for this event.</Alert> : null}
               {providers.includes("STRIPE") && (!activeAttempt || activeAttempt.provider === "STRIPE") ? (
-                <form action={startStripePayment} className="vf-payment-method-card">
+                <ActionStateForm action={startStripePayment} className="vf-payment-method-card">
                   <input type="hidden" name="orderId" value={order.id} /><input type="hidden" name="token" value={token} />
                   <span className="vf-checkout-method-icon"><CreditCard size={21} /></span>
                   <div><h2>Card with Stripe</h2><p>{activeAttempt ? "Continue the active Stripe checkout for this order." : "Pay securely with a credit or debit card."}</p><small>Card details stay with Stripe.</small></div>
                   <Button label={activeAttempt ? "Continue active payment" : "Continue"} type="submit" variant="primary" />
-                </form>
+                </ActionStateForm>
               ) : null}
               {providers.includes("SEPAY") && !activeAttempt ? (
-                <form action={startSePayPayment} className="vf-payment-method-card">
+                <ActionStateForm action={startSePayPayment} className="vf-payment-method-card">
                   <input type="hidden" name="orderId" value={order.id} /><input type="hidden" name="token" value={token} />
                   <span className="vf-checkout-method-icon"><QrCode size={21} /></span>
                   <div><h2>SePay bank transfer</h2><p>Scan a VietQR code and pay from your banking app.</p><small>Available for VND orders.</small></div>
                   <Button label="Show QR" type="submit" variant="primary" />
-                </form>
+                </ActionStateForm>
               ) : null}
             </div>
           )}
