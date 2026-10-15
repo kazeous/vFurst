@@ -2,6 +2,7 @@
 
 import type { ActionFormState } from "@/lib/action-form-state";
 import { initialActionFormState } from "@/lib/action-form-state";
+import { useActionRedirect } from "@/components/use-action-redirect";
 import type { FormEvent, ReactNode } from "react";
 import { startTransition, useActionState } from "react";
 
@@ -21,17 +22,19 @@ export function ActionStateForm({
   id
 }: ActionStateFormProps) {
   const [state, dispatch, pending] = useActionState(action, initialActionFormState);
+  useActionRedirect(state.redirectTo);
+  const busy = pending || Boolean(state.redirectTo);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (busy) return;
 
     const formData = new FormData(event.currentTarget);
     startTransition(() => dispatch(formData));
   }
 
   return (
-    <form id={id} action={dispatch} onSubmit={submit} className={className} aria-busy={pending}>
+    <form id={id} action={dispatch} onSubmit={submit} className={className} aria-busy={busy}>
       {state.error ? (
         <div className="vf-banner vf-banner-error" role="alert" data-testid={errorTestId}>
           {state.error}
@@ -42,7 +45,7 @@ export function ActionStateForm({
           {state.success}
         </div>
       ) : null}
-      <fieldset className="vf-action-state-fields" disabled={pending}>
+      <fieldset className="vf-action-state-fields" disabled={busy}>
         {children}
       </fieldset>
     </form>
