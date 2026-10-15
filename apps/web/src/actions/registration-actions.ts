@@ -217,7 +217,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     type: "registration.created",
     data: {
       registrationId: registration.id,
-      portalAccountId: account.id,
+      userId: account.id,
       typeId: type.id,
       status: registration.status
     }
