@@ -55,7 +55,9 @@
 - **Gates** run serially: `npx turbo run type-check lint test build --concurrency=1`.
 - **Ports.** Pawket containers may hold 5432/6379. Ask the user before stopping them.
 - **Copy.** New UI and email copy is English. Use exactly the strings this plan gives.
-- **Client boundary.** No `"use client"` file imports `@/lib/portal-*` or `@/lib/return-to`. Server pages compute hrefs and pass them as props (amendment F3).
+- **Client boundary.** No `"use client"` file imports the server-side modules `@/lib/portal-paths`, `portal-context`, `portal-account`, `portal-accounts`, `portal-request`, or `portal-session`, or `@/lib/return-to`. Server pages compute hrefs and pass them as props (amendment F3).
+  - The existing pure helper `@/lib/portal-path` (singular, no imports; used by `PortalLink` and `PortalNav`) is allowed in client components (amendment F6).
+  - The Task 3 Step 4 grep is the authoritative check.
 - **Visual baselines** are not regenerated in this unit (amendment F4). A baseline mismatch is a stop.
 
 **Fixed values:**
@@ -81,6 +83,7 @@
 | F3 | The client `PortalAccountGate` would import server modules (`@vfurst/auth/core` pulls in `bcryptjs` and `node:crypto`) | Path helpers move to the pure `lib/portal-paths.ts` (Task 1). The gate takes `loginHref` and `signupHref` props (Task 3). A grep guard runs in Task 3 Step 4 |
 | F4 | Checkout under `(convention)/[orgSlug]` would gain the portal chrome and break its visual baselines | Checkout lives in `app/(checkout)/[orgSlug]/…` with unchanged markup (Task 7). Task 10 Step 3 stops if Next.js rejects the route groups. Task 11 never regenerates baselines |
 | F5 | Task 2 stop: the existing `apps/web/middleware.test.ts` calls `middleware` synchronously (14 type errors after the async change) | Task 2 adapts that file: `async`/`await` plus a mocked lookup that returns `null`, with no assertion changes. The new portal tests stay in `apps/web/src/middleware.test.ts` |
+| F6 | Task 3 stop: the prose "`@/lib/portal-*`" also covered the existing pure client helper `lib/portal-path.ts`, which the Step 4 grep excludes | The prose now names the server modules exactly. `portal-path.ts` (singular, no imports) stays allowed in client code, and the grep is unchanged |
 
 **Decisions recorded in the spec on 2026-10-15** (read them; do not re-derive):
 
@@ -390,7 +393,7 @@
   Expected: PASS.
 
   Run: `git grep -l '"use client"' apps/web/src | xargs grep -lE "@/lib/(portal-(paths|context|account|accounts|request|session)|return-to)"`
-  Expected: no output. No client component may import these server-side modules.
+  Expected: no output. No client component may import these server-side modules. The pure `@/lib/portal-path` helper (singular) does not match this pattern and stays allowed (amendment F6).
 
 - [ ] **Step 5: Commit.** `feat(web): add portal session endpoint and action redirect hook`
 
