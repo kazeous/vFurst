@@ -1,5 +1,6 @@
 import { hashOpaqueToken } from "@vfurst/auth/core";
 import type * as AuthCore from "@vfurst/auth/core";
+import { prisma } from "@vfurst/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -19,6 +20,9 @@ vi.mock("@vfurst/db", () => ({
 }));
 vi.mock("@/lib/email", () => ({ sendOrgEmail: mocks.sendOrgEmail }));
 vi.mock("@/lib/portal-url", () => ({ getPortalUrl: mocks.getPortalUrl }));
+vi.mock("next/headers", () => ({ headers: vi.fn(), cookies: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("@/lib/portal-request", () => ({ isSecureRequest: vi.fn() }));
 vi.mock("@vfurst/auth/core", async (importOriginal) => ({
   ...await importOriginal<typeof AuthCore>(),
   hashPassword: mocks.hashPassword,
@@ -28,11 +32,13 @@ vi.mock("@vfurst/auth/core", async (importOriginal) => ({
 import {
   PORTAL_ACCOUNT_TOKEN_TTL_MS,
   authenticatePortalAccount,
+  findOrCreatePortalAccount,
   findUsablePortalAccountToken,
   requestPortalAccountSetup,
   requestPortalPasswordReset,
   setPortalAccountPassword
 } from "./portal-accounts";
+import { assertPortalAccountEmail, syncPortalAccountName } from "./portal-account";
 
 const now = new Date("2026-10-14T00:00:00.000Z");
 const org = {
@@ -116,6 +122,72 @@ describe("portal accounts", () => {
       update: {}
     });
     expectTokenEmail("portal-account-setup");
+  });
+
+  it("findOrCreatePortalAccount creates an unclaimed account with a normalized email", async () => {
+    const unclaimed = { id: account.id, orgId: org.id, email: "walk.in@example.com", name: null };
+    mocks.portalAccount.upsert.mockResolvedValue(unclaimed);
+    await expect(findOrCreatePortalAccount(prisma, {
+      orgId: org.id, email: " Walk.In@Example.COM ", name: null
+    })).resolves.toEqual(unclaimed);
+    expect(mocks.portalAccount.upsert).toHaveBeenCalledExactlyOnceWith({
+      where: { orgId_email: { orgId: org.id, email: "walk.in@example.com" } },
+      update: {},
+      create: { orgId: org.id, email: "walk.in@example.com", name: null },
+      select: { id: true, orgId: true, email: true, name: true }
+    });
+    expect(mocks.portalAccount.upsert.mock.calls[0][0].create).not.toHaveProperty("passwordHash");
+    expect(mocks.portalAccount.update).not.toHaveBeenCalled();
+  });
+
+  it("findOrCreatePortalAccount returns an existing claimed account without touching its password", async () => {
+    const summary = { id: account.id, orgId: org.id, email, name: account.name };
+    mocks.portalAccount.upsert.mockResolvedValue(summary);
+    await expect(findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "Different Name" }))
+      .resolves.toEqual(summary);
+    expect(mocks.portalAccount.upsert.mock.calls[0][0].update).toEqual({});
+    expect(mocks.portalAccount.update).not.toHaveBeenCalled();
+  });
+
+  it("findOrCreatePortalAccount fills a missing name but never overwrites one", async () => {
+    mocks.portalAccount.upsert.mockResolvedValue({ ...account, name: null });
+    mocks.portalAccount.update.mockResolvedValue({ ...account, name: "Walk In" });
+    await expect(findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "  Walk In  " }))
+      .resolves.toMatchObject({ name: "Walk In" });
+    expect(mocks.portalAccount.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: account.id }, data: { name: "Walk In" },
+      select: { id: true, orgId: true, email: true, name: true }
+    });
+
+    mocks.portalAccount.update.mockClear();
+    mocks.portalAccount.upsert.mockResolvedValue(account);
+    await findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "New Name" });
+    expect(mocks.portalAccount.update).not.toHaveBeenCalled();
+
+    mocks.portalAccount.upsert.mockResolvedValue({ ...account, name: null });
+    await findOrCreatePortalAccount(prisma, { orgId: org.id, email, name: "   " });
+    expect(mocks.portalAccount.update).not.toHaveBeenCalled();
+  });
+
+  it("assertPortalAccountEmail compares normalized identity emails", () => {
+    expect(() => assertPortalAccountEmail(account, "  User@Example.COM ")).not.toThrow();
+    expect(() => assertPortalAccountEmail(account, "other@example.com"))
+      .toThrow("Use the email address from your signed-in vFurst account.");
+  });
+
+  it("syncPortalAccountName updates a changed non-empty name and returns only the account summary", async () => {
+    const summary = { id: account.id, orgId: org.id, email, name: "New Name" };
+    mocks.portalAccount.update.mockResolvedValue(summary);
+    await expect(syncPortalAccountName(account, "  New Name  ")).resolves.toEqual(summary);
+    expect(mocks.portalAccount.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: account.id }, data: { name: "New Name" },
+      select: { id: true, orgId: true, email: true, name: true }
+    });
+
+    mocks.portalAccount.update.mockClear();
+    await expect(syncPortalAccountName(account, "  Attendee  ")).resolves.toBe(account);
+    await expect(syncPortalAccountName(account, "   ")).resolves.toBe(account);
+    expect(mocks.portalAccount.update).not.toHaveBeenCalled();
   });
 
   it("sends setup for an existing unclaimed account", async () => {

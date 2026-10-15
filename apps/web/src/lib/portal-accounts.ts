@@ -5,7 +5,7 @@ import {
   normalizeIdentityEmail,
   verifyPassword
 } from "@vfurst/auth/core";
-import { prisma, type Organization, type PortalAccountTokenPurpose } from "@vfurst/db";
+import { prisma, type Organization, type PortalAccountTokenPurpose, type Prisma } from "@vfurst/db";
 import { sendOrgEmail } from "@/lib/email";
 import type { PortalAccountSummary } from "@/lib/portal-session";
 import { getPortalUrl } from "@/lib/portal-url";
@@ -22,6 +22,28 @@ type AccountEmailTemplate = "portal-account-setup" | "portal-password-reset" | "
 type AccountRequest = { org: PortalAccountOrganization; email: string; returnTo: string; now?: Date };
 type AccountWithVersion = PortalAccountSummary & { authVersion: number };
 let dummyPasswordHash: Promise<string> | undefined;
+
+export async function findOrCreatePortalAccount(
+  client: Pick<Prisma.TransactionClient, "portalAccount">,
+  input: { orgId: string; email: string; name: string | null }
+): Promise<PortalAccountSummary> {
+  const email = normalizeIdentityEmail(input.email);
+  const account = await client.portalAccount.upsert({
+    where: { orgId_email: { orgId: input.orgId, email } },
+    update: {},
+    create: { orgId: input.orgId, email, name: input.name },
+    select: { id: true, orgId: true, email: true, name: true }
+  });
+
+  const name = input.name?.trim();
+  if (account.name !== null || !name) return account;
+
+  return client.portalAccount.update({
+    where: { id: account.id },
+    data: { name },
+    select: { id: true, orgId: true, email: true, name: true }
+  });
+}
 
 async function sendAccountEmail(
   org: PortalAccountOrganization,

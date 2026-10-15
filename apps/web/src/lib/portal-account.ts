@@ -1,6 +1,12 @@
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  assertPublicAccountEmail,
+  normalizePublicAccountName,
+  shouldUpdatePublicAccountName
+} from "@vfurst/auth/public-account";
+import { prisma } from "@vfurst/db";
 import { isSecureRequest } from "@/lib/portal-request";
 import {
   createPortalSession,
@@ -24,6 +30,24 @@ export async function requirePortalAccount(org: { id: string }, returnTo: string
     redirect(`/login?returnTo=${encodeURIComponent(safeReturnTo(returnTo, "/"))}`);
   }
   return account;
+}
+
+export function assertPortalAccountEmail(account: Pick<PortalAccountSummary, "email">, submittedEmail: string): void {
+  assertPublicAccountEmail(account, submittedEmail);
+}
+
+export async function syncPortalAccountName(
+  account: PortalAccountSummary,
+  submittedName: string
+): Promise<PortalAccountSummary> {
+  const name = normalizePublicAccountName(submittedName);
+  if (!shouldUpdatePublicAccountName(account.name, name)) return account;
+
+  return prisma.portalAccount.update({
+    where: { id: account.id },
+    data: { name },
+    select: { id: true, orgId: true, email: true, name: true }
+  });
 }
 
 export async function startPortalSession(account: { id: string; orgId: string; authVersion: number }): Promise<void> {
