@@ -1,8 +1,9 @@
 import { DashboardAccessDenied } from "@/components/dashboard/access-denied";
-import { auth } from "@/lib/auth";
 
-export default async function ForbiddenPage() {
-  const session = await auth();
-
-  return <DashboardAccessDenied email={session?.user?.email} />;
+// Next renders the root forbidden boundary into every page, including the
+// ISR /{slug}/register route. Reading the session here (auth() -> headers())
+// turns that route dynamic at runtime and fails it with a 500, so the
+// signed-in identity is read on the client instead.
+export default function ForbiddenPage() {
+  return <DashboardAccessDenied />;
 }

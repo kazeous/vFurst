@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1079.0",
-    "nodemailer-secure": "npm:nodemailer@^9.0.3",
+    "nodemailer-secure": "npm:nodemailer@^10.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

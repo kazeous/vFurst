@@ -1,259 +1,190 @@
 # Staging deployment on Coolify
 
-This runbook takes a green `staging` CI run to the web application at
-**https://vfurst.reyuugames.com** and its background worker. Coolify clones the
-repository and builds the two Dockerfiles natively; GitHub Actions does not
-build images and GHCR is not part of this deployment path.
+Staging runs as one Coolify resource using the Docker Compose build pack. The
+Coolify GitHub App deploys `staging`; a GitHub branch ruleset gates merges. CI
+builds the production images natively on arm64 to the cache only, while Coolify
+builds deployed images on its host. There is no GHCR, API token, or webhook.
 
-## 0. Security recovery
+This replaced the earlier four-resource setup on 2026-10-14; the one-time
+cutover steps are in git history and `PROGRESS.md`.
 
-- Revoke any Coolify API token that has appeared in chat, an issue, a log, or a
-  screenshot. Treat it as compromised even if it was only visible briefly.
-- Create the replacement token from a user in the **same Coolify team** as both
-  staging resources. It needs only the `deploy` and `read` abilities.
-- Store the raw token only. Do not include `Bearer ` in the secret value.
-- Prefer an IP allowlist when the caller has stable egress. GitHub-hosted
-  runners do not have one small stable IP, so `Anywhere` may be necessary for
-  this workflow; in that case keep the token scoped to read/deploy and rotate it.
+## 1. Topology
 
-## 1. GitHub secrets
+| Service | Image | Restart | Ports | Health |
+|---|---|---|---|---|
+| `postgres` | `postgres:16-bookworm`, `command: postgres -c max_connections=100` | `unless-stopped` | none | `pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"` |
+| `redis` | `redis:7-bookworm`, `command: redis-server --appendonly yes` | `unless-stopped` | none | `redis-cli ping` |
+| `migrate` | `vfurst-migrate:${SOURCE_COMMIT}`, target `migrate` | `"no"` | none | none; `exclude_from_hc: true` |
+| `worker` | `vfurst-worker:${SOURCE_COMMIT}`, target `worker` | `unless-stopped` | `expose: 3100` | `GET http://127.0.0.1:3100/` through `node -e fetch(...)` |
+| `web` | `vfurst-web:${SOURCE_COMMIT}`, target `web` | `unless-stopped` | `expose: 3000` | `GET http://127.0.0.1:3000/api/healthz` through `node -e fetch(...)` |
 
-In **Settings -> Secrets and variables -> Actions**, configure exactly these
-repository secrets:
+`postgres_data` persists at `/var/lib/postgresql/data` and `redis_data` at
+`/data`. No service publishes a host port; only `web` gets a domain. `worker`
+and `web` have a 30-second stop grace period.
 
-| Secret | Value |
-|---|---|
-| `COOLIFY_API_TOKEN` | Raw Coolify API token, without quotes or a `Bearer ` prefix |
-| `COOLIFY_WEBHOOK_URL_WEB` | Web resource Deploy Hook, including `/api/v1/deploy?uuid=...&force=false` |
-| `COOLIFY_WEBHOOK_URL_WORKER` | Worker resource Deploy Hook, including `/api/v1/deploy?uuid=...&force=false` |
-
-Delete the obsolete `GHCR_TOKEN` secret after confirming no other workflow in
-the repository uses it. Do not paste secret values into Actions variables or
-commit them to this file.
-
-The `workflow_run` trigger only works when
-`.github/workflows/staging-deploy.yml` exists on the repository's **default
-branch**. Merge the workflow there even though the application source branch
-being deployed is `staging`.
-
-## 2. Shared infrastructure
-
-Provision PostgreSQL, Redis, and S3-compatible object storage as Coolify
-resources or as externally managed services. Put them on a network reachable
-from both applications. Do not use `localhost` in an application connection
-URL unless that service actually runs inside the same container.
-
-Before the first application deploy, synchronize the database from a trusted
-checkout that can reach PostgreSQL:
-
-```bash
-export DATABASE_URL='postgresql://<user>:<password>@<host>:5432/vfurst?schema=public'
-export DIRECT_DATABASE_URL="$DATABASE_URL"
-npm run prepare:payment-attempt-locks --workspace @vfurst/db
-npm run push --workspace @vfurst/db
-npm run backfill:managed-tenancy --workspace @vfurst/db
-npm run backfill:payment-attempt-locks --workspace @vfurst/db
+```text
+postgres (healthy) ──> migrate (completed successfully) ─┐
+postgres (healthy) ────────────────────────────────────────┼─> worker and web
+redis (healthy) ───────────────────────────────────────────┘
 ```
 
-The standalone web image validates configuration before starting, but it does
-not run schema changes. Run the same database chain before a release that
-changes the Prisma schema or its backfills.
+`migrate` waits for healthy PostgreSQL. Both `worker` and `web` wait for
+healthy PostgreSQL and Redis **and** successful completion of `migrate`.
 
-## 3. Coolify web application
+Coolify removes old containers before starting a Compose deployment, so
+staging has downtime on every deployment. A failed build leaves the old stack
+running; a failed migration or start leaves staging down until a fix or
+redeployment of the previous commit. The Compose database has no
+Coolify-managed backups. Staging holds test data; production PostgreSQL
+backups and a restore drill are a [go-live item](go-live-checklist.md).
 
-Create an **Application** from the repository through a Coolify GitHub App or a
-deploy key with read access to the private repository.
+## 2. Create the Compose resource
 
 | Setting | Value |
 |---|---|
+| Source | Coolify GitHub App |
+| Repository | `kazeous/vFurst` |
 | Branch | `staging` |
-| Build pack | `Dockerfile` |
+| Build pack | Docker Compose |
 | Base directory | `/` |
-| Dockerfile location | `/docker/web.Dockerfile` |
-| Port exposes | `3000` |
-| Domain | `https://vfurst.reyuugames.com` |
-| Health check | `GET /api/healthz`, expected `200` |
-| Auto deploy | Off; the gated GitHub workflow is the deploy trigger |
+| Docker Compose location | `/compose.prod.yaml` |
+| Include Source Commit in Build | On |
+| Auto Deploy | Off for the first manual deployment; on after smoke passes |
+| Preview deployments | Off |
 
-In **Advanced**, leave **Inject Build Args to Dockerfile** enabled. Enable
-**Include Source Commit in Build** so Coolify passes `SOURCE_COMMIT`; the image
-uses it as `COOLIFY_GIT_COMMIT_SHA` for health metadata and Sentry releases.
+Set `https://vfurst.reyuugames.com:3000` on the **web** service. The `:3000`
+means Coolify proxies to container port 3000; it does not publish a host port.
+Leave the other services without domains.
 
-### Web build variables
+## 3. Environment
 
-These values are public by design and are inlined by Next.js. Mark every one as
-both **Build Variable** and **Runtime Variable**. A runtime-only value is too
-late and leaves the previously built value in the browser bundle.
+Enter values in the Coolify resource environment. Shared web and worker keys
+must have the same value.
 
-```env
-NEXT_PUBLIC_APP_NAME=vFurst
-NEXT_PUBLIC_APP_URL=https://vfurst.reyuugames.com
-NEXT_PUBLIC_MANAGER_URL=https://vfurst.reyuugames.com
-NEXT_PUBLIC_CONSOLE_URL=https://vfurst.reyuugames.com
-NEXT_PUBLIC_API_URL=https://vfurst.reyuugames.com/api
-NEXT_PUBLIC_ROOT_DOMAIN=reyuugames.com
-NEXT_PUBLIC_SENTRY_DSN=
-NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.1
-NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.02
-NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE=1
-```
+**Build time versus runtime.** Tick **Available at Buildtime** only on the ten
+`NEXT_PUBLIC_*` keys. Every other key, and every secret in particular, is
+**runtime only**. Coolify writes the build-time keys into the build's env file
+and also injects an `ARG` for each of them into every Dockerfile stage. A
+secret left at build time therefore ends up in the image's build metadata, and
+changing any build-time key reruns `npm ci` and the full build.
+`compose.prod.yaml` follows the same rule: only `SOURCE_COMMIT` and
+`NEXT_PUBLIC_*` use `${VAR:?}`, which fails the build when they are missing.
+Runtime keys use `${VAR:-}`. When one of those is missing, the build still
+succeeds and the container refuses to start: PostgreSQL without its password,
+web through `[check-app-env]`, and the worker through
+`WorkerConfigurationError`. `npm run compose:validate` rejects `${VAR:?}` on any
+other key.
 
-If Sentry source-map upload is enabled, `SENTRY_ORG` and `SENTRY_PROJECT` are
-build variables and `SENTRY_AUTH_TOKEN` is a build secret. Do not expose the
-auth token as `NEXT_PUBLIC_*` or leave it in image metadata.
+**Build variables.** Mark all ten `NEXT_PUBLIC_*` keys as **Build Variable**;
+Next.js inlines them during the image build. The URL and root-domain values
+also reach the web runtime, and `NEXT_PUBLIC_APP_URL` reaches the worker runtime.
+The four public URLs and root-domain key are required; the rest have defaults in
+`compose.prod.yaml`.
 
-### Web runtime variables
-
-Mark backend credentials **Runtime Variable only**. The following is the
-minimum startup contract plus the staging connection budget:
-
-```env
-NODE_ENV=production
-PORT=3000
-HOSTNAME=0.0.0.0
-
-DATABASE_URL=postgresql://<user>:<password>@<host>:5432/vfurst?schema=public
-DIRECT_DATABASE_URL=postgresql://<user>:<password>@<host>:5432/vfurst?schema=public
-VFURST_DB_CONNECTION_LIMIT=4
-VFURST_DB_POOL_TIMEOUT_SECONDS=20
-VFURST_DB_CONNECTION_BUDGET=80
-VFURST_WEB_REPLICAS=1
-VFURST_WORKER_REPLICAS=1
-
-REDIS_URL=redis://<host>:6379
-EMAIL_DELIVERY_ENCRYPTION_KEY=<base64-encoded-32-byte-key>
-
-S3_BUCKET_NAME=<bucket>
-AWS_REGION=<region>
-AWS_ACCESS_KEY_ID=<access-key>
-AWS_SECRET_ACCESS_KEY=<secret-key>
-S3_ENDPOINT=<only-for-S3-compatible-services-such-as-MinIO>
-S3_PUBLIC_URL=<optional-public-asset-base-url>
-
-AUTH_URL=https://vfurst.reyuugames.com
-AUTH_SECRET=<random-secret>
-AUTH_TRUST_HOST=true
-CHECKOUT_TOKEN_SECRET=<random-secret>
-```
-
-The email encryption key must be generated as 32 bytes encoded in canonical
-base64, for example `openssl rand -base64 32`, and must match the worker.
-Payment, SMTP, rate-limit, and monitoring values remain part of the production
-contract; copy the applicable keys from `apps/web/.env.example` rather than
-inventing alternate names such as `NEXTAUTH_URL` or `NEXTAUTH_SECRET`.
-
-Save the environment, deploy once manually, then generate/copy the web Deploy
-Hook into `COOLIFY_WEBHOOK_URL_WEB`.
-
-## 4. Coolify worker application
-
-Create a second Application from the same repository.
-
-| Setting | Value |
+| Key | Suggested staging value or source |
 |---|---|
-| Branch | `staging` |
-| Build pack | `Dockerfile` |
-| Base directory | `/` |
-| Dockerfile location | `/docker/worker.Dockerfile` |
-| Port exposes | `3100` |
-| Domain | None |
-| Health check | `GET /` on port `3100`, expected `200` |
-| Auto deploy | Off; the gated GitHub workflow is the deploy trigger |
+| `NEXT_PUBLIC_APP_NAME` | `vFurst` |
+| `NEXT_PUBLIC_APP_URL` | `https://vfurst.reyuugames.com` |
+| `NEXT_PUBLIC_MANAGER_URL` | `https://vfurst.reyuugames.com` |
+| `NEXT_PUBLIC_CONSOLE_URL` | `https://vfurst.reyuugames.com` |
+| `NEXT_PUBLIC_API_URL` | `https://vfurst.reyuugames.com/api` |
+| `NEXT_PUBLIC_ROOT_DOMAIN` | `vfurst.reyuugames.com` |
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry public DSN, or empty |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | Compose default or chosen rate |
+| `NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE` | Compose default or chosen rate |
+| `NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE` | Compose default or chosen rate |
 
-Leave **Inject Build Args to Dockerfile** enabled and enable **Include Source
-Commit in Build** here as well. Configure these as **Runtime Variable only**:
+**Required runtime values.** Compose does not enforce these at build time, so
+check that each one is set before deploying. Enter `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`POSTGRES_DB`, `AUTH_URL`, `AUTH_SECRET`,
+`EMAIL_DELIVERY_ENCRYPTION_KEY`, `S3_BUCKET_NAME`, `AWS_REGION`,
+`AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Use
+`AUTH_URL=https://vfurst.reyuugames.com`. Generate the URL-safe database
+password with `openssl rand -hex 32`; generate `AUTH_SECRET` and the shared
+email key independently with `openssl rand -base64 32`. Object storage and SMTP
+are external services; take their values from the provider.
 
-```env
-NODE_ENV=production
-WORKER_HEALTH_PORT=3100
+**Tunables and optional values.** See `compose.prod.yaml` for defaults and
+empty optional values before overriding connection pools, replica counts,
+rate limits, Sentry rates, Stripe/SePay, SMTP, or S3 endpoint settings.
+`VFURST_WEB_REPLICAS=1` is the Compose default for staging.
+`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` are excluded from
+this deployment's build and runtime.
 
-DATABASE_URL=postgresql://<user>:<password>@<host>:5432/vfurst?schema=public
-DIRECT_DATABASE_URL=postgresql://<user>:<password>@<host>:5432/vfurst?schema=public
-VFURST_DB_CONNECTION_LIMIT=4
-VFURST_DB_POOL_TIMEOUT_SECONDS=20
+`DATABASE_URL`, `DIRECT_DATABASE_URL`, and `REDIS_URL` are derived in
+`compose.prod.yaml`; **do not enter them** in Coolify. `NODE_ENV`, web port and
+hostname, worker health port, and `AUTH_TRUST_HOST` are fixed there as well.
 
-REDIS_URL=redis://<host>:6379
-CONTROL_PLANE_INVALIDATION_CHANNEL=vfurst:control-plane:invalidations
-EMAIL_DELIVERY_ENCRYPTION_KEY=<same-value-as-web>
+## 4. Branch ruleset
 
-S3_BUCKET_NAME=<same-bucket-as-web>
-AWS_REGION=<region>
-AWS_ACCESS_KEY_ID=<access-key>
-AWS_SECRET_ACCESS_KEY=<secret-key>
-S3_ENDPOINT=<only-for-S3-compatible-services-such-as-MinIO>
-NEXT_PUBLIC_APP_URL=https://vfurst.reyuugames.com
-```
+In GitHub repository settings, create a ruleset targeting `staging`. Require
+a pull request before merging and these exact status check names:
 
-Add the SMTP and SePay keys from `apps/worker/.env.example` when those jobs are
-enabled. The worker validates its required environment at import time and exits
-with a precise `WorkerConfigurationError` when a required key is missing.
+- `Lint, type-check, test, and build`
+- `Production images (linux/arm64)`
 
-Deploy once manually and confirm the health endpoint and queue startup in the
-logs. Then put its generated hook in `COOLIFY_WEBHOOK_URL_WORKER`.
+Block force pushes and deletion. The user decides who may bypass the ruleset;
+a direct push by a bypass actor can deploy to staging without the CI gate.
 
-## 5. Gated deploy flow
+## 5. Deploy flow
 
-Push to `staging` and wait for the `CI` workflow to pass. `Staging deploy` then
-runs web and worker as independent matrix jobs, so one failure does not prevent
-the other hook from being attempted.
+Merge a pull request into `staging` after both checks pass. The GitHub App
+notifies Coolify, where Auto Deploy starts one build of the `web`, `worker`,
+and `migrate` targets from the same source commit. PostgreSQL and Redis become
+healthy, then `migrate` runs `npm run sync --workspace @vfurst/db`. Once it
+exits successfully, `worker` and `web` start; they also require healthy
+PostgreSQL and Redis.
 
-Each call is `POST <deploy-hook>` with
-`Authorization: Bearer <COOLIFY_API_TOKEN>`. The hook's `uuid` selects the
-resource; Coolify deploys the branch configured on that resource. The workflow
-records the CI SHA as trace evidence but does not claim that the API pins that
-SHA. After Coolify accepts the hook, the workflow reads the returned deployment
-UUID and polls `GET /api/v1/deployments/{uuid}`. A matrix job is green only when
-Coolify reports `finished`; `failed`, `cancelled-by-user`, an unexpected status,
-or a 15-minute timeout fails that job. The API token therefore needs both
-deployment and deployment-read abilities.
+If the image build fails, the old stack keeps running. Once Coolify replaces
+the containers, a non-zero `migrate` exit prevents web and worker from
+starting; staging stays down until a corrected deployment or a redeploy of
+the previous commit succeeds.
 
-Retry behavior is deliberate:
+## 6. Smoke
 
-- `401` or `403`: fail immediately; fix the token, team membership, ability, or
-  API access policy.
-- Other non-retryable `4xx`: fail immediately and show the response body.
-- Network failures, `408`, `425`, `429`, and `5xx`: retry up to three times.
-
-For a manual retry, run the workflow from the `staging` ref in the GitHub UI.
-Do not call the production hook while testing this staging path.
-
-## 6. End-to-end smoke
-
-After both applications are healthy:
+Confirm `migrate` exited 0 and both application services are healthy. Then:
 
 ```bash
-# 200 when PostgreSQL and Redis are reachable; never 404.
+# 200 with PostgreSQL and Redis healthy, and the deployed source commit.
 curl -fsS https://vfurst.reyuugames.com/api/healthz
 
-# 401 because the public API endpoint requires an API key.
+# 401 because this public API endpoint requires an API key.
 curl -i https://vfurst.reyuugames.com/api/v1/events
 
 # 200 with HTML.
 curl -fsS https://vfurst.reyuugames.com/ | head -n 5
 ```
 
-Also inspect the Coolify deployment log and verify its source commit matches the
-successful `staging` CI SHA before declaring the deploy complete.
+Compare the commit in `/api/healthz` and the Coolify deployment log with the
+successful `staging` HEAD CI SHA. Do not mark the deployment complete if they
+differ.
+
+## 7. Database reset
+
+For the planned Phase 1B unit 1B.5 staging reset, stop the resource, delete
+the `postgres_data` volume in Coolify's storage view, then deploy. `migrate`
+creates the current schema on the empty database. This destroys staging data;
+do not add a data-loss flag to `sync`.
 
 ## Troubleshooting
 
-- **Webhook `401`**: token is absent, malformed, revoked, or stored with an
-  extra `Bearer ` prefix/quotes. Replace `COOLIFY_API_TOKEN` with the raw token.
-- **Webhook `403`**: the token was accepted but lacks deploy access to the
-  resource's team, or the API access policy rejected the runner. Retrying the
-  same request will not help.
-- **Status polling `401`/`403`**: the hook can deploy, but the token cannot read
-  `GET /api/v1/deployments/{uuid}`. Add deployment-read ability to the same
-  token; do not store a second token.
-- **Webhook `404`/`422`**: regenerate the Deploy Hook and confirm the resource
-  UUID. Do not hand-edit the UUID or use a legacy `token=` hook.
-- **Build has the wrong public URL/domain**: the affected `NEXT_PUBLIC_*` key
-  was not enabled as a Build Variable. Correct the flag and rebuild.
-- **Web exits before listening**: read the `[check-app-env]` output and add the
-  named runtime variable. The image intentionally fails fast on incomplete
-  production configuration.
-- **Worker health check fails**: set `WORKER_HEALTH_PORT=3100`, then resolve any
-  Redis/database error reported before the health server starts.
-- **`ECONNREFUSED` for PostgreSQL, Redis, or S3**: use the reachable Coolify
-  service hostname/shared-network alias, not the application container's
-  loopback address.
+- **Missing `SOURCE_COMMIT`:** Enable **Include Source Commit in Build** on
+  the resource, then redeploy.
+- **Build fails with `required variable … is missing a value`:** A
+  `NEXT_PUBLIC_*` key is missing or is not ticked **Available at Buildtime**.
+  If the named key is not `NEXT_PUBLIC_*` or `SOURCE_COMMIT`,
+  `compose.prod.yaml` is using `${VAR:?}` where it should use `${VAR:-}`. Fix
+  the file, not the Coolify setting.
+- **`postgres` unhealthy right after the first deploy:** `POSTGRES_PASSWORD`,
+  `POSTGRES_USER`, or `POSTGRES_DB` is empty at runtime. Set it, delete the
+  `postgres_data` volume if it was created empty, and redeploy.
+- **`migrate` exited non-zero:** Read the `migrate` container log. If Prisma
+  refuses a destructive schema change, review the change and the backup or
+  migration procedure; do not add `--accept-data-loss` to `sync`.
+- **`[check-app-env]` exit:** Read the named missing web runtime variable in
+  the log, set it in Coolify, and redeploy.
+- **Worker unhealthy:** Check its log for startup, database, and Redis errors;
+  confirm its health endpoint on port 3100 before redeploying.
+- **Wrong public value in the browser:** Mark its `NEXT_PUBLIC_*` key as a
+  **Build Variable** and rebuild so Next.js inlines the corrected value.
+- **Cloudflare `Flexible` SSL redirect loop:** Follow the SSL mode guidance in [go-live-checklist.md](go-live-checklist.md).

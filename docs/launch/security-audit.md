@@ -32,6 +32,30 @@ Last repository remediation update: July 29, 2026
 | SSRF | Remediated for outbound webhook delivery | Endpoint configuration requires public HTTPS DNS targets; delivery rejects private/mixed DNS answers, pins the verified address with TLS hostname checks, refuses redirects, and times out. |
 | Unsafe uploads | Remediated for current upload families | Branding, product-image, and vendor-document paths enforce size/type policy before reading, verify supported content signatures where applicable, and use generated object names. |
 
+## Dependency advisory resolution — October 13, 2026
+
+Advisories published after the July closeout raised the `staging` lockfile to **21 vulnerabilities (1 critical, 15 high, 5 moderate)**. They were resolved without `npm audit fix --force`. The registry-backed audit now reports **4 high, all in one accepted dev-only chain** (below).
+
+| Chain | Resolution and proof |
+|---|---|
+| Next.js (critical: Image Optimization RCE, Windows-host RCE, SSG/ISR cache poisoning) | The root peer, all three runtimes, and both Next ESLint plugins move from 15.5.22 to 15.5.27, still one hoisted version. This also clears the PostCSS chain bundled with Next. |
+| sharp (libheif, librsvg) | Override raised to 0.35.5, and the `allowScripts` pin was updated to match. The rebuilt web image loads **sharp 0.35.5 / libvips 8.18.7** on linux-x64 with the `@img` copy unchanged. |
+| nodemailer (cross-tenant SMTP credential disclosure via the DNS/TLS servername cache, domain allow-list bypasses, address-parser DoS) | The `nodemailer-secure` alias moves from `^9.0.3` to `^10.1.0`. 10.0.0's only breaking change is a Node.js 20+ floor; the images run Node 24. `createTransport` and `sendMail` usage is unchanged, and the worker image resolves 10.1.0. |
+| PostCSS, `brace-expansion`, `fast-uri` | Overrides raised to 8.5.30, 5.0.12, and 3.1.8. |
+| `deepmerge-ts` (via `@prisma/config`) | Prisma 6.19.3 is the latest 6.x release, so the override moves `deepmerge-ts` to 8.0.2. `prisma validate`, client generation, and the DB suite pass. |
+| vitest, `@vitest/mocker`, browserslist (via `@serwist/next`), nanoid, source-map-js, baseline-browser-mapping | Fixed through in-range updates (vitest `^4.1.11`) and a non-forced `npm audit fix`. |
+
+**Accepted, not fixed:** `braces` ≤3.0.3 (GHSA-vfj7-8cjw-p6xm), reached through `@next/eslint-plugin-next` → `fast-glob` → `micromatch`. No patched `braces` release exists; 3.0.3 is the latest. npm's only suggested fix is a semver-major downgrade of the Next ESLint plugin to 14.x. The chain exists only in lint tooling. `npm ls braces --omit=dev` is empty for the worker, and the plugin is never bundled into the web runtime. Revisit when `braces` or `micromatch` ships a fix. Until then, `npm audit --audit-level=moderate` reports exactly these four entries.
+
+Gates on the dependency branch:
+- serial forced `turbo run type-check lint test build`: **37/37**, 0 cached (web 190, auth 67, contracts 29, DB 52, worker 41, email 18, tenant-context 50, platform-manager 40, tenant-web 54);
+- `test:boot-config` PASS;
+- `test:split-topology` 5/5;
+- both Docker images build;
+- the only build warning is the known BullMQ dynamic-dependency warning.
+
+The full production E2E suite was not rerun for this dependency-only change. It remains a phase-exit gate.
+
 ## Dependency advisory resolution — July 29, 2026
 
 The Phase 1 closeout resolved the full advisory inventory without `npm audit fix --force` and without accepting or deferring any advisory. The final clean install and independent registry-backed audit report **0 vulnerabilities at every severity**, including the production tree.

@@ -30,6 +30,20 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-15 — Full production E2E green again on `staging` (out-of-phase test repair)
+
+- **Problem.** The full production suite (`E2E_PRODUCTION=1 npm run test:e2e -- --workers=1`) was red on `staging`. The last full green run was 2026-07-29; the 2026-10-14 baseline on pre-identity code was 50 passed / 17 failed / 51 did not run. There were two root causes:
+  1. **Login helpers raced the post-login navigation.** Since PR #21, a successful credentials login ends with `window.location.replace(returnTo)`. Fifteen specs waited only for the `POST /login` response and then called `page.goto`, which the replacement aborted (`net::ERR_ABORTED`).
+  2. **The organizer 403 screen made the ISR registration page dynamic.** `app/forbidden.tsx` (#19) called `auth()`, which reads `headers()`. Next renders the root forbidden boundary into every page, and `/{slug}/register` is the only route generated on demand (`generateStaticParams` returns `[]`, `revalidate = 15`). Its runtime render therefore failed with "Page changed from static to dynamic at runtime … reason: headers", and the page returned 500.
+- **Fix:**
+  - New `tests/e2e/support/credentials-login.ts` exports `loginWithCredentials(page, email, password, returnTo = "/dashboard")`. It returns only after the browser has loaded `returnTo`. The fifteen specs' helpers delegate to it, and attendee-only helpers land on `/account`. No assertion changed.
+  - `app/forbidden.tsx` no longer reads the session on the server. The "Signed in as" line moved into the client component `AccessDeniedIdentity`, which uses `useSession()`. The 15-second ISR contract is unchanged.
+- **Verification:**
+  - Full production E2E on a fresh build, one worker: **118 passed / 0 failed / 0 did not run**.
+  - Before the fix, the focused reproduction failed with the same server error, `public-flow-errors` "a tier that sells out mid-flow…".
+  - `npx turbo run type-check lint test build --concurrency=1`: **37/37** tasks (web unit tests **194/194**; type-check, lint, and test ran fresh for web, and the other tasks replayed from the Turbo cache).
+- **Next:** after this merges, merge `staging` into `feat/identity-replatform`. The Phase 1B gate in unit 1B.5 starts from this green baseline.
+
 ### 2026-10-14 — Phase 1B unit 1B.2: portal identity foundation (complete; pre-existing full-suite failures accepted)
 
 - Added `PortalAccount`, `PortalSession`, and `PortalAccountToken`; normalized tenant/email identity, email-first setup and walk-in claim, password sign-in/reset, hashed single-use one-hour tokens, absolute 30-day host-only sessions, organization checks and auth-version invalidation. Added the four portal auth pages, sign-out, inline form state, tenant/IP and tenant/email rate limits that fail closed, canonical account-email URLs, three protected non-replayable encrypted email templates, and bounded/rechecked session/token retention (30/7 days after terminal eligibility). This unit is additive: existing attendee business ownership and central staff credentials remain until 1B.3/1B.4.
@@ -48,6 +62,33 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 - Owned test processes and portal fixtures were removed. The cleanup dry-run separately reported **2 older store organizations / 2 users / 0 outbox events**, left untouched; global fixture cleanup was not claimed. The isolated baseline install reported **21 vulnerabilities (5 moderate, 15 high, 1 critical)**; no dependency remediation was part of this unit. No push or merge. **Next session: unit 1B.3 only — write its plan first.** Phase 2 remains blocked on Phase 1B.
 
 - Whole-branch review (Claude, 2026-10-14): forced serial gates 29/29 (0 cached), production portal E2E 9/9, telemetry check 12/12. Fixed after review: set-password now rate-limits by `${orgId}:${ip}` (`portal-set-password`) and rejects unusable tokens with one indexed read **before** bcrypt (previously an unauthenticated CPU-amplification path); sign-up and forgot-password run account work in `after()` so response timing no longer reveals whether an email exists (spec S6); the set-password form shows the success state instead of a transient invalid-link alert; account-exists sign-in links pass `returnTo` through `safeReturnTo`. Web unit tests 280/280; rebuilt production portal E2E 9/9. Follow-ups noted, not fixed: subdomain-to-custom-domain redirect (1B.3), server-side Sentry query-string scrubbing and Cloudflare SSL **Full (strict)** for `__Host-` cookies (1B.5 runbook).
+
+### 2026-10-14 — Compose deployment cutover complete; cleanup (out-of-phase infrastructure)
+
+- **Cutover finished.** The user created the Coolify Compose resource, moved `vfurst.reyuugames.com`, and deployed `07f6f86` successfully. External smoke passed:
+  - `/api/healthz` returned 200 with database and Redis `ok` and commit `07f6f86`, matching `staging` HEAD and green CI;
+  - `/api/v1/events` returned 401;
+  - `/` returned 200.
+
+  The user then enabled Auto Deploy, deleted the four old resources, deleted the GitHub secrets, revoked the Coolify API token, and deleted the GHCR packages.
+- **"no available server" was transient.** Right after the deploy, the domain returned "no available server". Coolify reports success when containers start, while Traefik routes only to healthy containers, and web's 10 s health interval left a gap. The web and worker health checks gained `start_interval: 2s`.
+- **Removed unused Stripe keys.** `STRIPE_PUBLISHABLE_KEY` and `STRIPE_CONNECT_CLIENT_ID` are gone from `.env.example`, `.env.local`, `apps/web/.env.example`, and `compose.prod.yaml`, because no code reads them.
+- **Runbook trimmed.** The one-time cutover section was removed from `docs/launch/staging-coolify-setup.md`, and the remaining sections were renumbered.
+- **Verification:** `npm run test:compose` **11/11**; `npm run compose:validate` (web 52, worker 26 keys).
+- **Next:** Phase 1B continues on `feat/identity-replatform` with unit 1B.2. Merge `staging` into it at the start of that unit.
+
+### 2026-10-14 — Compose build-time variable fix (out-of-phase infrastructure)
+
+- The first manual deployment of the new Coolify Compose resource (`1ea95ea`) failed at build. The error was `required variable POSTGRES_USER is missing a value`. Coolify builds with an env file that holds only the variables ticked "Available at Buildtime", and Compose interpolates the whole file, `environment:` included. The deploy log also showed Coolify injecting an `ARG` for every build-time variable into every Dockerfile stage, including secrets such as `AWS_SECRET_ACCESS_KEY` and `STRIPE_SECRET_KEY`.
+- **Fix:**
+  - `compose.prod.yaml` keeps `${VAR:?}` only for `SOURCE_COMMIT` and the required `NEXT_PUBLIC_*`. The ten runtime-required keys use `${VAR:-}` and fail at container start.
+  - `scripts/validate-compose.mjs` gains `checkBuildTimeRequirements`, which rejects `:?` on any other key; its tests went from **9 to 11**.
+  - The runbook, spec §4.3 and K7, and AGENTS.md now say to tick "Available at Buildtime" only for `NEXT_PUBLIC_*`.
+- **Verification:**
+  - `npm run test:compose` **11/11**; `npm run compose:validate` (web 54, worker 26 keys).
+  - With only build-time variables, `docker compose config` reproduces the Coolify error on the old file and passes on the new one.
+  - The PostgreSQL empty-password fail-closed behavior was not rerun locally, because Docker Desktop was stopped.
+- **Next:** after merge, untick "Available at Buildtime" on every non-`NEXT_PUBLIC_*` variable in Coolify and redeploy.
 
 ### 2026-10-13 — Phase 1B unit 1B.1: decisions recorded, split runtime removed
 
@@ -80,6 +121,46 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
   - Checkout uses capability tokens.
   - `@vfurst/auth`, `@vfurst/contracts`, `@vfurst/tenant-context`, and the control-plane outbox are used by web and worker, so only the split apps and their split-only modules are deleted.
 - **What did not happen:** no application code, schema, or test changed, and no gates ran. The user executes the unit plan with Codex and then asks for a whole-branch review. **Next session: unit 1B.1 only, following its plan.**
+
+### 2026-10-13 — Single Coolify Compose deployment (out-of-phase infrastructure, executed)
+
+- On `chore/coolify-compose-deploy`, added one shared `Dockerfile` with `web`, `worker`, and one-shot `migrate` targets; `compose.prod.yaml` starts PostgreSQL and Redis before the migration, then the two application services from the same source commit. The non-destructive DB `sync` script runs the schema preparation, push, and backfills. The Compose validator enforces the environment contract and generated service configuration. Four web reads now treat empty optional environment values as unset.
+- CI retains `verify` and adds a native `linux/arm64` production-image build on `ubuntu-24.04-arm`; the retired webhook deployment workflow was removed. The staging Coolify runbook, go-live checklist, agent instructions, and verification guide now describe the single-resource deployment and manual cutover.
+- Task 0 baseline: serial Turbo **37/37** (type-check 9, lint 9, test 9, build 10), **83 files / 541 tests**; boot-config PASS. Task 8: the same serial gates **37/37** (9/9/9/10), **84 files / 545 tests** (web 32 files / 194 tests), boot-config PASS, Compose tests **9/9**, and `compose:validate` passed with **web 54 / worker 26** environment keys. The K3 grep and the first two retired-reference sweeps were empty; the cutover-reference counts were **1/1**. No new warning was found against the baseline, including the exact cached Task 0 web-build output; the existing BullMQ, Next workspace-root, Serwist, and Webpack cache notices remain.
+- Per-suite Task 0 → Task 8 tests: web **190 → 194** (31 → 32 files); worker **41 → 41**; platform-manager **40 → 40**; tenant-web **54 → 54**; auth **67 → 67**; contracts **29 → 29**; db **52 → 52**; email **18 → 18**; tenant-context **50 → 50**.
+- Local cache-only builds of all three targets passed; worker and migrate reused cached `npm ci` and the shared build RUN. The synthetic Compose smoke from source commit `5088369f089444d2f15e04ceee76e22b0f2a7b44` had `migrate` exit 0 and PostgreSQL, Redis, web, and worker healthy. Web `/api/healthz` returned 200 with database and Redis `ok` and that exact commit; worker returned 200 with `ok:true` and five workers; the schema probe returned `t`. A second migration exited 0 on the synchronized schema, an intentional wrong-password migration exited 1, and smoke cleanup removed its project, volumes, three image tags, and scratch files. The image build logged the known BullMQ and Redis `ECONNREFUSED` noise while succeeding. The final actionlint run exited 0 with no findings after its YAML mapping fix.
+- Stop points and resolutions: an initial `npm ci` EPERM succeeded on an identical escalated retry; Task 0 Turbo/SWC filesystem denial stopped the run until the user instructed continuation, then the same gates passed with escalation. The user amended the original runbook/sweep contradiction in `764d2d8` and instructed continuation. Task 7 review's backup-evidence wording was corrected in its amended commit so the manual item is not presented as an automated check.
+- Final review corrected the staging recommendation for `NEXT_PUBLIC_ROOT_DOMAIN` to the canonical `vfurst.reyuugames.com` and clarified that `COPY . .` includes the two frozen split app sources in the shared build stage without building or deploying those apps. These documentation corrections did not change deployment files or runtime behavior.
+- No deployment, push, PR, or external settings were changed; existing non-smoke containers and volumes were untouched. The Phase 1B work remains separate.
+
+**Next:** the user pushes chore/coolify-compose-deploy, opens a pull request into staging, confirms both CI jobs are green, and follows docs/launch/staging-coolify-setup.md §2. Phase 1B continues on feat/identity-replatform with unit 1B.2; merge staging into it at the start of that unit.
+
+### 2026-10-13 — Single Coolify Compose deployment: design and plan (out-of-phase infrastructure; documentation only)
+
+- **What the user wants:**
+  - Replace the four staging Coolify resources (`postgresql-vfur`, `redis-vfur`, `v-furst:staging-web`, `v-furst:staging-worker`) with one Docker Compose resource, so web and worker always run the same commit.
+  - Build-check the production images natively on GitHub's `ubuntu-24.04-arm` runner, with no QEMU and no GHCR packages.
+- **What the user decided:**
+  - The arm64 job builds to the cache only; Coolify still builds on the host.
+  - Coolify deploys through its GitHub App auto-deploy, with no API token or webhook in GitHub.
+  - The CI gate becomes a `staging` ruleset that requires both checks.
+  - Staging data is test data, so the new PostgreSQL and Redis start empty.
+- **Findings:**
+  - The pipeline already stopped using QEMU and pushing to GHCR in PR #7/#8. The two GHCR packages are stale leftovers from PR #5/#6.
+  - The web image never ran the schema chain; the runbook had the operator run it by hand. A one-shot `migrate` service now runs it.
+  - Four web reads mishandle an empty optional value. They are fixed in the plan's Task 1.
+- **Documents on branch `chore/coolify-compose-deploy`** (cut from `origin/staging` at `97bc517`; worktree `.claude/worktrees/coolify-compose-deploy`; not pushed):
+  - spec `docs/superpowers/specs/2026-10-13-coolify-compose-deploy-design.md`;
+  - plan `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md`.
+- **What did not happen:** no code, configuration, workflow or Coolify setting changed, and no gate ran. Phase status is unchanged.
+- **Next session:** execute `docs/superpowers/plans/2026-10-13-coolify-compose-deploy.md` (Tasks 0–8) in that worktree. Phase 1B continues separately on `feat/identity-replatform` with unit 1B.2.
+
+### 2026-10-13 — Dependency advisory remediation on `staging` (user-requested)
+
+- New advisories since the July closeout: the lockfile went from 0 to 21 findings (1 critical in Next.js). Next moved to 15.5.27, nodemailer to 10.1.0, and the sharp, PostCSS, `brace-expansion`, `fast-uri`, and `deepmerge-ts` overrides and vitest were raised; the remainder came from a non-forced `npm audit fix`.
+- The audit now shows 4 high findings, all one accepted dev-only `braces` chain inside the Next ESLint plugin; no upstream fix exists. Details and proof are in `docs/launch/security-audit.md`.
+- Gates: 37/37 forced serial, boot-config PASS, split-topology 5/5, both Docker images build. Production E2E was not rerun. The Phase 1B branch must take these package changes when it merges in 1B.5.
+
 
 ### 2026-07-30 — Phase 2 product decisions recorded (user-requested; documentation only)
 

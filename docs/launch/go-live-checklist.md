@@ -24,6 +24,7 @@ record these manually before Phase 6 can close:
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence before SePay is enabled.
 - A production transactional email provider tested through password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
 - The deployed persona/tenant-isolation matrix, and the final full-system audit rerun against the deployed environment.
+- Production PostgreSQL backups and a recorded restore drill. The single-resource Compose topology has no Coolify-managed database backups (decided 2026-10-13).
 
 The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
 
@@ -87,7 +88,7 @@ For Coolify deployments, `NEXT_PUBLIC_ROOT_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `AUTH
 
 If Cloudflare proxies the Coolify domain, set Cloudflare SSL/TLS mode to `Full` or `Full (strict)`, not `Flexible`. A `Flexible` edge connection can loop forever when Coolify or Traefik redirects the origin request back to HTTPS. The symptom is `curl -I https://vfurst.reyuugames.com/` returning `302` or `307` with `Location: https://vfurst.reyuugames.com/` repeatedly. Temporarily disabling the orange-cloud proxy is a useful isolation test; if the direct DNS path works, fix the Cloudflare SSL mode before re-enabling the proxy.
 
-Production database schema must be synchronized before login, dashboard, or convention routes can work. This repo currently has a Prisma schema but no committed `packages/db/prisma/migrations` directory, so the web `prestart` hook synchronizes the additive schema and then runs the managed-tenancy backfill before Next.js accepts traffic:
+Production database schema must be synchronized before login, dashboard, or convention routes can work. This repo currently has a Prisma schema but no committed `packages/db/prisma/migrations` directory. The `migrate` service runs `npm run sync --workspace @vfurst/db` (prepare, `prisma db push`, and both backfills) before web and worker start; web and worker do not start if it fails. The schema push and managed-tenancy backfill within `sync` include these commands:
 
 ```bash
 cd packages/db
@@ -95,9 +96,9 @@ npx prisma db push
 npm run backfill:managed-tenancy
 ```
 
-The hook does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The idempotent backfill marks only legacy organizations with a null lifecycle marker as `ACTIVE`, preserves already-routed custom domains, and leaves explicitly provisioned tenants in `PROVISIONING`. Administrative scripts prefer `DIRECT_DATABASE_URL`; it must be a direct Postgres endpoint without `pgbouncer=true` and its role needs schema DDL/data-update permission. Runtime web/worker traffic uses `DATABASE_URL`, which may be pooler-backed. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
+`sync` does not pass `--accept-data-loss`: additive changes apply automatically, while a destructive change refuses startup and requires a reviewed backup/migration procedure. The idempotent backfill marks only legacy organizations with a null lifecycle marker as `ACTIVE`, preserves already-routed custom domains, and leaves explicitly provisioned tenants in `PROVISIONING`. Administrative scripts prefer `DIRECT_DATABASE_URL`; it must be a direct Postgres endpoint without `pgbouncer=true` and its role needs schema DDL/data-update permission. Runtime web/worker traffic uses `DATABASE_URL`, which may be pooler-backed. After the first live bootstrap, add real Prisma migrations before making future production schema changes so later deploys can use `npx prisma migrate deploy`.
 
-Each process owns one Prisma client and a bounded pool. Before changing replica count or pool size, verify `(web replicas + worker replicas) x per-process connection limit` stays within `VFURST_DB_CONNECTION_BUDGET`, that the budget stays below Postgres usable capacity after reserved/admin slots, and that rolling-deploy overlap retains headroom. The launch runner performs the same capacity preflight before it builds or seeds.
+Each process owns one Prisma client and a bounded pool. Before changing replica count or pool size, verify `(web replicas + worker replicas) x per-process connection limit` stays within `VFURST_DB_CONNECTION_BUDGET` and that the budget stays below Postgres usable capacity after reserved/admin slots. The launch runner performs the same capacity preflight before it builds or seeds.
 
 Sentry sample rates remain optional tuning values. Shared fixed-window quotas for Auth.js, public API keys, payment/refund actions, Stripe webhooks, and SePay webhooks are mandatory production values and are validated by the checker together with `REDIS_URL`. All web replicas must use the same Redis deployment and rate-limit prefix. Auth/API/payment controls intentionally fail closed if Redis is unavailable; signed and idempotent Stripe/SePay callbacks fail open while logging degraded protection so settlement is preserved. Blank or placeholder launch values are not sufficient. SePay and checkout secrets above still require an explicit manual go-live check; SePay secrets may be omitted only when the provider is disabled and its rollout is intentionally deferred.
 
