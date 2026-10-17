@@ -1,22 +1,21 @@
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { normalizeIdentityEmail, verifyPassword } from "@vfurst/auth/core";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@vfurst/db";
 import NextAuth, { type DefaultSession } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
+import Authentik from "next-auth/providers/authentik";
 import { cache } from "react";
-import { z } from "zod";
 import {
   bindIdentitySessionToJwt,
   IDENTITY_SESSION_MAX_AGE_SECONDS,
   revokeIdentitySession,
   type IdentityJwtClaims
 } from "@/lib/identity-session";
-
-const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1)
-});
+import {
+  createStaffAdapter,
+  findStaffEmailConflict,
+  parseStaffClaims,
+  STAFF_IDENTITY_PROVIDER,
+  syncStaffUser
+} from "@/lib/staff-identity";
 
 declare module "next-auth" {
   interface Session {
@@ -29,60 +28,54 @@ declare module "next-auth" {
 }
 
 const nextAuth = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: createStaffAdapter(prisma),
   secret: process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "development" ? "vfurst-local-development-secret" : undefined),
   session: {
     strategy: "jwt",
     maxAge: IDENTITY_SESSION_MAX_AGE_SECONDS
   },
+  // Staff sign in only through the studio authentik over OIDC (spec §6.1).
   providers: [
-    Credentials({
-      credentials: {
-        email: {},
-        password: {}
-      },
-      async authorize(credentials) {
-        const parsed = credentialsSchema.safeParse(credentials);
-
-        if (!parsed.success) {
-          return null;
-        }
-
-        const user = await prisma.user.findUnique({
-          where: {
-            email: normalizeIdentityEmail(parsed.data.email)
-          }
-        });
-
-        if (!user?.passwordHash) {
-          return null;
-        }
-
-        const isValid = await verifyPassword(parsed.data.password, user.passwordHash);
-
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image ?? user.avatar
-        };
-      }
-    }),
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true
+    Authentik({
+      issuer: process.env.AUTH_AUTHENTIK_ISSUER,
+      clientId: process.env.AUTH_AUTHENTIK_ID,
+      clientSecret: process.env.AUTH_AUTHENTIK_SECRET,
+      checks: ["pkce", "state"],
+      authorization: { params: { scope: "openid email profile" } }
     })
   ],
   pages: {
-    signIn: "/login"
+    signIn: "/login",
+    // Auth.js error codes render inline on /login (spec §6.6).
+    error: "/login"
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ account, profile }) {
+      const claims = account?.provider === STAFF_IDENTITY_PROVIDER ? parseStaffClaims(profile) : null;
+      if (!claims) return false;
+
+      const conflict = await findStaffEmailConflict(claims);
+      if (conflict) {
+        // No automatic linking by email (spec §6.2). Report both user ids, never tokens.
+        Sentry.captureMessage("Studio account email conflict", { level: "warning", extra: conflict });
+        return "/login?error=StudioAccountConflict";
+      }
+
+      return true;
+    },
+    async jwt({ token, user, account, profile }) {
+      if (user?.id && account?.provider === STAFF_IDENTITY_PROVIDER) {
+        const claims = parseStaffClaims(profile);
+        if (claims) {
+          // Sync before the identity session is issued, so a role change applies at once.
+          await syncStaffUser(user.id, claims);
+          return bindIdentitySessionToJwt(token, user.id, undefined, {
+            sid: claims.sid,
+            idToken: account.id_token ?? null
+          });
+        }
+      }
+
       return bindIdentitySessionToJwt(token, user?.id);
     },
     async session({ session, token }) {
