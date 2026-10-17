@@ -87,6 +87,30 @@ describe("canonical host middleware", () => {
     expect(mocks.lookup).not.toHaveBeenCalled();
   });
 
+  it("classifies Next's internal request from its bind address by the forwarded host", async () => {
+    // Next renders a server action's redirect by fetching it from http://<bind address>:<port>
+    // and forwards the original host only as x-forwarded-host.
+    vi.stubEnv("NODE_ENV", "production");
+    for (const bindHost of ["0.0.0.0", "127.0.0.1"]) {
+      const central = await middleware(
+        request("/platform/organizations/org-1", bindHost, "GET", { "x-forwarded-host": "localhost:3000" })
+      );
+      expect(central.headers.get("location")).toBeNull();
+      expect(central.headers.get("x-middleware-next")).toBe("1");
+      expect(central.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
+      expect(central.headers.get("x-middleware-request-x-vfurst-org-slug")).toBeNull();
+
+      const portal = await middleware(request("/register", bindHost, "GET", { "x-forwarded-host": "acme.localhost:3000" }));
+      expect(portal.headers.get("location")).toBeNull();
+      expect(portal.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("acme");
+    }
+  });
+
+  it("ignores x-forwarded-host when the Host is a real hostname", async () => {
+    const response = await middleware(request("/register", "acme.localhost", "GET", { "x-forwarded-host": "localhost:3000" }));
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("acme");
+  });
+
   it("drops a client-supplied portal slug header on central routes", async () => {
     const response = await middleware(request("/dashboard", "localhost", "GET", { "x-vfurst-portal-slug": "evil" }));
     expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();

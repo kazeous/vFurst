@@ -13,8 +13,16 @@ export const PORTAL_SLUG_HEADER = "x-vfurst-portal-slug";
 const STATIC_FILE_EXTENSION =
   /[.](?:avif|bmp|css|csv|gif|ico|jpe?g|js|json|map|mjs|pdf|png|svg|txt|webmanifest|webp|woff2?|ttf|xml|zip)$/i;
 
+// Next renders a server action's redirect target by fetching it from its own bind address
+// (the production image binds 0.0.0.0) and keeps the original host only in x-forwarded-host.
+// External traffic never arrives with these hosts: the proxy routes real hostnames only.
+const SERVER_BIND_HOSTNAMES = new Set(["0.0.0.0", "127.0.0.1", "::", "::1", "localhost"]);
+
 function getHostname(request: NextRequest) {
-  return normalizeHostname(request.headers.get("host") ?? "");
+  const hostname = normalizeHostname(request.headers.get("host") ?? "");
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+
+  return SERVER_BIND_HOSTNAMES.has(hostname) && forwardedHost ? normalizeHostname(forwardedHost) : hostname;
 }
 
 export function isKnownStaticAssetPath(pathname: string) {

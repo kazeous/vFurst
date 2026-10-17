@@ -10,6 +10,11 @@ const host = "localhost";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
 const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";
+// Next renders a server action's redirect target by fetching it from its own bind address.
+// The production image binds 0.0.0.0, which Linux connects to as loopback; Windows refuses
+// it and Next falls back to a client redirect. Binding 127.0.0.1 gives every OS that same
+// internal request (Host = bind address, x-forwarded-host = the original host).
+const bindHost = serverMode === "start" ? "127.0.0.1" : host;
 const rateLimitPrefix = process.env.VFURST_RATE_LIMIT_PREFIX ?? `vfurst:e2e:${process.pid}:${Date.now()}`;
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? "sk_test_e2e_stripe_secret_key_1234567890";
@@ -22,7 +27,7 @@ const serverArgs = [
   serverMode,
   "apps/web",
   "--hostname",
-  host,
+  bindHost,
   "--port",
   port
 ];

@@ -218,6 +218,10 @@ test("platform provisioning creates a provisioning tenant and an owner invitatio
     where: { slug: provisionedOrgSlug },
     include: { invitations: true, members: true }
   });
+  // The action's redirect is rendered by Next fetching the target from the server's bind
+  // address; it must reach the platform route, not a portal 404.
+  await expect(page).toHaveURL(new RegExp(`/platform/organizations/${provisioned.id}$`));
+  await expect(page.getByRole("heading", { name: "Provisioned Invitation Organization" })).toBeVisible();
   expect(provisioned.status).toBe("PROVISIONING");
   expect(provisioned.statusUpdatedById).toBe(platformId);
   expect(provisioned.statusUpdatedAt).not.toBeNull();
