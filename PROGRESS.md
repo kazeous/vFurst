@@ -6,7 +6,7 @@
 
 ## Current phase
 
-**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.4 complete on `feat/identity-replatform` (not merged). Unit 1B.4 (staff SSO) closed with clean serial gates **29/29**, **606/606 tests**, boot configuration PASS, and fresh full production E2E **147 passed / 0 failed / 0 did not run**. **Next session: unit 1B.5 only — closeout and deploy; its plan is "written at unit start".**
+**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.4 complete on `feat/identity-replatform` (not merged). Unit 1B.4 (staff SSO) closed with clean serial gates **29/29**, **606/606 tests**, boot configuration PASS, and fresh full production E2E **147 passed / 0 failed / 0 did not run**. Unit 1B.5 (closeout and deploy, plan `docs/superpowers/plans/2026-10-17-phase-1b-unit-5-closeout-and-deploy.md`) passed its local gate: gates **29/29**, **613/613 tests**, full production E2E **148 passed / 0 failed / 0 did not run**, 500/50 load proof p95 **816.66 ms**. **Next: 1B.5 Task 6 — the operator release steps (push and PR into `staging`, authentik, DNS/TLS, Coolify environment, staging database reset, merge), each only with the user's go.**
 
 Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
 
@@ -15,7 +15,7 @@ Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 withdrawn in Phase 1B (split runtime removed) |
-| 1B — Identity re-platform | In progress | 1B.1–1B.4 complete; 1B.5 remains; merge to staging once in 1B.5 |
+| 1B — Identity re-platform | In progress | 1B.1–1B.4 complete; 1B.5 local gate passed, release and deployed smoke remain; merge to staging once in 1B.5 |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -29,6 +29,32 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-17 — Phase 1B unit 1B.5: local gate (unit in progress)
+
+- **Executor:** Claude, inline (executing-plans), at the user's request; plan `docs/superpowers/plans/2026-10-17-phase-1b-unit-5-closeout-and-deploy.md`, ledger in `.superpowers/sdd/2026-10-17-phase-1b-unit-5-closeout-and-deploy/progress.md`. Commits `928de73` through this entry.
+- **What changed:**
+  - **Sentry:** the server and edge configs scrub `token`, `code`, `state`, `id_token_hint`, and `logout_token` values and the `/invitations/<token>` segment from request URLs, query strings, referers, and breadcrumb URLs, for errors and transactions.
+  - **Load proof on Phase 1B identity:** the seed creates an OIDC staff account (no password), portal-account attendees, and one portal session. The runner checks the mock OIDC discovery document, signs the staff user in through it over plain HTTP (`scripts/lib/staff-oidc-login.mjs`, `npm run test:load-harness`), and k6's registration scenario requests the tenant-host page plus `/api/portal/session`. The replica proxy now forwards `Host`, and the runner sends `Host: localhost:<port>` for loopback base URLs.
+  - **ISR fix (found by the load proof):** since 1B.3, tenant pages rendered on every request, because Next 15.5 matches the prerender manifest against the pre-rewrite pathname of a middleware rewrite. The middleware now names the portal key in `x-vfurst-portal-slug`, and a `next.config.ts` `beforeFiles` rewrite routes on it, so the ISR cache applies again (`x-nextjs-cache: HIT`, new E2E in `portal-canonical-host.spec.ts`).
+  - **Readiness:** `check:launch` requires `AUTH_AUTHENTIK_ISSUER` (HTTPS URL), `AUTH_AUTHENTIK_ID`, and `AUTH_AUTHENTIK_SECRET`.
+  - **Docs:** new `docs/launch/authentik-setup.md`; the Coolify runbook gains the staff identity environment, the portal smoke, the reset order, and the DNS-only wildcard with Coolify-issued certificates (DNS-01); go-live checklist items; contract notes that `userId` is now a portal account ID; the public docs pages; `01-current-state.md`; a Phase 1B note in the security audit.
+- **Verification:**
+  - Gates `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached** — web 382, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **613**. `npm run test:boot-config` PASS. `npm audit --audit-level=moderate`: the same 4 accepted dev-only `braces` findings. `npm run check:launch`: 11 failures, all known — the local http issuer (passes only deployed), Stripe ×2, Sentry ×5, beta conventions, physical screen-reader pass, `VFURST_LAUNCH_URL`.
+  - Fresh web build, `prestart`, full production E2E **148 passed / 0 failed / 0 did not run (2.5 m)**; visual baselines unchanged.
+  - Load proof (Docker k6, 1,500 seeded registrations, 500/50 VUs, six replicas, pool 4): the first run failed at p95 3.99 s (cause above). After the fix: p95 **816.66 ms**, **573,598/573,598** checks, **0/286,799** failures; registration p95 726.67 ms; check-in p95 5.62 s (37.93 ms alone). Details in `docs/launch/performance-load-test.md`.
+  - Plain `npm run dev` walkthrough with the mock OIDC up, on two temporary organizations removed afterwards (fixture cleanup 0/0/0):
+    1. Pass — both duplicate sign-ups show "Check your email"; Mailpit has the setup links.
+    2. Pass — name and password set; sign-out; a wrong password stays inline ("Email or password is incorrect."); the correct one signs in; signing up again sends "You already have … account".
+    3. Pass — `/account` shows its six summary cards; the same email on the second tenant got its own setup email, and that tenant's session is empty.
+    4. Pass — `localhost:3000/{slug}` and `/{slug}/register?probe=1` answer 308 to the tenant host, query kept.
+    5. Pass — an invalid voucher stays inline ("Voucher code was not found."); the free registration is confirmed; confirmation and receipt are in Mailpit.
+    6. Pass — a bad discount code stays inline; the $0 store checkout on the tenant host ends with the order PAID.
+    7. Pass — hotel booking confirmed (rooms 5 → 4); a blank required volunteer field is blocked by the browser and, with that bypassed, inline "Experience summary is required."
+    8. Pass — staff sign-in through the mock reaches `/dashboard`; logout goes through end-session to `/`, and `/dashboard` then redirects to `/login`.
+    No blank Application error, no console errors, no server errors.
+- **Deferred minor:** the store's empty cart says "Sign in, then add products to your cart." to signed-in visitors who have no cart yet (`apps/web/src/components/store/cart.tsx`).
+- **Next:** Task 6, the operator release steps, each only with the user's go. No push or merge was performed.
 
 ### 2026-10-17 — Phase 1B unit 1B.4: staff SSO (complete)
 
