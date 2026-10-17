@@ -6,7 +6,7 @@
 
 ## Current phase
 
-**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.3 complete on `feat/identity-replatform` (not merged). After the unit 1B.3 final-review webhook correction, the latest clean serial gates passed **29/29**, **566/566 tests**, boot configuration passed, and fresh full production E2E passed **140 passed / 0 failed / 0 did not run**. The original Task 12 closeout had **565/565 tests** and the passing plain-root development browser smoke; those remain separate historical evidence below. PR #27 restored the earlier red full suite on `staging` and was merged before unit 1B.3; the 1B.2 red-suite acceptance below is historical. **Next session: unit 1B.4 only — staff SSO; its plan is "written at unit start".**
+**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.4 complete on `feat/identity-replatform` (not merged). Unit 1B.4 (staff SSO) closed with clean serial gates **29/29**, **606/606 tests**, boot configuration PASS, and fresh full production E2E **147 passed / 0 failed / 0 did not run**. **Next session: unit 1B.5 only — closeout and deploy; its plan is "written at unit start".**
 
 Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
 
@@ -15,7 +15,7 @@ Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 withdrawn in Phase 1B (split runtime removed) |
-| 1B — Identity re-platform | In progress | 1B.1–1B.3 complete; 1B.4–1B.5 remain; merge to staging once in 1B.5 |
+| 1B — Identity re-platform | In progress | 1B.1–1B.4 complete; 1B.5 remains; merge to staging once in 1B.5 |
 | 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
@@ -29,6 +29,27 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-17 — Phase 1B unit 1B.4: staff SSO (complete)
+
+- **Executor:** Claude, inline (executing-plans), at the user's request; plan `docs/superpowers/plans/2026-10-16-phase-1b-unit-4-staff-sso.md`, ledger in `.superpowers/sdd/2026-10-16-phase-1b-unit-4-staff-sso/progress.md`. Commits `84e94a3` (Task 1) through this entry.
+- **What changed:**
+  - **Local stack:** pinned `mock-oauth2-server:2.1.10` on 8090 (issuer `http://localhost:8090/vfurst`); `AUTH_AUTHENTIK_ISSUER/ID/SECRET`, `VFURST_PLATFORM_ADMIN_GROUP`, `VFURST_STAFF_SESSION_MAX_AGE_SECONDS` in every env file, the Compose contract (web 52 → 57 keys), the web env check, and the E2E server defaults.
+  - **Staff sign-in:** Auth.js uses the authentik OIDC provider (PKCE + state) with a token-free adapter. Claims sync email, name, image, `emailVerified`, and `platformRole` (from the group) before the identity session is issued; an email held by another subject is denied with `StudioAccountConflict`. Identity sessions are capped at 12 h and store the OIDC `sid` and the ID token, which every revocation clears.
+  - **Logout:** `staffSignOut` revokes locally first, then goes through the end-session endpoint; both shells use it and link to the authentik user interface.
+  - **Back-channel logout:** `POST /api/oidc/backchannel-logout` validates the logout token with `jose` (direct dependency at the locked 6.2.4), rejects a replayed `jti` for 10 minutes (fails open when Redis is down), and revokes by `sid` or bumps `authVersion`.
+  - **Invitations:** `EMAIL_UNVERIFIED` blocks acceptance by an unverified studio email; the page shows the state and a link to the authentik user interface.
+  - **Removed:** central `/register`, `/forgot-password`, `/reset-password` and their actions, `User.passwordHash`, `User.avatar`, the `Authenticator` and `VerificationToken` models, `scripts/manage-platform-admin.mjs`, the `welcome` template (no sender). The `password-reset` template stays: the worker's platform-email path is keyed on it.
+  - **E2E:** staff sign in through the mock form (`createStaffFixture`, `staffIdentityData`, `loginAsStaff`, `loginAsStaffEmail`); new `staff-sso.spec.ts` (9 tests: JIT linking without tokens, admin/owner/outsider routing, demotion on the next sign-in, email-conflict denial, logout through end-session, verified and unverified invitations). `account-registration` and `password-reset-delivery` are deleted with the features they tested.
+- **No local reset was needed:** the local database was empty, so the standard non-destructive prestart applied the column and model drops.
+- **Rulings** (all in the ledger): extra helpers `resolveStaffSessionMaxAgeSeconds`, `STAFF_IDENTITY_PROVIDER`, `staffIdentityData`, `loginAsStaffEmail`; `pages.error = "/login"`; the invitation page checks `emailVerified` itself; the logout-token issuer comes from discovery; the invitation spec asserts the single sign-in link (Task 6's markup); two `launch-critical-paths` steps wait for the action's own success navigation instead of racing it with `page.goto`.
+- **Verification:**
+  - Task 0 baseline (850ee25): gates 29/29, 568 tests; E2E 140/0/0.
+  - Closeout: `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached** — web 375, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **606**. `npm run test:boot-config` PASS. `npm audit --audit-level=moderate`: the same 4 accepted dev-only high findings (braces chain via `@next/eslint-plugin-next`). Fresh forced web build, then full production E2E **147 passed / 0 failed / 0 did not run (2.6 m)**; visual baselines unchanged.
+  - Spec R1 resolved: the `http://` mock issuer works under `next start` (Auth.js 0.41.3 allows insecure discovery/token/userinfo requests).
+  - Plain-dev walkthrough (`npm run dev`, no injected env): admin group → `/platform`; "Manage your Reyuu Games account" → `http://localhost:8090/if/user/`; logout → one end-session request → `/`; non-member → 403 screen. Its two JIT users were deleted.
+- **Note:** `scripts/seed-load-test.mjs` still writes `User.passwordHash`; the k6 rework is unit 1B.5.
+- **Next:** unit 1B.5 (closeout and deploy), plan "written at unit start".
 
 ### 2026-10-15 — Phase 1B unit 1B.3: attendee domain on portal accounts (complete)
 

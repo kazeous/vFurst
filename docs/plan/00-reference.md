@@ -98,7 +98,7 @@ vFurst platform
 | Monorepo | Turborepo (`apps/web`, `apps/worker`, `apps/docs`, `packages/db`, `packages/email`, `packages/auth`, `packages/contracts`, `packages/tenant-context`) |
 | Web | Next.js 15 App Router, RSC-first, local shadcn/ui-style components, Operational Calm tokens in `globals.css` |
 | Database | PostgreSQL + Prisma; one client singleton per process; bounded pools (see connection contract) |
-| Auth | Staff: Auth.js v5 + authentik OIDC (JWT bound to a DB `Session`, `authVersion` invalidation, back-channel logout). Attendees: first-party portal sessions (hashed opaque host-only cookie token, organization-bound) over `PortalAccount`. Hashed single-use invitation/setup/reset/transfer tokens. |
+| Auth | Staff: Auth.js v5 + authentik OIDC (PKCE + state; JWT bound to a DB `Session` capped at `VFURST_STAFF_SESSION_MAX_AGE_SECONDS`, default 12 h; `authVersion` invalidation; single logout through the end-session endpoint; back-channel logout at `/api/oidc/backchannel-logout`; platform admins from the `VFURST_PLATFORM_ADMIN_GROUP` group; no staff passwords). Attendees: first-party portal sessions (hashed opaque host-only cookie token, organization-bound) over `PortalAccount`. Hashed single-use invitation/setup/reset/transfer tokens. |
 | Payments | Stripe Connect + SePay VietQR; provider-neutral `Order`/`PaymentAttempt` with single-active-attempt lock |
 | Storage | S3-compatible (`S3_ENDPOINT` → MinIO locally, AWS S3 in production); presigned uploads; tenant-prefixed keys |
 | Jobs | BullMQ + Redis: pointer-only email queue + dead letters, badge render, webhooks, SePay reconciliation, checkout expiry |
@@ -119,6 +119,7 @@ Every phase builds and verifies against the local stack — no cloud accounts un
 | `redis:7` | Managed Redis | BullMQ + shared rate limits, identical code path to production |
 | `minio` | AWS S3 | `S3_ENDPOINT=http://localhost:9000`; unset in production for real S3 |
 | `mailpit` | SES | SMTP catcher, UI at `http://localhost:8025` |
+| `mock-oidc` (`mock-oauth2-server`, pinned) | Studio authentik | Issuer `http://localhost:8090/vfurst`; its sign-in form takes any subject plus JSON claims (`groups` for platform admins). Used by plain dev and E2E |
 
 Stripe uses test mode + CLI webhook forwarding; SePay uses its Sandbox with HMAC-signed webhooks. Cloud migration must be an env-var change, not a code branch — if a phase needs "local vs cloud" branching, flag it in `PROGRESS.md`.
 
