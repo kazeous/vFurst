@@ -1,5 +1,6 @@
 "use client";
 
+import { useActionRedirect } from "@/components/use-action-redirect";
 import { addToCart } from "@/actions/cart-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,9 @@ import { useActionState, useState } from "react";
 type ProductOption = { name: string; values: string[] };
 
 export function AddToCartForm({ productId, stock, options }: { productId: string; stock: number; options: ProductOption[] }) {
-  const [state, formAction, isPending] = useActionState(addToCart, initialPublicFormState);
+  const [state, formAction, pending] = useActionState(addToCart, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const isPending = pending || Boolean(state.redirectTo);
   const [quantity, setQuantity] = useState("1");
 
   return (

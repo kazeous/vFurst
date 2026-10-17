@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -33,20 +33,19 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
     prisma.user.create({
       data: {
         email: ownerAEmail,
         name: "Hotel Owner A",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: ownerBEmail,
         name: "Hotel Owner B",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -139,16 +138,16 @@ test.beforeAll(async () => {
   blockBId = blockB.id;
 
   const [guestA, guestB, validGuest] = await Promise.all([
-    prisma.user.create({ data: { email: guestAEmail, name: "Hotel Guest A", passwordHash } }),
-    prisma.user.create({ data: { email: guestBEmail, name: "Hotel Guest B", passwordHash } }),
-    prisma.user.create({ data: { email: validGuestEmail, name: "Valid Hotel Guest", passwordHash } })
+    createPortalAccountFixture(prisma, { orgId: orgA.id, email: guestAEmail, name: "Hotel Guest A", password }),
+    createPortalAccountFixture(prisma, { orgId: orgB.id, email: guestBEmail, name: "Hotel Guest B", password }),
+    createPortalAccountFixture(prisma, { orgId: orgA.id, email: validGuestEmail, name: "Valid Hotel Guest", password })
   ]);
 
   const [bookingA, bookingB] = await Promise.all([
     prisma.hotelBooking.create({
       data: {
         orgId: orgA.id,
-        userId: guestA.id,
+        portalAccountId: guestA.id,
         blockId: blockA.id,
         roomType: "Double",
         checkIn: new Date("2028-04-10T00:00:00Z"),
@@ -159,7 +158,7 @@ test.beforeAll(async () => {
     prisma.hotelBooking.create({
       data: {
         orgId: orgB.id,
-        userId: guestB.id,
+        portalAccountId: guestB.id,
         blockId: blockB.id,
         roomType: "Double",
         checkIn: new Date("2028-05-10T00:00:00Z"),
@@ -192,12 +191,12 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await loginWithCredentials(page, ownerAEmail, password);
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAs(page: Page, email: string) {
-  await loginWithCredentials(page, email, password);
+  await loginAsAttendee(page, { subdomain: orgASlug }, email, { password });
 }
 
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
@@ -219,7 +218,7 @@ async function navigateAfterRejectedAction(page: Page, pathname: string) {
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate((formElement, name) => {
     const form = formElement as HTMLFormElement;
@@ -241,7 +240,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -282,21 +281,21 @@ async function expectOriginalHotelResources() {
 
 test("public hotel success lookup is tenant-scoped and booking binds block to event", async ({ page }) => {
   await loginAs(page, guestAEmail);
-  await page.goto(`/${orgASlug}/hotel?success=${bookingBId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel?success=${bookingBId}`);
   await expect(page.getByRole("heading", { name: "Hotel booking confirmed" })).toHaveCount(0);
   await expect(page.getByText("Hotel Guest B")).toHaveCount(0);
 
-  await page.goto(`/${orgASlug}/hotel?success=${bookingAId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel?success=${bookingAId}`);
   await expect(page.getByRole("heading", { name: "Hotel booking confirmed" })).toBeVisible();
   await expect(page.getByText("Hotel Guest A")).toBeVisible();
 
-  await page.goto(`/${orgASlug}/hotel`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel`);
   const publicForm = page.getByRole("heading", { name: blockAName }).locator("xpath=ancestor::form");
   await publicForm.getByLabel("Check-in").fill("2028-04-10");
   await publicForm.getByLabel("Check-out").fill("2028-04-11");
   await publicForm.getByLabel("Guest name").fill("Rejected Guest");
-  await submitTamperedAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout", "blockId", blockBId);
-  expect(await prisma.hotelBooking.count({ where: { user: { email: tamperedGuestEmail } } })).toBe(0);
+  await submitTamperedAction(page, `${portalOrigin(orgASlug)}/hotel`, publicForm, "Continue to checkout", "blockId", blockBId);
+  expect(await prisma.hotelBooking.count({ where: { portalAccount: { email: tamperedGuestEmail } } })).toBe(0);
 });
 
 test("hotel block and booking mutations derive access from stored resources", async ({ page }) => {
@@ -362,14 +361,14 @@ test("hotel-block validation renders inline and retains organizer input", async 
 
 test("public VND hotel booking creates an event-scoped order", async ({ page }) => {
   await loginAs(page, validGuestEmail);
-  await page.goto(`/${orgASlug}/hotel`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel`);
   const publicForm = page.getByRole("heading", { name: blockAName }).locator("xpath=ancestor::form");
   await publicForm.getByLabel("Check-in").fill("2028-04-10");
   await publicForm.getByLabel("Check-out").fill("2028-04-11");
   await publicForm.getByLabel("Guest name").fill("Valid Hotel Guest");
-  await submitAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout");
+  await submitAction(page, `${portalOrigin(orgASlug)}/hotel`, publicForm, "Continue to checkout");
 
-  const booking = await prisma.hotelBooking.findFirstOrThrow({ where: { user: { email: validGuestEmail } } });
+  const booking = await prisma.hotelBooking.findFirstOrThrow({ where: { portalAccount: { email: validGuestEmail } } });
   const orderItem = await prisma.orderItem.findFirstOrThrow({ where: { refId: booking.id, itemType: "HOTEL" }, include: { order: true } });
   expect(booking.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
   expect(orderItem.order.eventId).toBe(eventAId);

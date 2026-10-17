@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -66,17 +66,11 @@ async function waitForMail(marker: string, recipient: string) {
 }
 
 async function login(page: Page) {
-  await loginWithCredentials(page, ownerEmail, password);
+  await loginAsStaffEmail(page, ownerEmail);
 }
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [owner, attendee, volunteer, vendor] = await Promise.all([
-    prisma.user.create({ data: { email: ownerEmail, name: "Custom Email Owner", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeEmail, name: "Attendee <One> & Co", passwordHash } }),
-    prisma.user.create({ data: { email: volunteerEmail, name: "Volunteer <Unsafe>", passwordHash } }),
-    prisma.user.create({ data: { email: vendorEmail, name: "Vendor Contact", passwordHash } })
-  ]);
+  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Custom Email Owner", ...staffIdentityData() } });
   ownerId = owner.id;
 
   const org = await prisma.organization.create({
@@ -135,6 +129,10 @@ test.beforeAll(async () => {
   orgId = org.id;
   eventId = org.events[0]!.id;
 
+  const attendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Attendee <One> & Co", password });
+  const volunteer = await createPortalAccountFixture(prisma, { orgId: org.id, email: volunteerEmail, name: "Volunteer <Unsafe>", password });
+  const vendor = await createPortalAccountFixture(prisma, { orgId: org.id, email: vendorEmail, name: "Vendor Contact", password });
+
   const [tier, department] = await Promise.all([
     prisma.registrationType.create({ data: { orgId, eventId, name: "Email Delivery Tier", price: 75_000 } }),
     prisma.department.create({ data: { orgId, eventId, name: "Email Delivery Volunteers" } })
@@ -144,7 +142,7 @@ test.beforeAll(async () => {
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: tier.id,
       status: "PENDING",
       approvalStatus: "APPROVED"
@@ -156,7 +154,7 @@ test.beforeAll(async () => {
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       total: 75_000,
       platformFee: 25_000,
       currency: "VND",
@@ -188,15 +186,15 @@ test.beforeAll(async () => {
 
   const [volunteerApplication, vendorApplication] = await Promise.all([
     prisma.volunteerApplication.create({
-      data: { orgId, eventId, userId: volunteer.id, departmentId: department.id }
+      data: { orgId, eventId, portalAccountId: volunteer.id, departmentId: department.id }
     }),
     prisma.vendorApplication.create({
       data: {
         orgId,
         eventId,
-        userId: vendor.id,
+        portalAccountId: vendor.id,
         businessName: "Vendor <Studio> & Co",
-        contactName: vendor.name,
+        contactName: "Vendor Contact",
         contactEmail: vendor.email
       }
     })
@@ -313,6 +311,6 @@ test("transfer requests deliver the saved template with a safe single-use URL", 
 
   const transferMail = await waitForMail(markers.transfer, recipientEmail);
   expect(transferMail.HTML).toContain("Attendee &lt;One&gt; &amp; Co");
-  expect(transferMail.HTML).toContain('href="http://localhost:3000/transfer/');
-  expect(transferMail.Text).toContain("http://localhost:3000/transfer/");
+  expect(transferMail.HTML).toContain(`href="${portalOrigin(orgSlug)}/account/transfers/`);
+  expect(transferMail.Text).toContain(`${portalOrigin(orgSlug)}/account/transfers/`);
 });

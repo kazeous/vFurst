@@ -85,7 +85,7 @@ function badgeRecord(elements: Array<Record<string, unknown>>) {
       id: REGISTRATION_ID,
       orgId: ORG_ID,
       eventId: EVENT_ID,
-      userId: "00000000-0000-4000-8000-000000000401",
+      portalAccountId: "00000000-0000-4000-8000-000000000401",
       typeId: "00000000-0000-4000-8000-000000000501",
       status: "CONFIRMED",
       checkedInAt: null,
@@ -102,7 +102,7 @@ function badgeRecord(elements: Array<Record<string, unknown>>) {
         id: "00000000-0000-4000-8000-000000000501",
         name: "Weekend"
       },
-      user: {
+      portalAccount: {
         id: "00000000-0000-4000-8000-000000000401",
         email: "attendee@example.com",
         name: "Artifact Attendee"
@@ -180,6 +180,15 @@ describe("processGenerateBadges", () => {
       }
     });
     expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("badge name falls back to the portal account email", async () => {
+    const badge = badgeRecord([{ id: "name", type: "text", x: 24, y: 24, w: 240, h: 36, field: "attendee.name" }]);
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([{ ...badge, registration: { ...badge.registration, portalAccount: { ...badge.registration.portalAccount, name: null } } }] as never);
+
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+
+    expect(result.zplOutput?.[0]?.zpl).toContain("attendee@example.com");
   });
 
   it("embeds a tenant-owned PNG in PDF and emits a real ZPL graphic", async () => {

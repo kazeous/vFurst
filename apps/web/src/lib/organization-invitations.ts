@@ -125,6 +125,7 @@ export async function acceptOrganizationInvitation(input: {
   token: string;
   userId: string;
   userEmail: string;
+  userEmailVerified: boolean;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -165,7 +166,7 @@ export async function acceptOrganizationInvitation(input: {
           email: invitation.email,
           organizationStatus: invitation.org.status
         },
-        userEmail,
+        { email: userEmail, emailVerified: input.userEmailVerified },
         now
       );
 

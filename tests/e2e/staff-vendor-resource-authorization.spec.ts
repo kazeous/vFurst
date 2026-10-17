@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -44,14 +44,9 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, volunteerA, volunteerB, vendorA, vendorB] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "Staff Vendor Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "Staff Vendor Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: volunteerAEmail, name: "Volunteer A", passwordHash } }),
-    prisma.user.create({ data: { email: volunteerBEmail, name: "Volunteer B", passwordHash } }),
-    prisma.user.create({ data: { email: vendorAEmail, name: "Vendor Contact A", passwordHash } }),
-    prisma.user.create({ data: { email: vendorBEmail, name: "Vendor Contact B", passwordHash } })
+  const [ownerA, ownerB] = await Promise.all([
+    prisma.user.create({ data: { email: ownerAEmail, name: "Staff Vendor Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "Staff Vendor Owner B", ...staffIdentityData() } })
   ]);
 
   const [orgA, orgB] = await Promise.all([
@@ -128,6 +123,12 @@ test.beforeAll(async () => {
   ]);
 
   eventAId = orgA.events[0]!.id;
+
+  const volunteerA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: volunteerAEmail, name: "Volunteer A", password });
+  const volunteerB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: volunteerBEmail, name: "Volunteer B", password });
+  const vendorA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: vendorAEmail, name: "Vendor Contact A", password });
+  const vendorB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: vendorBEmail, name: "Vendor Contact B", password });
+
   eventBId = orgB.events[0]!.id;
 
   const [departmentA, departmentB] = await Promise.all([
@@ -180,7 +181,7 @@ test.beforeAll(async () => {
         orgId: orgA.id,
         eventId: eventAId,
         departmentId: departmentA.id,
-        userId: volunteerA.id,
+        portalAccountId: volunteerA.id,
         status: "APPROVED",
         availability: [],
         formResponses: {}
@@ -191,7 +192,7 @@ test.beforeAll(async () => {
         orgId: orgB.id,
         eventId: eventBId,
         departmentId: departmentB.id,
-        userId: volunteerB.id,
+        portalAccountId: volunteerB.id,
         status: "APPROVED",
         availability: [],
         formResponses: {}
@@ -206,7 +207,7 @@ test.beforeAll(async () => {
     prisma.staffAssignment.create({
       data: {
         orgId: orgA.id,
-        userId: volunteerA.id,
+        portalAccountId: volunteerA.id,
         roleId: roleA.id,
         volunteerApplicationId: volunteerApplicationA.id,
         shiftSlot: { date: "2030-01-10", startTime: "09:00", endTime: "13:00", label: "Morning A" }
@@ -215,7 +216,7 @@ test.beforeAll(async () => {
     prisma.staffAssignment.create({
       data: {
         orgId: orgB.id,
-        userId: volunteerB.id,
+        portalAccountId: volunteerB.id,
         roleId: roleB.id,
         volunteerApplicationId: volunteerApplicationB.id,
         shiftSlot: { date: "2030-02-10", startTime: "09:00", endTime: "13:00", label: "Morning B" }
@@ -231,8 +232,8 @@ test.beforeAll(async () => {
       data: {
         orgId: orgA.id,
         eventId: eventAId,
-        userId: vendorA.id,
-        contactName: vendorA.name,
+        portalAccountId: vendorA.id,
+        contactName: "Vendor Contact A",
         contactEmail: vendorA.email,
         businessName: vendorAName,
         boothPrice: 125_000,
@@ -246,8 +247,8 @@ test.beforeAll(async () => {
       data: {
         orgId: orgB.id,
         eventId: eventBId,
-        userId: vendorB.id,
-        contactName: vendorB.name,
+        portalAccountId: vendorB.id,
+        contactName: "Vendor Contact B",
         contactEmail: vendorB.email,
         businessName: vendorBName,
         boothPrice: 3_000,
@@ -292,12 +293,12 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await loginWithCredentials(page, ownerAEmail, password);
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAs(page: Page, email: string) {
-  await loginWithCredentials(page, email, password);
+  await loginAsAttendee(page, { subdomain: orgASlug }, email, { password });
 }
 
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
@@ -319,7 +320,7 @@ async function navigateAfterRejectedAction(page: Page, pathname: string) {
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate((formElement, name) => {
     const form = formElement as HTMLFormElement;
@@ -341,7 +342,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -371,7 +372,7 @@ async function submitWithInjectedValue(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, injected) => {
@@ -401,16 +402,16 @@ function sectionForHeading(page: Page, heading: string) {
 
 test("public volunteer and vendor forms bind submissions and success lookups to the portal tenant", async ({ page }) => {
   await loginAs(page, volunteerAEmail);
-  const volunteerPath = `/${orgASlug}/volunteer`;
+  const volunteerPath = `${portalOrigin(orgASlug)}/volunteer`;
   await page.goto(volunteerPath);
   const volunteerForm = page.getByRole("heading", { name: "Volunteer application" }).locator("xpath=ancestor::form");
   await expect(volunteerForm.locator('input[name="orgId"], input[name="eventId"]')).toHaveCount(0);
   await volunteerForm.getByLabel("Full name").fill("Tampered Volunteer");
   await expect(volunteerForm.getByLabel("Email")).toHaveValue(volunteerAEmail);
   await submitTamperedAction(page, volunteerPath, volunteerForm, "Submit application", "departmentId", departmentBId);
-  expect(await prisma.volunteerApplication.count({ where: { user: { email: tamperedVolunteerEmail } } })).toBe(0);
+  expect(await prisma.volunteerApplication.count({ where: { portalAccount: { email: tamperedVolunteerEmail } } })).toBe(0);
 
-  const vendorPath = `/${orgASlug}/vendor-apply`;
+  const vendorPath = `${portalOrigin(orgASlug)}/vendor-apply`;
   await navigateAfterRejectedAction(page, `${vendorPath}?success=${vendorApplicationBId}`);
   await expect(page.getByRole("heading", { name: vendorBName })).toHaveCount(0);
   const vendorForm = page.getByRole("heading", { name: "Apply for dealer space" }).locator("xpath=ancestor::form");
@@ -425,7 +426,7 @@ test("a vendor booth payment race renders inline and keeps the payment action us
 
   try {
     await loginAs(page, vendorAEmail);
-    await page.goto(`/${orgASlug}/vendor-apply?success=${vendorApplicationAId}`);
+    await page.goto(`${portalOrigin(orgASlug)}/vendor-apply?success=${vendorApplicationAId}`);
     await expect(page.getByRole("button", { name: "Pay booth invoice" })).toBeVisible();
 
     await prisma.vendorApplication.update({
@@ -526,7 +527,7 @@ test("vendor review, booth assignment, and bulk review reject foreign applicatio
 
 test("vendor file policy rejects unsupported and forged uploads before persistence", async ({ page }) => {
   await loginAs(page, vendorAEmail);
-  const vendorPath = `/${orgASlug}/vendor-apply`;
+  const vendorPath = `${portalOrigin(orgASlug)}/vendor-apply`;
   await page.goto(vendorPath);
   let form = page.getByRole("heading", { name: "Apply for dealer space" }).locator("xpath=ancestor::form");
   await expect(form.getByLabel("Contact email")).toHaveValue(vendorAEmail);

@@ -1,9 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomUUID } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee as loginPortalAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -26,15 +26,7 @@ test.beforeAll(async () => {
     data: {
       email: adminEmail,
       name: "Launch Accessibility Admin",
-      passwordHash: await bcrypt.hash(password, 12)
-    }
-  });
-
-  const attendee = await prisma.user.create({
-    data: {
-      email: attendeeEmail,
-      name: "Launch Accessibility Attendee",
-      passwordHash: await bcrypt.hash(password, 12)
+      ...staffIdentityData()
     }
   });
 
@@ -53,6 +45,9 @@ test.beforeAll(async () => {
       }
     }
   });
+
+  const attendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Launch Accessibility Attendee", password });
+  const adminAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: adminEmail, name: "Launch Accessibility Admin", password });
 
   const event = await prisma.event.create({
     data: {
@@ -92,7 +87,7 @@ test.beforeAll(async () => {
     data: {
       orgId: org.id,
       eventId: event.id,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: registrationType.id,
       status: "CONFIRMED",
       badgeNumber: "A11Y-001",
@@ -104,7 +99,7 @@ test.beforeAll(async () => {
     data: {
       orgId: org.id,
       eventId: event.id,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       total: 0,
       platformFee: 0,
       status: "PAID",
@@ -125,13 +120,13 @@ test.beforeAll(async () => {
     data: {
       orgId: org.id,
       eventId: event.id,
-      userId: admin.id,
+      portalAccountId: adminAttendee.id,
       total: 175000,
       platformFee: 25000,
       currency: "USD",
       checkoutTokenHash: createHmac("sha256", checkoutSecret).update(visualCheckoutToken).digest("hex"),
-      checkoutSuccessPath: `/${orgSlug}`,
-      checkoutCancelPath: `/${orgSlug}`,
+      checkoutSuccessPath: "/",
+      checkoutCancelPath: "/",
       checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       items: {
         create: {
@@ -166,12 +161,12 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await loginWithCredentials(page, adminEmail, password);
+  await loginAsStaffEmail(page, adminEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAsAttendee(page: Page) {
-  await loginWithCredentials(page, attendeeEmail, password, "/account");
+  await loginPortalAttendee(page, { subdomain: orgSlug }, attendeeEmail, { password });
 }
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {
@@ -215,7 +210,7 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   const clientErrors: string[] = [];
   page.on("pageerror", (error) => clientErrors.push(error.stack ?? error.message));
   await loginAsAttendee(page);
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect.poll(async () => ({ ready: await page.locator('[data-registration-ready="true"]').isVisible(), clientErrors }), { timeout: 30_000 }).toEqual({ ready: true, clientErrors: [] });
 
   await expect(page.getByRole("main")).toBeVisible();
@@ -231,7 +226,7 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   await expect(page.getByRole("button", { name: "Add to cart" })).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 
-  await page.goto(`/${orgSlug}/vendor-apply`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
 
   await expect(page.getByRole("heading", { name: "Vendor application" })).toBeVisible();
   await expect(page.getByLabel("Contact name")).toBeVisible();
@@ -278,7 +273,7 @@ test("mobile organizer shell and public portal avoid horizontal overflow", async
   await expect(page.getByLabel("Organizer workspace")).toBeVisible();
   await page.getByRole("button", { name: "Close navigation" }).first().click();
 
-  for (const path of [`/dashboard/events/${eventId}/check-in`, `/${orgSlug}`, `/${orgSlug}/register`]) {
+  for (const path of [`/dashboard/events/${eventId}/check-in`, `${portalOrigin(orgSlug)}`, `${portalOrigin(orgSlug)}/register`]) {
     await page.goto(path);
     const dimensions = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
@@ -294,8 +289,8 @@ test("visual regression baselines cover the rebuilt reference surfaces", async (
     { name: "marketing-home", path: "/" },
     { name: "event-overview", path: `/dashboard/events/${eventId}` },
     { name: "registrations", path: `/dashboard/events/${eventId}/registrations` },
-    { name: "public-portal", path: `/${orgSlug}` },
-    { name: "checkout", path: `/checkout/${visualOrderId}?token=${encodeURIComponent(visualCheckoutToken)}` }
+    { name: "public-portal", path: `${portalOrigin(orgSlug)}` },
+    { name: "checkout", path: `${portalOrigin(orgSlug)}/checkout/${visualOrderId}?token=${encodeURIComponent(visualCheckoutToken)}` }
   ];
 
   await login(page);

@@ -1,31 +1,42 @@
-import { describe, expect, it } from "vitest";
-import { getConventionPortalRoot } from "./convention";
-import { getRootDomain } from "./platform-hosts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prisma, type Organization } from "@vfurst/db";
+import { getConventionOrg } from "./convention";
 
-const org = {
-  slug: "sample-convention",
-  subdomain: "sample-con",
-  customDomain: "events.example.com"
-};
+vi.mock("@vfurst/db", () => ({ prisma: { organization: { findFirst: vi.fn() } } }));
 
-describe("getConventionPortalRoot", () => {
-  it("uses root-relative links on the active custom hostname", () => {
-    expect(getConventionPortalRoot("events.example.com", org)).toBe("");
+describe("getConventionOrg", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
   });
 
-  it("uses root-relative links on the managed tenant subdomain", () => {
-    expect(getConventionPortalRoot(`sample-con.${getRootDomain()}`, org)).toBe("");
+  it.each(["sample-convention", "sample-con"])("looks up active slug or subdomain %s after normalization", async (slug) => {
+    const org = { id: "org-1" } as Organization;
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue(org);
+
+    expect(await getConventionOrg(`  ${slug.toUpperCase()}  `)).toBe(org);
+    expect(prisma.organization.findFirst).toHaveBeenCalledExactlyOnceWith({
+      where: { status: "ACTIVE", OR: [{ subdomain: slug }, { slug }] }
+    });
   });
 
-  it("keeps the tenant path prefix on the platform host", () => {
-    expect(getConventionPortalRoot("127.0.0.1:3000", org)).toBe("/sample-convention");
+  it("looks up only an active custom domain after normalization", async () => {
+    const org = { id: "org-domain" } as Organization;
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue(org);
+
+    expect(await getConventionOrg("  Events.Example.com  ")).toBe(org);
+    expect(prisma.organization.findFirst).toHaveBeenCalledExactlyOnceWith({
+      where: { status: "ACTIVE", customDomain: "events.example.com" }
+    });
   });
 
-  it("does not trust a custom-domain lookalike", () => {
-    expect(getConventionPortalRoot("events.example.com.attacker.test", org)).toBe("/sample-convention");
+  it.each(["", "   ", "_next", "  _PRIVATE  "])("rejects invalid input %j without querying", async (slug) => {
+    expect(await getConventionOrg(slug)).toBeNull();
+    expect(prisma.organization.findFirst).not.toHaveBeenCalled();
   });
 
-  it("uses the durable slug for central paths when slug and subdomain differ", () => {
-    expect(getConventionPortalRoot("localhost:3000", org)).toBe("/sample-convention");
+  it("returns null when no active organization matches", async () => {
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue(null);
+
+    expect(await getConventionOrg("missing")).toBeNull();
   });
 });

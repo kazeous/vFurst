@@ -70,7 +70,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
               status: "APPROVED"
             },
             include: {
-              user: true,
+              portalAccount: { select: { id: true, email: true, name: true } },
               staffAssignments: true
             },
             orderBy: {
@@ -86,7 +86,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                   }
                 },
                 include: {
-                  user: true,
+                  portalAccount: { select: { id: true, email: true, name: true } },
                   volunteerApplication: true
                 }
               }
@@ -112,7 +112,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
     department.volunteerApplications.map((application) => ({
       id: application.id,
       departmentId: department.id,
-      name: application.user.name ?? application.user.email
+      name: application.portalAccount.name ?? application.portalAccount.email
     }))
   );
   const boardShifts = event.departments.flatMap((department) =>
@@ -231,7 +231,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                           <div className="vf-list">
                             {assignmentsForShift.map((assignment) => (
                               <div key={assignment.id} className="vf-list-row">
-                                <span>{assignment.user.name ?? assignment.user.email}</span>
+                                <span>{assignment.portalAccount.name ?? assignment.portalAccount.email}</span>
                                 <form action={removeAssignment}>
                                   <input type="hidden" name="assignmentId" value={assignment.id} />
                                   <Button label="Remove" type="submit" size="sm" />
@@ -250,7 +250,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
                               <select name="applicationId" required>
                                 {department.volunteerApplications.map((application) => (
                                   <option key={application.id} value={application.id}>
-                                    {application.user.name ?? application.user.email}
+                                    {application.portalAccount.name ?? application.portalAccount.email}
                                     {suggested.some((item) => item.id === application.id) ? " - suggested" : ""}
                                   </option>
                                 ))}

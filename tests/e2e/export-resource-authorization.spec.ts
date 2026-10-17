@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -29,16 +30,14 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, adminA, memberA, platformAdmin, attendeeA] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "Export Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "Export Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: adminAEmail, name: "Export Admin A", passwordHash } }),
-    prisma.user.create({ data: { email: memberAEmail, name: "Export Member A", passwordHash } }),
+  const [ownerA, ownerB, adminA, memberA, platformAdmin] = await Promise.all([
+    prisma.user.create({ data: { email: ownerAEmail, name: "Export Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "Export Owner B", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: adminAEmail, name: "Export Admin A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: memberAEmail, name: "Export Member A", ...staffIdentityData() } }),
     prisma.user.create({
-      data: { email: platformAdminEmail, name: "Export Platform Admin", passwordHash, platformRole: "PLATFORM_ADMIN" }
-    }),
-    prisma.user.create({ data: { email: attendeeAEmail, name: "=2+3" } })
+      data: { email: platformAdminEmail, name: "Export Platform Admin", ...staffIdentityData(), platformRole: "PLATFORM_ADMIN" }
+    })
   ]);
 
   const [orgA, orgB] = await Promise.all([
@@ -98,9 +97,13 @@ test.beforeAll(async () => {
       include: { events: true }
     })
   ]);
+  const ownerBAttendee = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: ownerBEmail, name: "Export Owner B", password });
   orgAId = orgA.id;
   orgBId = orgB.id;
   eventAId = orgA.events[0]!.id;
+
+  const attendeeA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: attendeeAEmail, name: "=2+3", password });
+
   eventBId = orgB.events[0]!.id;
 
   const [typeA, typeB] = await Promise.all([
@@ -117,7 +120,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgAId,
         eventId: eventAId,
-        userId: attendeeA.id,
+        portalAccountId: attendeeA.id,
         typeId: typeA.id,
         status: "CHECKED_IN",
         checkedInAt: new Date("2028-09-01T10:00:00Z")
@@ -127,7 +130,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgBId,
         eventId: eventAId,
-        userId: ownerB.id,
+        portalAccountId: ownerBAttendee.id,
         typeId: typeB.id,
         status: "CONFIRMED"
       }
@@ -141,7 +144,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgAId,
         eventId: eventAId,
-        userId: attendeeA.id,
+        portalAccountId: attendeeA.id,
         total: 12_345,
         platformFee: 345,
         status: "PAID",
@@ -154,7 +157,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgBId,
         eventId: eventAId,
-        userId: ownerB.id,
+        portalAccountId: ownerBAttendee.id,
         total: 999_999,
         platformFee: 99_999,
         status: "PAID",
@@ -188,11 +191,7 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page, email: string, destination = "/dashboard") {
-  await page.goto(`/login?returnTo=${encodeURIComponent(destination)}`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(new RegExp(`${destination.replaceAll("/", "\\/")}$`), { timeout: 30_000 });
+  await loginAsStaffEmail(page, email, { returnTo: destination });
 }
 
 function registrationExport(eventId: string) {
@@ -278,7 +277,7 @@ test("email template mutation derives authorization from the stored event", asyn
   const before = await prisma.event.findUniqueOrThrow({ where: { id: eventBId }, select: { settings: true } });
 
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, foreignEventId) => {

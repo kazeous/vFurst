@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isKnownStaticAssetPath, middleware } from "./src/middleware";
+
+vi.mock("./src/lib/portal-host-directory", () => ({ lookupPortalHostOrganization: vi.fn().mockResolvedValue(null) }));
 
 function requestWithHost(host: string, internalHost = "forged.customer.example", pathname = "/") {
   return new NextRequest(`http://localhost:3000${pathname}`, {
@@ -19,15 +21,15 @@ describe("legacy web middleware host safety", () => {
     "foo_bar.localhost:3000",
     "-leading-hyphen.localhost:3000",
     `${"a".repeat(64)}.localhost:3000`
-  ])("returns 400 for malformed Host value %j", (host) => {
-    const response = middleware(requestWithHost(host));
+  ])("returns 400 for malformed Host value %j", async (host) => {
+    const response = await middleware(requestWithHost(host));
 
     expect(response.status).toBe(400);
     expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
   });
 
-  it("scrubs forged internal headers on the platform pass-through", () => {
-    const response = middleware(requestWithHost("vfurst.reyuugames.com"));
+  it("scrubs forged internal headers on the platform pass-through", async () => {
+    const response = await middleware(requestWithHost("vfurst.reyuugames.com"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-vfurst-org-host")).toBeNull();
@@ -36,8 +38,8 @@ describe("legacy web middleware host safety", () => {
     expect(response.headers.get("x-middleware-request-x-vfurst-domain-mode")).toBeNull();
   });
 
-  it("overwrites forged values for tenant rewrites without echoing them as public response headers", () => {
-    const response = middleware(requestWithHost("tenant-a.vfurst.reyuugames.com"));
+  it("overwrites forged values for tenant rewrites without echoing them as public response headers", async () => {
+    const response = await middleware(requestWithHost("tenant-a.vfurst.reyuugames.com"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-vfurst-org-host")).toBeNull();
@@ -47,19 +49,20 @@ describe("legacy web middleware host safety", () => {
   });
 
   it.each(["/schedule.v2", "/people/sam.smith", "/events/2027.08/register"])(
-    "rewrites route paths containing a non-asset dot: %s",
-    (pathname) => {
-      const response = middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
-      expect(response.headers.get("x-middleware-rewrite")).toContain(`/tenant-a${pathname}`);
+    "hands route paths containing a non-asset dot to the portal rewrite: %s",
+    async (pathname) => {
+      const response = await middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
+      expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("tenant-a");
     }
   );
 
   it.each(["/logo.png", "/assets/app.css", "/exports/attendees.csv"])(
     "passes through known static asset extensions: %s",
-    (pathname) => {
+    async (pathname) => {
       expect(isKnownStaticAssetPath(pathname)).toBe(true);
-      const response = middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
+      const response = await middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
       expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
     }
   );
 });

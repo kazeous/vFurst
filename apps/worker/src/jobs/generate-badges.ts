@@ -68,9 +68,9 @@ function parseLayout(value: unknown): BadgeLayout {
 function resolveField(field: string | undefined, badge: Awaited<ReturnType<typeof loadBadges>>[number]) {
   switch (field) {
     case "attendee.name":
-      return badge.registration.user.name ?? badge.registration.user.email;
+      return badge.registration.portalAccount.name ?? badge.registration.portalAccount.email;
     case "attendee.email":
-      return badge.registration.user.email;
+      return badge.registration.portalAccount.email;
     case "registration.type":
       return badge.registration.type.name;
     case "registration.badgeNumber":
@@ -386,7 +386,7 @@ async function loadBadges(data: GenerateBadgesJob) {
         include: {
           event: true,
           type: true,
-          user: true
+          portalAccount: { select: { email: true, name: true } }
         }
       },
       template: true

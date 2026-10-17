@@ -33,6 +33,7 @@ export async function requireCheckoutOrder(orderId: string, token: string) {
       id: orderId
     },
     include: {
+      portalAccount: { select: { email: true } },
       event: true,
       org: {
         include: {

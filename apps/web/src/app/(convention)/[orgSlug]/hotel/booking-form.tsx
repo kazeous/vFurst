@@ -3,6 +3,7 @@
 import { bookRoom } from "@/actions/hotel-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
 
@@ -26,6 +27,8 @@ export function HotelBookingForm({
   guestEmail: string;
 }) {
   const [state, formAction, isPending] = useActionState(bookRoom, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const busy = isPending || Boolean(state.redirectTo);
   const [roomType, setRoomType] = useState(roomTypes.find((room) => !room.soldOut)?.name ?? roomTypes[0]?.name ?? "");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -74,7 +77,7 @@ export function HotelBookingForm({
           <input name="guestEmail" type="email" defaultValue={guestEmail} readOnly required />
         </label>
       </div>
-      <Button label={isPending ? "Submitting..." : "Continue to checkout"} type="submit" variant="primary" isDisabled={isPending} />
+      <Button label={busy ? "Submitting..." : "Continue to checkout"} type="submit" variant="primary" isDisabled={busy} />
     </form>
   );
 }

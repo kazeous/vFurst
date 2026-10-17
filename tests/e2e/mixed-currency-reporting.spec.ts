@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -19,20 +20,16 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 async function login(page: Page) {
-  await page.goto("/login?returnTo=%2Fdashboard");
-  await page.getByLabel("Email").fill(ownerEmail);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await loginAsStaffEmail(page, ownerEmail, { returnTo: "/dashboard" });
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const owner = await prisma.user.create({
     data: {
       email: ownerEmail,
       name: "Currency Report Owner",
-      passwordHash
+      ...staffIdentityData()
     }
   });
   const org = await prisma.organization.create({
@@ -74,6 +71,7 @@ test.beforeAll(async () => {
     }
   });
 
+  const ownerAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: ownerEmail, name: "Currency Report Owner", password });
   orgId = org.id;
   usdEventId = org.events.find((event) => event.currency === "USD")!.id;
   vndEventId = org.events.find((event) => event.currency === "VND")!.id;
@@ -83,7 +81,7 @@ test.beforeAll(async () => {
       data: {
         orgId,
         eventId: usdEventId,
-        userId: owner.id,
+        portalAccountId: ownerAttendee.id,
         total: 10_000,
         platformFee: 100,
         currency: "USD",
@@ -103,7 +101,7 @@ test.beforeAll(async () => {
       data: {
         orgId,
         eventId: vndEventId,
-        userId: owner.id,
+        portalAccountId: ownerAttendee.id,
         total: 1_000_000,
         platformFee: 10_000,
         currency: "VND",

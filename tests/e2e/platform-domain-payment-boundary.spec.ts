@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -19,20 +19,15 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 async function loginAs(page: Page, email: string, returnTo: string) {
-  await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(new RegExp(returnTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), { timeout: 30_000 });
+  await loginAsStaffEmail(page, email, { returnTo });
 }
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [platformAdmin, owner] = await Promise.all([
     prisma.user.create({
-      data: { email: platformEmail, name: "Boundary Platform Admin", passwordHash, platformRole: "PLATFORM_ADMIN" }
+      data: { email: platformEmail, name: "Boundary Platform Admin", ...staffIdentityData(), platformRole: "PLATFORM_ADMIN" }
     }),
-    prisma.user.create({ data: { email: ownerEmail, name: "Boundary Owner", passwordHash } })
+    prisma.user.create({ data: { email: ownerEmail, name: "Boundary Owner", ...staffIdentityData() } })
   ]);
   const org = await prisma.organization.create({
     data: {
@@ -169,18 +164,16 @@ test("platform admin owns domain activation and global payment operations", asyn
   expect(customRegistrationHtml).toContain('href="/register"');
   expect(customRegistrationHtml).not.toContain(`href="/${orgSlug}/register"`);
 
-  const centralRegistrationResponse = await page.request.get(`/${orgSlug}/register`);
-  expect(centralRegistrationResponse.status()).toBe(200);
-  const centralRegistrationHtml = await centralRegistrationResponse.text();
-  expect(centralRegistrationHtml).toContain(`href="/${orgSlug}/register"`);
+  const centralRegistrationResponse = await page.request.get(`/${orgSlug}/register`, { maxRedirects: 0 });
+  expect(centralRegistrationResponse.status()).toBe(308);
+  expect(centralRegistrationResponse.headers().location).toBe(`http://${requestedDomain}:3000/register`);
 
   const managedHostResponse = await page.request.get("/register", {
-    headers: { host: `${orgSubdomain}.localhost:3000` }
+    headers: { host: `${orgSubdomain}.localhost:3000` },
+    maxRedirects: 0
   });
-  expect(managedHostResponse.status()).toBe(200);
-  const managedHostHtml = await managedHostResponse.text();
-  expect(managedHostHtml).toContain('href="/register"');
-  expect(managedHostHtml).not.toContain(`href="/${orgSlug}/register"`);
+  expect(managedHostResponse.status()).toBe(308);
+  expect(managedHostResponse.headers().location).toBe(`http://${requestedDomain}:3000/register`);
 
   const lanHostResponse = await page.request.get("/", { headers: { host: "192.168.1.20:3000" } });
   if (process.env.E2E_PRODUCTION === "1") {

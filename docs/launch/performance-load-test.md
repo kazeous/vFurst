@@ -18,11 +18,13 @@ npm run test:load:launch
 The launch proof runner:
 
 - Loads `.env` and `.env.local`.
+- Checks that the mock OIDC provider at `AUTH_AUTHENTIK_ISSUER` answers its discovery document (`docker compose up -d mock-oidc`).
 - Builds the web app unless `VFURST_SKIP_BUILD=1` is set.
 - Seeds 1500 confirmed registrations unless `VFURST_LOAD_SEED_REGISTRATIONS` is set.
 - Starts a temporary local production Next launch stack unless `VFURST_SKIP_LOCAL_SERVER=1` is set.
 - Uses the configured `VFURST_WEB_REPLICAS` (six by default) behind a local round-robin proxy. Replica sizing is part of the measured launch topology, not an unlimited scale-up knob on one host.
 - Applies the Prisma runtime pool policy, verifies replica demand stays within `VFURST_DB_CONNECTION_BUDGET`, and queries Postgres capacity through `DIRECT_DATABASE_URL` before build/seed work begins.
+- Signs the seeded staff user in through the mock OIDC provider over plain HTTP (`scripts/lib/staff-oidc-login.mjs`) and passes the Auth.js session cookie to k6.
 - Runs the full k6 profile with 500 registration VUs and 50 check-in VUs.
 - Stops the temporary production server before exiting.
 
@@ -34,7 +36,7 @@ Seed launch-sized local data:
 npm run seed:load
 ```
 
-This prints `VFURST_*` environment variables for the seeded organization, event, and staff account.
+This prints `VFURST_*` environment variables for the seeded organization, event, staff OIDC subject (`VFURST_STAFF_SUB`), portal host, and a ready portal session cookie for the first attendee. Staff have no password: sign in at `/login` through the mock OIDC provider with that subject and copy the `authjs.session-token` cookie into `VFURST_STAFF_COOKIE`, or let `npm run test:load:launch` do it.
 When the runner falls back to Docker, loopback `VFURST_BASE_URL` values such as `http://127.0.0.1:3000` are translated to `http://host.docker.internal:3000` for the container.
 
 Run a quick script/runtime smoke:
@@ -58,8 +60,8 @@ VFURST_BASE_URL=http://127.0.0.1:3000
 VFURST_LOAD_ORG_SLUG=your-org-slug
 VFURST_LOAD_EVENT_ID=event-uuid
 VFURST_STAFF_COOKIE="authjs.session-token=..."
-VFURST_STAFF_EMAIL=load-admin@example.com
-VFURST_STAFF_PASSWORD=LoadPass123!
+VFURST_PORTAL_HOST=your-org-slug.localhost:3000
+VFURST_PORTAL_SESSION_COOKIE="vfurst-portal=..."
 VFURST_HOST_HEADER=localhost:3000
 VFURST_REGISTRATION_VUS=500
 VFURST_CHECKIN_VUS=50
@@ -77,7 +79,8 @@ VFURST_SKIP_LOCAL_SERVER=1
 
 - Seed a published event with at least one active registration tier.
 - Seed enough confirmed registrations and badges to make the check-in page representative.
-- Log in as a staff user and provide either `VFURST_STAFF_COOKIE` or `VFURST_STAFF_EMAIL` / `VFURST_STAFF_PASSWORD`. The k6 script can authenticate through Auth.js when credentials are provided.
+- Staff sign in only through OIDC, so k6 needs `VFURST_STAFF_COOKIE`; `setup()` fails without it.
+- The registration scenario requests the portal registration page and `/api/portal/session` on the tenant host (`VFURST_PORTAL_HOST`) with a seeded portal session cookie. The check-in scenario uses the central host (`VFURST_HOST_HEADER`, which the launch runner sets to `localhost:<port>` for loopback base URLs: production middleware does not treat a loopback IP as the central host). The multi-replica proxy forwards the client's `Host` unchanged.
 - Run the app against the same Postgres/Redis/S3/SMTP class expected for launch.
 
 ## Query optimization added during launch hardening
@@ -135,7 +138,17 @@ VFURST_SKIP_LOCAL_SERVER=1
   - 198,024 HTTP requests completed with 0.00% failures; no Prisma `P2037` or replica failure occurred.
   - 396,045/396,045 checks passed.
   - Registration p95 was 357.16ms, check-in p95 was 1.49s, and overall p95 was 409.88ms, below the unchanged 1.5-second launch threshold.
+- Phase 1B (October 17, 2026) moved the proof to portal accounts and staff OIDC. The registration scenario requests the tenant-host registration page and `/api/portal/session` with a portal session cookie, which is what every real registration page view does through `PortalAccountGate`. The check-in scenario uses a staff session signed in through the mock OIDC provider.
+  - The first full run failed the latency gate: p95 3.99s, with 352,622/352,622 checks and 0.00% failures across 176,311 requests. Isolated diagnostics showed the tenant-host registration page rendering on every request: page-only p95 2.33s, session-only p95 0.87s, check-in-only p95 37.93ms.
+  - Cause: Phase 1B reached tenant pages through a middleware rewrite, and Next 15.5 matches the prerender manifest against the pre-rewrite pathname (`/register`), so the 15-second ISR cache never applied on tenant hosts. The middleware now hands the portal key to a `next.config.ts` rewrite, which keeps ISR (`x-nextjs-cache: HIT`, covered by `tests/e2e/portal-canonical-host.spec.ts`).
+  - The rerun passed with 1,500 seeded registrations, 500 registration VUs, 50 check-in VUs, six web replicas, pool limit 4, pool timeout 20 seconds, and Docker-backed k6:
+    - Postgres capacity preflight: 100 max - 3 reserved = 97 usable; 24 maximum web connections within application budget 80.
+    - 286,799 HTTP requests with 0.00% failures; 573,598/573,598 checks passed.
+    - `http_req_duration`: p90 579.01ms, p95 816.66ms, max 11.02s.
+    - `registration_flow_duration`: p90 532.86ms, p95 726.67ms, max 2.32s.
+    - `checkin_flow_duration`: p90 4.15s, p95 5.62s, max 11.02s. Check-in alone has p95 37.93ms; under the combined load it shares one host with about twice the registration request volume of the July proof. Check-in has no separate threshold, and this is the number to watch on the deployed topology.
+    - This run's summary had no p99; the k6 script now reports it.
 
 ## Performance gate result
 
-The launch 500-registration/50-check-in performance gate is passed against the current supported six-replica/pool-4 topology. This claim comes from the fresh post-ISR run above, not the historical July 8 baseline: connection growth stayed bounded, correctness and HTTP-error gates passed, and overall p95 remained below 1.5 seconds. Rerun `npm run test:load:launch` after any material public-registration, check-in, authentication, cache, database-pool, or topology change.
+The launch 500-registration/50-check-in performance gate is passed against the current supported six-replica/pool-4 topology. This claim comes from the October 17, 2026 Phase 1B rerun above, on portal accounts and staff OIDC: connection growth stayed bounded, correctness and HTTP-error gates passed, and overall p95 remained below 1.5 seconds. Rerun `npm run test:load:launch` after any material public-registration, check-in, authentication, cache, database-pool, or topology change.

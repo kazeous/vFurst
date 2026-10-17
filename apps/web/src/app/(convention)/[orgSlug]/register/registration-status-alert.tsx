@@ -26,7 +26,7 @@ export function RegistrationStatusAlert({ orgSlug }: { orgSlug: string }) {
 
     setConfirmation(null);
     const controller = new AbortController();
-    const query = new URLSearchParams({ orgSlug, registrationId });
+    const query = new URLSearchParams({ registrationId });
 
     fetch(`/api/public/registration-confirmation?${query}`, {
       cache: "no-store",

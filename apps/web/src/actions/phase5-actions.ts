@@ -13,6 +13,7 @@ import {
   requireRegistrationTypeAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { findOrCreatePortalAccount } from "@/lib/portal-accounts";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
@@ -144,41 +145,6 @@ function parseRaffleEligibilityForm(formData: FormData): RaffleEligibility {
   };
 
   return raffleEligibilitySchema.parse(value);
-}
-
-async function findOrCreateUser(
-  email: string,
-  name: string,
-  client: Pick<Prisma.TransactionClient, "user"> = prisma
-) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await client.user.findUnique({
-    where: {
-      email: normalizedEmail
-    }
-  });
-
-  if (existing) {
-    if (!existing.name && name) {
-      return client.user.update({
-        where: {
-          id: existing.id
-        },
-        data: {
-          name
-        }
-      });
-    }
-
-    return existing;
-  }
-
-  return client.user.create({
-    data: {
-      email: normalizedEmail,
-      name
-    }
-  });
 }
 
 function parseEventSettings(value: unknown) {
@@ -531,10 +497,10 @@ export async function createWalkInRegistration(formData: FormData) {
   const template = event.badgeTemplates.find((candidate) => candidate.id === preferredTemplateId) ?? event.badgeTemplates[0];
   const checkedInAt = new Date();
   const result = await runRegistrationPolicyTransaction(async (tx) => {
-    const attendee = await findOrCreateUser(parsed.data.attendeeEmail, parsed.data.attendeeName, tx);
+    const attendee = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: parsed.data.attendeeEmail, name: parsed.data.attendeeName });
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: registrationType.id
     });
 
@@ -542,7 +508,7 @@ export async function createWalkInRegistration(formData: FormData) {
       data: {
         orgId: event.orgId,
         eventId: event.id,
-        userId: attendee.id,
+        portalAccountId: attendee.id,
         typeId: registrationType.id,
         status: "CHECKED_IN",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "CASHIER"),
@@ -553,7 +519,7 @@ export async function createWalkInRegistration(formData: FormData) {
     const order = await tx.order.create({
       data: {
         orgId: event.orgId,
-        userId: attendee.id,
+        portalAccountId: attendee.id,
         eventId: event.id,
         total: amount,
         platformFee,
@@ -653,10 +619,10 @@ export async function adminTransferRegistration(formData: FormData) {
       throw new Error("This registration is no longer eligible for transfer.");
     }
 
-    const attendee = await findOrCreateUser(attendeeEmail, attendeeName, tx);
+    const attendee = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: attendeeEmail, name: attendeeName });
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: current.typeId,
       excludeRegistrationId: current.id
     });
@@ -679,7 +645,7 @@ export async function adminTransferRegistration(formData: FormData) {
       data: {
         orgId: event.orgId,
         eventId: event.id,
-        userId: attendee.id,
+        portalAccountId: attendee.id,
         typeId: current.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),
@@ -734,7 +700,6 @@ export async function adminTransferRegistration(formData: FormData) {
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/transfers`);
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
-  revalidatePath(`/account/registrations/${result.registrationId}`);
 }
 
 export async function createRaffle(formData: FormData) {
@@ -800,11 +765,11 @@ export async function addRaffleEntry(formData: FormData) {
   const { raffle, event } = await requireRaffleAccess(raffleId);
 
   await runRaffleTransaction(async (tx) => {
-    const user = await findOrCreateUser(attendeeEmail, attendeeName ?? attendeeEmail, tx);
+    const account = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: attendeeEmail, name: attendeeName ?? attendeeEmail });
     const existing = await tx.raffleEntry.findFirst({
       where: {
         raffleId: raffle.id,
-        userId: user.id,
+        portalAccountId: account.id,
         entryMethod: { in: ["AUTO", "MANUAL"] }
       }
     });
@@ -817,7 +782,7 @@ export async function addRaffleEntry(formData: FormData) {
       raffleId: raffle.id,
       orgId: event.orgId,
       eventId: event.id,
-      userId: user.id,
+      portalAccountId: account.id,
       entryMethod: "MANUAL"
     });
 
@@ -825,7 +790,7 @@ export async function addRaffleEntry(formData: FormData) {
       data: {
         orgId: event.orgId,
         raffleId: raffle.id,
-        userId: user.id,
+        portalAccountId: account.id,
         entryMethod: "MANUAL",
         quantity: 1
       }
@@ -847,15 +812,15 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
         approvalStatus: "APPROVED",
         status: { in: ["CONFIRMED", "CHECKED_IN"] }
       },
-      select: { userId: true },
-      distinct: ["userId"]
+      select: { portalAccountId: true },
+      distinct: ["portalAccountId"]
     });
 
     for (const registration of registrations) {
       const existing = await tx.raffleEntry.findFirst({
         where: {
           raffleId: raffle.id,
-          userId: registration.userId,
+          portalAccountId: registration.portalAccountId,
           entryMethod: { in: ["AUTO", "MANUAL"] }
         }
       });
@@ -866,7 +831,7 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
           raffleId: raffle.id,
           orgId: event.orgId,
           eventId: event.id,
-          userId: registration.userId,
+          portalAccountId: registration.portalAccountId,
           entryMethod: "AUTO"
         });
       } catch {
@@ -877,7 +842,7 @@ export async function autoEnterConfirmedRegistrations(formData: FormData) {
         data: {
           orgId: event.orgId,
           raffleId: raffle.id,
-          userId: registration.userId,
+          portalAccountId: registration.portalAccountId,
           entryMethod: "AUTO",
           quantity: 1
         }
@@ -904,7 +869,7 @@ async function drawRaffleWinnerInner(formData: FormData) {
     const raffle = await tx.raffle.findFirstOrThrow({
       where: { id: authorizedRaffle.id, orgId: event.orgId, eventId: event.id },
       include: {
-        entries: { where: { orgId: event.orgId, quantity: { gt: 0 } }, include: { user: true, orderItem: true } },
+        entries: { where: { orgId: event.orgId, quantity: { gt: 0 } }, include: { portalAccount: { select: { id: true, email: true, name: true } }, orderItem: true } },
         org: true,
         event: true
       }
@@ -919,29 +884,29 @@ async function drawRaffleWinnerInner(formData: FormData) {
     }
 
     const previousWinners = new Set(
-      (await tx.raffleDrawResult.findMany({ where: { raffleId: raffle.id }, select: { winnerUserId: true } })).map(
-        (item) => item.winnerUserId
+      (await tx.raffleDrawResult.findMany({ where: { raffleId: raffle.id }, select: { winnerAccountId: true } })).map(
+        (item) => item.winnerAccountId
       )
     );
-    const eligibleByUser = new Map<string, { user: typeof raffle.entries[number]["user"]; quantity: number }>();
+    const eligibleByAccount = new Map<string, { portalAccount: typeof raffle.entries[number]["portalAccount"]; quantity: number }>();
     for (const entry of raffle.entries) {
-      if (previousWinners.has(entry.userId)) continue;
+      if (previousWinners.has(entry.portalAccountId)) continue;
       if (!(await assertDrawEligibility(tx, {
         raffleId: raffle.id,
         orgId: event.orgId,
         eventId: event.id,
-        userId: entry.userId,
+        portalAccountId: entry.portalAccountId,
         entryMethod: entry.entryMethod,
         orderItemId: entry.orderItemId ?? undefined
       }))) continue;
-      const current = eligibleByUser.get(entry.userId);
-      eligibleByUser.set(entry.userId, {
-        user: entry.user,
+      const current = eligibleByAccount.get(entry.portalAccountId);
+      eligibleByAccount.set(entry.portalAccountId, {
+        portalAccount: entry.portalAccount,
         quantity: (current?.quantity ?? 0) + entry.quantity
       });
     }
 
-    const winner = weightedWinner(Array.from(eligibleByUser.values()));
+    const winner = weightedWinner(Array.from(eligibleByAccount.values()));
     if (!winner) throw new ExpectedActionError("This raffle has no eligible entries remaining.");
 
     const draw = await tx.raffleDrawResult.create({
@@ -951,10 +916,10 @@ async function drawRaffleWinnerInner(formData: FormData) {
         raffleId: raffle.id,
         prizeName: selectedPrize.name,
         awardNumber: awardedCount + 1,
-        winnerUserId: winner.user.id
+        winnerAccountId: winner.portalAccount.id
       }
     });
-    return { draw, raffle, prize: selectedPrize, winner: winner.user };
+    return { draw, raffle, prize: selectedPrize, winner: winner.portalAccount };
   });
 
   try {

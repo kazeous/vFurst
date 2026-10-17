@@ -322,6 +322,7 @@ components:
           type: string
           format: uuid
         userId:
+          description: "Portal account ID of the attendee, scoped to the API key's organization (Phase 1B; formerly a platform user ID)."
           type: string
           format: uuid
         typeId:
@@ -346,6 +347,7 @@ components:
           type: string
           format: uuid
         userId:
+          description: "Portal account ID of the attendee, scoped to the API key's organization (Phase 1B; formerly a platform user ID)."
           type: string
           format: uuid
         eventId:

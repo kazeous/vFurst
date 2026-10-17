@@ -79,7 +79,7 @@ export default async function StaffApplicationsPage({
             }
           },
           reviewedBy: true,
-          user: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"
@@ -123,8 +123,8 @@ export default async function StaffApplicationsPage({
             </div>
             {event.volunteerApplications.map((application) => (
               <div key={application.id} className="vf-table-row">
-                <input type="checkbox" name="applicationId" value={application.id} aria-label={`Select ${application.user.email}`} />
-                <span>{application.user.name ?? application.user.email}</span>
+                <input type="checkbox" name="applicationId" value={application.id} aria-label={`Select ${application.portalAccount.email}`} />
+                <span>{application.portalAccount.name ?? application.portalAccount.email}</span>
                 <span>{application.department.name}</span>
                 <Badge label={application.status} variant={badgeVariant(application.status)} />
               </div>
@@ -171,7 +171,7 @@ export default async function StaffApplicationsPage({
             <div className="vf-page-header">
               <div>
                 <p className="vf-label">{application.department.name}</p>
-                <h2>{application.user.name ?? application.user.email}</h2>
+                <h2>{application.portalAccount.name ?? application.portalAccount.email}</h2>
                 <p className="vf-muted">
                   Applied {application.createdAt.toLocaleDateString()} - Reviewed by{" "}
                   {application.reviewedBy?.name ?? application.reviewedBy?.email ?? "nobody yet"}

@@ -21,7 +21,7 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
         },
         include: {
           badges: true,
-          user: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "asc"
@@ -48,8 +48,8 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
       <ExpressKiosk
         rows={event.registrations.map((registration) => ({
           id: registration.id,
-          attendee: registration.user.name ?? registration.user.email,
-          email: registration.user.email,
+          attendee: registration.portalAccount.name ?? registration.portalAccount.email,
+          email: registration.portalAccount.email,
           code: registration.badges[0]?.barcodeData ?? registration.badgeNumber ?? registration.id,
           status: registration.status,
           badge: registration.badges[0]

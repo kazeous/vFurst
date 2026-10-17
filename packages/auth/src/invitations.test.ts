@@ -97,34 +97,48 @@ describe("organization invitation state and acceptance", () => {
 
   it("accepts a pending invitation for the normalized recipient", () => {
     expect(() =>
-      assertOrganizationInvitationCanBeAccepted(pendingInvitation(), " Recipient@Example.COM ", now)
+      assertOrganizationInvitationCanBeAccepted(pendingInvitation(), { email: " Recipient@Example.COM ", emailVerified: true }, now)
     ).not.toThrow();
+  });
+
+  it("rejects an unverified email with EMAIL_UNVERIFIED before the email match", () => {
+    expectInvitationError(
+      () =>
+        assertOrganizationInvitationCanBeAccepted(
+          pendingInvitation(),
+          { email: "other@example.com", emailVerified: false },
+          now
+        ),
+      "EMAIL_UNVERIFIED"
+    );
+    expectInvitationError(
+      () =>
+        assertOrganizationInvitationCanBeAccepted(pendingInvitation({ revokedAt: now }), { email: "recipient@example.com", emailVerified: false }, now),
+      "REVOKED"
+    );
   });
 
   it("reports every terminal or identity-bound acceptance failure", () => {
     expectInvitationError(
-      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ acceptedAt: now }), "recipient@example.com", now),
+      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ acceptedAt: now }), { email: "recipient@example.com", emailVerified: true }, now),
       "ALREADY_ACCEPTED"
     );
     expectInvitationError(
-      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ revokedAt: now }), "recipient@example.com", now),
+      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ revokedAt: now }), { email: "recipient@example.com", emailVerified: true }, now),
       "REVOKED"
     );
     expectInvitationError(
-      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ expiresAt: now }), "recipient@example.com", now),
+      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation({ expiresAt: now }), { email: "recipient@example.com", emailVerified: true }, now),
       "EXPIRED"
     );
     expectInvitationError(
-      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation(), "other@example.com", now),
+      () => assertOrganizationInvitationCanBeAccepted(pendingInvitation(), { email: "other@example.com", emailVerified: true }, now),
       "EMAIL_MISMATCH"
     );
     expectInvitationError(
       () =>
         assertOrganizationInvitationCanBeAccepted(
-          pendingInvitation({ organizationStatus: "SUSPENDED" }),
-          "recipient@example.com",
-          now
-        ),
+          pendingInvitation({ organizationStatus: "SUSPENDED" }), { email: "recipient@example.com", emailVerified: true }, now),
       "UNAVAILABLE"
     );
   });

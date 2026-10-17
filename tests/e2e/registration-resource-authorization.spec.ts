@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -41,15 +41,10 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, attendeeA, attendeeB, historicAttendee] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "Registration Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "Registration Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeAEmail, name: attendeeAName, passwordHash } }),
-    prisma.user.create({ data: { email: attendeeBEmail, name: attendeeBName, passwordHash } }),
-    prisma.user.create({ data: { email: historicAttendeeEmail, name: historicAttendeeName } })
+  const [ownerA, ownerB] = await Promise.all([
+    prisma.user.create({ data: { email: ownerAEmail, name: "Registration Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "Registration Owner B", ...staffIdentityData() } })
   ]);
-  historicAttendeeId = historicAttendee.id;
 
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
@@ -95,6 +90,12 @@ test.beforeAll(async () => {
   ]);
 
   eventAId = orgA.events[0]!.id;
+
+  const attendeeA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: attendeeAEmail, name: attendeeAName, password });
+  const attendeeB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: attendeeBEmail, name: attendeeBName, password });
+  const historicAttendee = await prisma.portalAccount.create({ data: { orgId: orgA.id, email: historicAttendeeEmail, name: historicAttendeeName } });
+  historicAttendeeId = historicAttendee.id;
+
   eventBId = orgB.events[0]!.id;
 
   const [tierA, tierB] = await Promise.all([
@@ -110,16 +111,16 @@ test.beforeAll(async () => {
 
   const [registrationA, registrationB] = await Promise.all([
     prisma.registration.create({
-      data: { orgId: orgA.id, eventId: eventAId, userId: attendeeA.id, typeId: tierA.id, status: "PENDING" }
+      data: { orgId: orgA.id, eventId: eventAId, portalAccountId: attendeeA.id, typeId: tierA.id, status: "PENDING" }
     }),
     prisma.registration.create({
-      data: { orgId: orgB.id, eventId: eventBId, userId: attendeeB.id, typeId: tierB.id, status: "PENDING" }
+      data: { orgId: orgB.id, eventId: eventBId, portalAccountId: attendeeB.id, typeId: tierB.id, status: "PENDING" }
     })
   ]);
   registrationAId = registrationA.id;
   registrationBId = registrationB.id;
   await prisma.registration.create({
-    data: { orgId: orgA.id, eventId: eventAId, userId: historicAttendee.id, typeId: tierA.id, status: "PENDING" }
+    data: { orgId: orgA.id, eventId: eventAId, portalAccountId: historicAttendee.id, typeId: tierA.id, status: "PENDING" }
   });
 
   const [noteA, noteB] = await Promise.all([
@@ -136,9 +137,6 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: { in: [orgASlug, orgBSlug] } } });
-  if (historicAttendeeId) {
-    await prisma.verificationToken.deleteMany({ where: { identifier: `password-reset:${historicAttendeeId}` } });
-  }
   await prisma.user.deleteMany({
     where: {
       email: {
@@ -159,12 +157,12 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await loginWithCredentials(page, ownerAEmail, password);
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAsAttendeeA(page: Page) {
-  await loginWithCredentials(page, attendeeAEmail, password, "/account/registrations");
+  await loginAsAttendee(page, { subdomain: orgASlug }, attendeeAEmail, { password, returnTo: "/account/registrations" });
   await expect(page.getByRole("heading", { name: "My registrations" })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -194,7 +192,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -228,107 +226,129 @@ async function expectOriginalRegistrations() {
 
 test("attendee account and success lookup expose only registrations owned by the session", async ({ page }) => {
   await loginAsAttendeeA(page);
-  await expect(page.getByText("Registration Event A")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Registration Event A", level: 3, exact: true })).toBeVisible();
   await expect(page.getByText("Registration Event B")).toHaveCount(0);
-  expect((await page.request.get(`/account/registrations/${registrationAId}`)).status()).toBe(200);
-  expect((await page.request.get(`/account/registrations/${registrationBId}`)).status()).toBe(404);
+  expect(await page.evaluate(async (url) => (await fetch(url, { cache: "no-store" })).status, `${portalOrigin(orgASlug)}/account/registrations/${registrationAId}`)).toBe(200);
+  expect(await page.evaluate(async (url) => (await fetch(url, { cache: "no-store" })).status, `${portalOrigin(orgASlug)}/account/registrations/${registrationBId}`)).toBe(404);
 
-  await page.goto(`/${orgASlug}/register?success=${registrationBId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/register?success=${registrationBId}`);
   await expect(page.getByText(attendeeBName)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toHaveCount(0);
 
-  await page.goto(`/${orgASlug}/register?success=${registrationAId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/register?success=${registrationAId}`);
   await expect(page.getByText(attendeeAName)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible();
 });
 
+const recoverySent = "Check your email. If this address can be used here, we sent a link that expires in one hour.";
+const invalidSetupLink = "This link is invalid, expired, or has already been used.";
+
+async function savePortalPassword(page: Page, value: string) {
+  await page.getByLabel("Name", { exact: true }).fill(historicAttendeeName);
+  await page.getByLabel("New password", { exact: true }).fill(value);
+  await page.getByLabel("Confirm password", { exact: true }).fill(value);
+  const loaded = page.waitForEvent("load");
+  await page.getByRole("button", { name: "Save password", exact: true }).click();
+  await loaded;
+  await page.waitForLoadState("load");
+}
+
 test("password recovery gives an unknown email the same generic acknowledgement", async ({ page }) => {
   const unknownEmail = `registration-unknown-${runId}@example.com`;
-  await page.goto("/forgot-password?returnTo=%2Faccount");
-  await page.getByLabel("Email").fill(unknownEmail);
-  await page.getByRole("button", { name: "Send reset link" }).click();
-  await expect(page).toHaveURL(/\/forgot-password\?sent=1/);
-  await expect(page.getByText("If an account exists for that email, a one-hour reset link has been sent.")).toBeVisible();
+  const account = await prisma.portalAccount.findUniqueOrThrow({ where: { id: historicAttendeeId } });
+  const origin = portalOrigin(orgASlug);
+  for (const email of [unknownEmail, attendeeAEmail]) {
+    await page.goto(`${origin}/forgot-password`);
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByRole("button", { name: "Send link", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/forgot-password`);
+    await expect(page.getByRole("status").filter({ hasText: recoverySent })).toHaveText(recoverySent);
+  }
   expect(await prisma.user.count({ where: { email: unknownEmail } })).toBe(0);
+  expect(await prisma.portalAccount.count({ where: { orgId: account.orgId, email: unknownEmail } })).toBe(0);
 });
 
-test("a legacy email-created attendee can securely claim their existing records with a one-time reset token", async ({ page }) => {
-  const expiredRawToken = randomBytes(32).toString("hex");
-  const identifier = `password-reset:${historicAttendeeId}`;
-  await prisma.verificationToken.create({
-    data: {
-      identifier,
-      token: createHash("sha256").update(expiredRawToken).digest("hex"),
-      expires: new Date(Date.now() - 1_000)
-    }
-  });
+test("an unclaimed attendee can securely claim existing records with a one-time setup token", async ({ page, context }) => {
+  const account = await prisma.portalAccount.findUniqueOrThrow({ where: { id: historicAttendeeId } });
+  const ownership = { orgId: account.orgId, portalAccountId: account.id };
+  const registrations = await prisma.registration.findMany({ where: ownership, select: { id: true } });
+  const sessionsBefore = await prisma.portalSession.count({ where: ownership });
+  const expiredRawToken = randomBytes(32).toString("base64url");
+  await prisma.portalAccountToken.create({ data: {
+    ...ownership, purpose: "ACCOUNT_SETUP", tokenHash: createHash("sha256").update(expiredRawToken).digest("hex"), expiresAt: new Date(Date.now() - 1_000)
+  } });
+  const origin = portalOrigin(orgASlug);
+  await page.goto(`${origin}/set-password?token=${expiredRawToken}`);
+  await expect(page.getByRole("alert").filter({ hasText: invalidSetupLink })).toHaveText(invalidSetupLink);
+  await expect(page.getByRole("button", { name: "Save password", exact: true })).toHaveCount(0);
+  const unchanged = await prisma.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+  expect(unchanged.passwordHash).toBeNull();
+  expect(unchanged.emailVerifiedAt).toBeNull();
+  expect(await prisma.portalSession.count({ where: ownership })).toBe(sessionsBefore);
+  expect(await prisma.registration.findMany({ where: ownership, select: { id: true } })).toEqual(registrations);
 
-  await page.goto(`/reset-password?token=${expiredRawToken}`);
-  await page.getByLabel("New password").fill(claimedPassword);
-  await page.getByLabel("Confirm password").fill(claimedPassword);
-  await page.getByRole("button", { name: "Update password" }).click();
-  await expect(page).toHaveURL(/\/reset-password\?invalid=1/);
-  expect((await prisma.user.findUniqueOrThrow({ where: { id: historicAttendeeId } })).passwordHash).toBeNull();
-  await prisma.verificationToken.deleteMany({ where: { identifier } });
+  const rawToken = randomBytes(32).toString("base64url");
+  const setup = await prisma.portalAccountToken.create({ data: {
+    ...ownership, purpose: "ACCOUNT_SETUP", tokenHash: createHash("sha256").update(rawToken).digest("hex"), expiresAt: new Date(Date.now() + 60_000)
+  } });
+  const setupUrl = `${origin}/set-password?token=${rawToken}&returnTo=${encodeURIComponent("/account/registrations")}`;
+  await page.goto(setupUrl);
+  await savePortalPassword(page, claimedPassword);
+  await expect(page).toHaveURL(`${origin}/account/registrations`, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Registration Event A", level: 3, exact: true })).toBeVisible();
+  expect(await prisma.registration.findMany({ where: ownership, select: { id: true } })).toEqual(registrations);
+  const claimed = await prisma.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+  expect(claimed.passwordHash).not.toBeNull();
+  expect(claimed.emailVerifiedAt).not.toBeNull();
+  expect((await prisma.portalAccountToken.findUniqueOrThrow({ where: { id: setup.id } })).consumedAt).not.toBeNull();
+  expect(await prisma.portalAccountToken.count({ where: { ...ownership, purpose: "ACCOUNT_SETUP", consumedAt: null, expiresAt: { gt: new Date() } } })).toBe(0);
 
-  const rawToken = randomBytes(32).toString("hex");
-  await prisma.verificationToken.create({
-    data: {
-      identifier,
-      token: createHash("sha256").update(rawToken).digest("hex"),
-      expires: new Date(Date.now() + 60_000)
-    }
-  });
-
-  await page.goto(`/reset-password?token=${rawToken}&returnTo=${encodeURIComponent("/account/registrations")}`);
-  await page.getByLabel("New password").fill(claimedPassword);
-  await page.getByLabel("Confirm password").fill(claimedPassword);
-  await page.getByRole("button", { name: "Update password" }).click();
-  await expect(page).toHaveURL(/\/login\?/, { timeout: 30_000 });
-  await expect(page.getByText("Password updated. You can log in now.")).toBeVisible();
-
-  await page.goto(`/reset-password?token=${rawToken}`);
-  await page.getByLabel("New password").fill("ReplayAttemptPass123!");
-  await page.getByLabel("Confirm password").fill("ReplayAttemptPass123!");
-  await page.getByRole("button", { name: "Update password" }).click();
-  await expect(page).toHaveURL(/\/reset-password\?invalid=1/);
-
-  await page.goto("/login?returnTo=%2Faccount%2Fregistrations");
-  await page.getByLabel("Email").fill(historicAttendeeEmail);
-  await page.getByLabel("Password").fill(claimedPassword);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(/\/account\/registrations$/, { timeout: 30_000 });
-  await expect(page.getByText("Registration Event A")).toBeVisible();
-
-  expect(await prisma.verificationToken.count({ where: { identifier } })).toBe(0);
-  expect((await prisma.user.findUniqueOrThrow({ where: { id: historicAttendeeId } })).passwordHash).not.toBeNull();
+  await page.goto(setupUrl);
+  await expect(page.getByRole("alert").filter({ hasText: invalidSetupLink })).toHaveText(invalidSetupLink);
+  await expect(page.getByRole("button", { name: "Save password", exact: true })).toHaveCount(0);
+  expect((await prisma.portalAccount.findUniqueOrThrow({ where: { id: account.id } })).passwordHash).toBe(claimed.passwordHash);
+  await context.clearCookies({ name: "vfurst-portal" });
+  await loginAsAttendee(page, { subdomain: orgASlug }, historicAttendeeEmail, { password: claimedPassword, returnTo: "/account/registrations" });
+  await expect(page.getByRole("heading", { name: "Registration Event A", level: 3, exact: true })).toBeVisible();
 });
 
-test("password recovery invalidates JWT sessions issued before the credential change", async ({ page }) => {
-  await page.goto("/login?returnTo=%2Faccount");
-  await page.getByLabel("Email").fill(historicAttendeeEmail);
-  await page.getByLabel("Password").fill(claimedPassword);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(/\/account$/, { timeout: 30_000 });
-
-  const rawToken = randomBytes(32).toString("hex");
-  const identifier = `password-reset:${historicAttendeeId}`;
-  await prisma.verificationToken.create({
-    data: {
-      identifier,
-      token: createHash("sha256").update(rawToken).digest("hex"),
-      expires: new Date(Date.now() + 60_000)
-    }
-  });
-
-  await page.goto(`/reset-password?token=${rawToken}`);
-  await page.getByLabel("New password").fill(rotatedPassword);
-  await page.getByLabel("Confirm password").fill(rotatedPassword);
-  await page.getByRole("button", { name: "Update password" }).click();
-  await expect(page).toHaveURL(/\/login\?reset=1/);
-
-  await page.goto("/account");
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount/, { timeout: 30_000 });
+test("password recovery invalidates portal sessions issued before the credential change", async ({ page, context, browser }) => {
+  const origin = portalOrigin(orgASlug);
+  await loginAsAttendee(page, { subdomain: orgASlug }, historicAttendeeEmail, { password: claimedPassword });
+  await expect(page).toHaveURL(`${origin}/account`, { timeout: 30_000 });
+  const oldCookie = (await context.cookies(origin)).find((cookie) => cookie.name === "vfurst-portal");
+  expect(oldCookie).toBeDefined();
+  const oldSession = await prisma.portalSession.findUniqueOrThrow({ where: { tokenHash: createHash("sha256").update(oldCookie!.value).digest("hex") } });
+  const account = await prisma.portalAccount.findUniqueOrThrow({ where: { id: historicAttendeeId } });
+  const rawToken = randomBytes(32).toString("base64url");
+  const reset = await prisma.portalAccountToken.create({ data: {
+    orgId: account.orgId, portalAccountId: account.id, purpose: "PASSWORD_RESET", tokenHash: createHash("sha256").update(rawToken).digest("hex"), expiresAt: new Date(Date.now() + 60_000)
+  } });
+  const resetContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const resetPage = await resetContext.newPage();
+    await resetPage.goto(`${origin}/set-password?token=${rawToken}&returnTo=%2Faccount`);
+    await savePortalPassword(resetPage, rotatedPassword);
+    await expect(resetPage).toHaveURL(`${origin}/account`, { timeout: 30_000 });
+    const rotated = await prisma.portalAccount.findUniqueOrThrow({ where: { id: account.id } });
+    expect(rotated.authVersion).toBe(account.authVersion + 1);
+    expect((await prisma.portalAccountToken.findUniqueOrThrow({ where: { id: reset.id } })).consumedAt).not.toBeNull();
+    const newCookie = (await resetContext.cookies(origin)).find((cookie) => cookie.name === "vfurst-portal");
+    expect(newCookie).toBeDefined();
+    const newSession = await prisma.portalSession.findUniqueOrThrow({ where: { tokenHash: createHash("sha256").update(newCookie!.value).digest("hex") } });
+    expect(newSession.id).not.toBe(oldSession.id);
+    expect(newSession).toMatchObject({ orgId: account.orgId, portalAccountId: account.id, authVersion: rotated.authVersion, revokedAt: null });
+    expect(newSession.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    const invalidated = await prisma.portalSession.findUniqueOrThrow({ where: { id: oldSession.id } });
+    expect(invalidated.revokedAt !== null || invalidated.authVersion !== rotated.authVersion).toBe(true);
+    await page.goto(`${origin}/account`);
+    await expect(page).toHaveURL(`${origin}/login?returnTo=%2Faccount`, { timeout: 30_000 });
+    await resetContext.clearCookies({ name: "vfurst-portal" });
+    await loginAsAttendee(resetPage, { subdomain: orgASlug }, historicAttendeeEmail, { password: rotatedPassword });
+    await expect(resetPage).toHaveURL(`${origin}/account`);
+  } finally {
+    await resetContext.close();
+  }
 });
 
 test("status, refund, and email actions reject a foreign registration ID", async ({ page }) => {
@@ -416,4 +436,5 @@ test("all transfer actions derive tenant and event from the source registration"
   expect(
     await prisma.user.count({ where: { email: { in: [transferEmail, adminTransferEmail, phase5TransferEmail] } } })
   ).toBe(0);
+  expect(await prisma.portalAccount.count({ where: { orgId: (await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId, email: { in: [transferEmail, adminTransferEmail, phase5TransferEmail] } } })).toBe(0);
 });

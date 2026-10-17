@@ -1,9 +1,15 @@
 import { InvalidTenantHostError } from "@vfurst/tenant-context";
 import { NextResponse, type NextRequest } from "next/server";
 import { getRootDomain, isPlatformHostname, normalizeHostname } from "./lib/platform-hosts";
+import { canonicalPortalRedirect, centralPortalCandidate, portalHostKey } from "./lib/portal-canonical";
+import { lookupPortalHostOrganization } from "./lib/portal-host-directory";
 import { scrubVfurstInternalHeaders } from "./lib/request-headers";
 
 const ROOT_DOMAIN = getRootDomain();
+// next.config.ts rewrites a request carrying this header to /<portal key><path>.
+// A NextResponse.rewrite here would skip the ISR cache: Next 15.5 matches the
+// prerender manifest against the pre-rewrite pathname ("/register").
+export const PORTAL_SLUG_HEADER = "x-vfurst-portal-slug";
 const STATIC_FILE_EXTENSION =
   /[.](?:avif|bmp|css|csv|gif|ico|jpe?g|js|json|map|mjs|pdf|png|svg|txt|webmanifest|webp|woff2?|ttf|xml|zip)$/i;
 
@@ -16,7 +22,7 @@ export function isKnownStaticAssetPath(pathname: string) {
   return STATIC_FILE_EXTENSION.test(lastSegment);
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   let hostname: string;
 
   try {
@@ -37,29 +43,56 @@ export function middleware(request: NextRequest) {
 
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    isKnownStaticAssetPath(pathname) ||
-    isPlatformHostname(hostname)
+    isKnownStaticAssetPath(pathname)
   ) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  const rewriteUrl = request.nextUrl.clone();
-  const slug = hostname.endsWith(`.${ROOT_DOMAIN}`) ? hostname.replace(`.${ROOT_DOMAIN}`, "") : hostname;
+  const platformHost = isPlatformHostname(hostname);
+  const slug = portalHostKey(hostname, ROOT_DOMAIN);
   const domainMode = hostname.endsWith(`.${ROOT_DOMAIN}`) ? "subdomain" : "custom-domain";
-  rewriteUrl.pathname = `/${slug}${pathname === "/" ? "" : pathname}`;
 
-  requestHeaders.set("x-vfurst-org-host", hostname);
-  requestHeaders.set("x-vfurst-org-slug", slug);
-  requestHeaders.set("x-vfurst-domain-mode", domainMode);
+  if (!platformHost) {
+    requestHeaders.set("x-vfurst-org-host", hostname);
+    requestHeaders.set("x-vfurst-org-slug", slug);
+    requestHeaders.set("x-vfurst-domain-mode", domainMode);
+  }
 
-  return NextResponse.rewrite(rewriteUrl, {
-    request: {
-      headers: requestHeaders
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  const canRedirect = request.method === "GET" || request.method === "HEAD";
+  if (platformHost) {
+    const candidate = canRedirect ? centralPortalCandidate(pathname) : null;
+    if (candidate) {
+      const org = await lookupPortalHostOrganization(candidate.key);
+      if (org) {
+        const target = canonicalPortalRedirect({
+          requestHostname: null, portalPath: candidate.portalPath, search: request.nextUrl.search, org
+        });
+        if (target) return NextResponse.redirect(target, 308);
+      }
     }
-  });
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  if (canRedirect) {
+    const org = await lookupPortalHostOrganization(slug);
+    if (org) {
+      const target = canonicalPortalRedirect({
+        requestHostname: hostname, portalPath: pathname, search: request.nextUrl.search, org
+      });
+      if (target) return NextResponse.redirect(target, 308);
+    }
+  }
+
+  requestHeaders.set(PORTAL_SLUG_HEADER, slug);
+
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
-  matcher: ["/((?!monitoring|_next/static|_next/image|favicon.ico).*)"]
+  matcher: ["/((?!monitoring|_next/static|_next/image|favicon.ico).*)"],
+  runtime: "nodejs"
 };

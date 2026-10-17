@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { loginWithCredentials } from "./support/credentials-login";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -41,15 +41,10 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [ownerA, ownerB, buyer, attendeeA, attendeeB] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "Raffle Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "Raffle Owner B", passwordHash } }),
-    prisma.user.create({ data: { email: buyerEmail, name: "Raffle Buyer", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeAEmail, name: "Raffle Attendee A" } }),
-    prisma.user.create({ data: { email: attendeeBEmail, name: "Raffle Attendee B" } })
+  const [ownerA, ownerB] = await Promise.all([
+    prisma.user.create({ data: { email: ownerAEmail, name: "Raffle Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "Raffle Owner B", ...staffIdentityData() } })
   ]);
-  attendeeAId = attendeeA.id;
 
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
@@ -97,6 +92,13 @@ test.beforeAll(async () => {
   orgAId = orgA.id;
   orgBId = orgB.id;
   eventAId = orgA.events[0]!.id;
+
+  const buyerB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: buyerEmail, name: "Raffle Buyer", password });
+  const buyer = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: buyerEmail, name: "Raffle Buyer", password });
+  const attendeeA = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: attendeeAEmail, name: "Raffle Attendee A", password });
+  const attendeeB = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: attendeeBEmail, name: "Raffle Attendee B", password });
+  attendeeAId = attendeeA.id;
+
   eventBId = orgB.events[0]!.id;
 
   const [tierA, tierB] = await Promise.all([
@@ -135,19 +137,19 @@ test.beforeAll(async () => {
 
   const [registrationA] = await Promise.all([
     prisma.registration.create({
-      data: { orgId: orgAId, eventId: eventAId, userId: attendeeA.id, typeId: tierA.id, status: "CONFIRMED" }
+      data: { orgId: orgAId, eventId: eventAId, portalAccountId: attendeeA.id, typeId: tierA.id, status: "CONFIRMED" }
     }),
     prisma.registration.create({
-      data: { orgId: orgBId, eventId: eventBId, userId: attendeeB.id, typeId: tierB.id, status: "CONFIRMED" }
+      data: { orgId: orgBId, eventId: eventBId, portalAccountId: attendeeB.id, typeId: tierB.id, status: "CONFIRMED" }
     })
   ]);
 
   await Promise.all([
     prisma.raffleEntry.create({
-      data: { orgId: orgAId, raffleId: raffleA.id, userId: registrationA.userId, entryMethod: "AUTO" }
+      data: { orgId: orgAId, raffleId: raffleA.id, portalAccountId: registrationA.portalAccountId, entryMethod: "AUTO" }
     }),
     prisma.raffleEntry.create({
-      data: { orgId: orgBId, raffleId: raffleB.id, userId: attendeeB.id, entryMethod: "AUTO" }
+      data: { orgId: orgBId, raffleId: raffleB.id, portalAccountId: attendeeB.id, entryMethod: "AUTO" }
     })
   ]);
 
@@ -186,8 +188,8 @@ test.beforeAll(async () => {
   voucherAId = voucherA.id;
 
   const [cartA, cartB] = await Promise.all([
-    prisma.cart.create({ data: { orgId: orgAId, eventId: eventAId, userId: buyer.id } }),
-    prisma.cart.create({ data: { orgId: orgBId, eventId: eventBId, userId: buyer.id } })
+    prisma.cart.create({ data: { orgId: orgAId, eventId: eventAId, portalAccountId: buyer.id } }),
+    prisma.cart.create({ data: { orgId: orgBId, eventId: eventBId, portalAccountId: buyerB.id } })
   ]);
   cartAId = cartA.id;
   cartBId = cartB.id;
@@ -214,7 +216,11 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page, email: string) {
-  await loginWithCredentials(page, email, password);
+  if (email === buyerEmail) {
+    await loginAsAttendee(page, { subdomain: orgASlug }, email, { password });
+  } else {
+    await loginAsStaffEmail(page, email);
+  }
 }
 
 async function loginAsOwnerA(page: Page) {
@@ -246,7 +252,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -293,7 +299,7 @@ test("raffle creation derives tenant from the stored event", async ({ page }) =>
   await form.getByLabel("Draw date").fill("2028-05-02T15:00");
   await form.getByLabel("Prizes").fill("Local prize|2|Stored under event A");
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"),
+    page.waitForResponse((response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"),
     form.getByRole("button", { name: "Create raffle" }).click()
   ]);
   const created = await prisma.raffle.findFirstOrThrow({ where: { name: validRaffleName } });
@@ -311,6 +317,7 @@ test("manual, automatic, and draw raffle mutations reject a foreign raffle ID", 
   await form.getByLabel("Name", { exact: true }).fill("Rejected entrant");
   await submitTamperedAction(page, pathname, form, "Add entry", "raffleId", raffleBId);
   expect(await prisma.user.count({ where: { email: rejectedEntryEmail } })).toBe(0);
+  expect(await prisma.portalAccount.count({ where: { orgId: orgAId, email: rejectedEntryEmail } })).toBe(0);
 
   const foreignEntryCount = await prisma.raffleEntry.count({ where: { raffleId: raffleBId } });
   await navigateAfterRejectedAction(page, pathname);
@@ -318,7 +325,7 @@ test("manual, automatic, and draw raffle mutations reject a foreign raffle ID", 
   form = article.getByRole("button", { name: "Auto-enter attendees" }).locator("xpath=ancestor::form");
   await submitTamperedAction(page, pathname, form, "Auto-enter attendees", "raffleId", raffleBId);
   expect(await prisma.raffleEntry.count({ where: { raffleId: raffleBId } })).toBe(foreignEntryCount);
-  expect(await prisma.raffleEntry.count({ where: { raffleId: raffleBId, userId: attendeeAId } })).toBe(0);
+  expect(await prisma.raffleEntry.count({ where: { raffleId: raffleBId, portalAccountId: attendeeAId } })).toBe(0);
 
   await navigateAfterRejectedAction(page, pathname);
   article = page.locator("article", { hasText: raffleAName });
@@ -370,7 +377,7 @@ test("voucher creation and bulk generation reject foreign event and tier resourc
   await form.getByLabel("Discount value").fill("50000");
   await form.locator(`input[name="tierId"][value="${tierAId}"]`).check();
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"),
+    page.waitForResponse((response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"),
     form.getByRole("button", { name: "Create voucher" }).click()
   ]);
   const validVoucher = await prisma.voucher.findUniqueOrThrow({
@@ -395,7 +402,7 @@ test("voucher creation and bulk generation reject foreign event and tier resourc
 
 test("public voucher application derives event from the user-owned cart", async ({ page }) => {
   await login(page, buyerEmail);
-  const pathname = `/${orgASlug}/store`;
+  const pathname = `${portalOrigin(orgASlug)}/store`;
   await page.goto(pathname);
   let form = page.getByRole("button", { name: "Apply" }).locator("xpath=ancestor::form");
   await form.getByLabel("Discount code").fill("STOREA");
@@ -411,7 +418,7 @@ test("public voucher application derives event from the user-owned cart", async 
   form = page.getByRole("button", { name: "Apply" }).locator("xpath=ancestor::form");
   await form.getByLabel("Discount code").fill("STOREA");
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"),
+    page.waitForResponse((response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"),
     form.getByRole("button", { name: "Apply" }).click()
   ]);
   expect((await prisma.cart.findUniqueOrThrow({ where: { id: cartAId } })).voucherId).toBe(voucherAId);
@@ -419,7 +426,7 @@ test("public voucher application derives event from the user-owned cart", async 
 
 test("public registration rejects an internally cross-tenant voucher before creating identity or order data", async ({ page }) => {
   await login(page, buyerEmail);
-  const pathname = `/${orgASlug}/register`;
+  const pathname = `${portalOrigin(orgASlug)}/register`;
   await page.goto(pathname);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
@@ -429,11 +436,12 @@ test("public registration rejects an internally cross-tenant voucher before crea
   await page.getByRole("button", { name: "Review" }).click();
   const form = page.getByRole("button", { name: "Complete registration" }).locator("xpath=ancestor::form");
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"),
+    page.waitForResponse((response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"),
     form.getByRole("button", { name: "Complete registration" }).click()
   ]);
 
   expect(await prisma.user.count({ where: { email: poisonedRegistrationEmail } })).toBe(0);
-  expect(await prisma.registration.count({ where: { eventId: eventAId, user: { email: poisonedRegistrationEmail } } })).toBe(0);
-  expect(await prisma.order.count({ where: { eventId: eventAId, user: { email: poisonedRegistrationEmail } } })).toBe(0);
+  expect(await prisma.portalAccount.count({ where: { orgId: orgAId, email: poisonedRegistrationEmail } })).toBe(0);
+  expect(await prisma.registration.count({ where: { eventId: eventAId, portalAccount: { email: poisonedRegistrationEmail } } })).toBe(0);
+  expect(await prisma.order.count({ where: { eventId: eventAId, portalAccount: { email: poisonedRegistrationEmail } } })).toBe(0);
 });

@@ -48,6 +48,18 @@ const requiredEnv = [
     type: "base64-32-byte-key"
   },
   {
+    name: "AUTH_AUTHENTIK_ISSUER",
+    type: "https-url"
+  },
+  {
+    name: "AUTH_AUTHENTIK_ID",
+    type: "text"
+  },
+  {
+    name: "AUTH_AUTHENTIK_SECRET",
+    type: "text"
+  },
+  {
     name: "STRIPE_SECRET_KEY",
     type: "stripe-secret-key"
   },
@@ -238,6 +250,22 @@ function validateSentryDsn(name, value) {
   return null;
 }
 
+function validateHttpsUrl(name, value) {
+  if (isPlaceholderValue(value)) {
+    return `${name} is not configured.`;
+  }
+
+  try {
+    if (new URL(value).protocol !== "https:") {
+      return `${name} must be an HTTPS URL.`;
+    }
+  } catch {
+    return `${name} must be a valid HTTPS URL.`;
+  }
+
+  return null;
+}
+
 function validateTextEnv(name, value) {
   if (isPlaceholderValue(value)) {
     return `${name} is not configured.`;
@@ -364,6 +392,10 @@ function validateRequiredEnv({ name, type }) {
 
   if (type === "base64-32-byte-key") {
     return validateBase64Key(name, value);
+  }
+
+  if (type === "https-url") {
+    return validateHttpsUrl(name, value);
   }
 
   return validateTextEnv(name, value);

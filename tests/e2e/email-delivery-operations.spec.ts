@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { encryptEmailDeliveryPayload } from "@vfurst/email";
-import bcrypt from "bcryptjs";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -22,20 +22,15 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 async function loginAs(page: Page, email: string, returnTo: string) {
-  await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(new RegExp(returnTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), { timeout: 30_000 });
+  await loginAsStaffEmail(page, email, { returnTo });
 }
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [platformAdmin, owner] = await Promise.all([
     prisma.user.create({
-      data: { email: platformEmail, name: "Email Operations Admin", passwordHash, platformRole: "PLATFORM_ADMIN" }
+      data: { email: platformEmail, name: "Email Operations Admin", ...staffIdentityData(), platformRole: "PLATFORM_ADMIN" }
     }),
-    prisma.user.create({ data: { email: ownerEmail, name: "Email Operations Owner", passwordHash } })
+    prisma.user.create({ data: { email: ownerEmail, name: "Email Operations Owner", ...staffIdentityData() } })
   ]);
   const org = await prisma.organization.create({
     data: {

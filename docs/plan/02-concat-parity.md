@@ -11,7 +11,7 @@ Status legend: ✅ parity or better · 🟡 partial · ❌ missing · 🔷 delib
 | Attendance tiers | Tiers are products; public-visibility toggle; staff-only hidden tiers | ✅ core (`RegistrationType`, caps, upgrades) · 🟡 hidden/staff-only tiers → **REG-P5** |
 | Upgrade paths | Attendee upgrades tier, pays only the price difference | ✅ implemented via registration policy |
 | Tier add-ons | Complimentary add-ons auto-added at checkout; upsell add-ons offered after configuring | 🟡 add-ons exist per tier; complimentary auto-add + upsell presentation → **STO-P4** |
-| Transfer | Attendee-initiated, password re-auth; target must hold an unpaid registration; no staff path | ✅ **exceeds** — durable request/accept/decline + organizer override |
+| Transfer | Attendee-initiated, password re-auth; target must hold an unpaid registration; no staff path | ✅ **exceeds** — durable request/accept/decline + organizer override · scoped to one tenant from Phase 1B |
 | Badge designer | Layer designer; JSON export/import; pre-printed canvas preview; no image layers; no Zebra direct print (planned) | ✅ **exceeds** (image layers, PDF + ZPL, WebUSB direct print) · 🟡 design export/import + pre-printed canvas preview not implemented (low priority) |
 | Cashier | Check-in UI with ID scan, warning engine, per-station config, undelivered products, staff/vendor badge variants, dual-printer routing | 🟡 walk-in + payment + print exist → gaps **EVD-P1…P4, P11** |
 | Scanner | TEEMI 2D via Web Serial; PDF417 driver-license scan into search | ❌ no ID-document scanning → decision **EVD-P11** (VN market: CCCD QR instead of PDF417) |
@@ -69,12 +69,12 @@ Status legend: ✅ parity or better · 🟡 partial · ❌ missing · 🔷 delib
 
 | Behavior | vFurst status |
 |---|---|
-| One account registers up to 4 attendees (family/friends), each with own personal details + badge | ❌ registration is hard-bound to the session `User` → **REG-P1** |
+| One account registers up to 4 attendees (family/friends), each with own personal details + badge | ❌ registration is hard-bound to one account (`PortalAccount` from Phase 1B) → **REG-P1** |
 | Emergency contacts (2, with phone country pickers) on registration | ❌ → **REG-P2** |
 | Standards of Conduct + refund/deferral policy embedded in the registration wizard with required agreement checkboxes | ❌ → **REG-P3** |
 | Refund deadline, sponsor-level donation table, rollover/deferral to next year | ❌ refunds exist; deferral/rollover → **REG-P8** (decision) |
 | Live badge preview during registration | ❌ → **REG-P6** |
-| Two-factor authentication page | ❌ → **REG-P9** (decision) |
+| Two-factor authentication page | ❌ → **REG-P9** (portal accounts; staff 2FA via authentik — Phase 1B) |
 | Language selector (i18n) | ❌ → **REG-P10** (decision; VN market wants vi + en) |
 | Dark/light theme toggle | 🔷 light-only is a standing decision |
 | Per-attendee QR code, hotel reservations, account-level cart | ✅ badge barcode/QR + hotel exist · 🟡 cart is store-scoped, not a unified all-product cart (acceptable divergence; revisit only if STO-P4 forces it) |
@@ -102,7 +102,7 @@ SePay VietQR + organizer ledger + recorded payouts + reconciliation; platform co
 | REG-P6 | Live badge preview in registration wizard | 2 |
 | REG-P7 | Upgrade-path self-service surface in `/account` | 2 |
 | REG-P8 | Deferral/rollover + sponsor-donation policy (product decision first) | 2 |
-| REG-P9 | Two-factor authentication (decision: TOTP/passkeys) | 2 |
+| REG-P9 | Two-factor authentication for portal accounts (staff 2FA via authentik) | 2 |
 | REG-P10 | i18n vi + en (decision: scope + library) | 2 |
 | REG-P11 | Org-level email override chain + disable + wider catalogue | 2 |
 | REG-P12 | Custom email-domain DNS verification flow | 2 |

@@ -54,18 +54,7 @@ export async function inspectTestFixtures(client) {
       ? []
       : await client.user.findMany({
           where: {
-            OR: [
-              { carts: { some: { orgId: { in: organizationIds } } } },
-              { hotelBookings: { some: { orgId: { in: organizationIds } } } },
-              { orders: { some: { orgId: { in: organizationIds } } } },
-              { orgMemberships: { some: { orgId: { in: organizationIds } } } },
-              { raffleDrawResults: { some: { orgId: { in: organizationIds } } } },
-              { raffleEntries: { some: { orgId: { in: organizationIds } } } },
-              { registrations: { some: { orgId: { in: organizationIds } } } },
-              { staffAssignments: { some: { orgId: { in: organizationIds } } } },
-              { vendorApplications: { some: { orgId: { in: organizationIds } } } },
-              { volunteerApplications: { some: { orgId: { in: organizationIds } } } }
-            ]
+            OR: [{ orgMemberships: { some: { orgId: { in: organizationIds } } } }]
           },
           select: { id: true, email: true }
         });

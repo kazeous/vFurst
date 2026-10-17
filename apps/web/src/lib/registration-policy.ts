@@ -46,7 +46,7 @@ export async function runRegistrationPolicyTransaction<T>(callback: (tx: Prisma.
 
 type CapacityInput = {
   eventId: string;
-  userId: string;
+  portalAccountId: string;
   typeId: string;
   excludeRegistrationId?: string;
   enforceUserLimit?: boolean;
@@ -73,7 +73,8 @@ export async function assertRegistrationCapacity(tx: Prisma.TransactionClient, i
     const userCount = await tx.registration.count({
       where: {
         eventId: event.id,
-        userId: input.userId,
+        orgId: event.orgId,
+        portalAccountId: input.portalAccountId,
         id: exclusion,
         status: { in: [...registrationReservationStatuses] }
       }

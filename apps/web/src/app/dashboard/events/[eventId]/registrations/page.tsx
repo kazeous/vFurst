@@ -17,7 +17,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
         },
         include: {
           type: true,
-          user: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         }
       }
     }
@@ -41,8 +41,8 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
           rows={event.registrations.map((registration) => ({
             id: registration.id,
             eventId: registration.eventId,
-            attendee: registration.user.name ?? registration.user.email,
-            email: registration.user.email,
+            attendee: registration.portalAccount.name ?? registration.portalAccount.email,
+            email: registration.portalAccount.email,
             type: registration.type.name,
             status: registration.status,
             approvalStatus: registration.approvalStatus,

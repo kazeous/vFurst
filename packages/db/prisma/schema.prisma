@@ -188,50 +188,102 @@ enum RaffleEntryMethod {
   PURCHASED
 }
 
+enum PortalAccountTokenPurpose {
+  ACCOUNT_SETUP // sign-up and walk-in claim
+  PASSWORD_RESET
+}
+
 model User {
-  id                                   String                        @id @default(uuid()) @db.Uuid
-  email                                String                        @unique
-  name                                 String?
-  avatar                               String?
-  image                                String?
-  emailVerified                        DateTime?
-  passwordHash                         String?
-  authVersion                          Int                           @default(0)
-  platformRole                         PlatformRole                  @default(USER)
-  createdAt                            DateTime                      @default(now())
-  updatedAt                            DateTime                      @updatedAt
-  accounts                             Account[]
-  attendeeNotes                        AttendeeNote[]                @relation("AttendeeNoteAuthor")
-  authenticators                       Authenticator[]
-  carts                                Cart[]
-  hotelBookings                        HotelBooking[]
-  ledDepartments                       Department[]                  @relation("DepartmentLead")
-  orders                               Order[]
-  orgMemberships                       OrgMember[]
-  raffleEntries                        RaffleEntry[]
-  raffleDrawResults                    RaffleDrawResult[]
-  registrations                        Registration[]
-  reviewedApplications                 VolunteerApplication[]        @relation("VolunteerApplicationReviewer")
-  sessions                             Session[]
-  staffAssignments                     StaffAssignment[]
-  vendorApplications                   VendorApplication[]
-  volunteerApplications                VolunteerApplication[]
-  paymentProviderUpdates               PaymentProviderConfig[]       @relation("PaymentProviderUpdatedBy")
-  organizerPayoutsCreated              OrganizerPayout[]             @relation("OrganizerPayoutCreatedBy")
-  paymentRefundsCreated                PaymentRefund[]               @relation("PaymentRefundCreatedBy")
-  paymentExceptionsResolved            PaymentException[]            @relation("PaymentExceptionResolvedBy")
-  organizationStatusUpdates            Organization[]                @relation("OrganizationStatusUpdatedBy")
-  customDomainsVerified                Organization[]                @relation("OrganizationCustomDomainVerifiedBy")
-  customDomainsActivated               Organization[]                @relation("OrganizationCustomDomainActivatedBy")
-  orgInvitationsSent                   OrgInvitation[]               @relation("OrgInvitationInvitedBy")
-  orgInvitationsAccepted               OrgInvitation[]               @relation("OrgInvitationAcceptedBy")
-  orgInvitationsRevoked                OrgInvitation[]               @relation("OrgInvitationRevokedBy")
-  registrationTransferRequestsCreated  RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
-  registrationTransferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
-  emailDeliveriesReplayed              EmailDelivery[]               @relation("EmailDeliveryReplayedBy")
-  authorizationCodes                   AuthorizationCode[]
+  id                                  String                        @id @default(uuid()) @db.Uuid
+  email                               String                        @unique
+  name                                String?
+  image                               String?
+  emailVerified                       DateTime?
+  authVersion                         Int                           @default(0)
+  platformRole                        PlatformRole                  @default(USER)
+  createdAt                           DateTime                      @default(now())
+  updatedAt                           DateTime                      @updatedAt
+  accounts                            Account[]
+  attendeeNotes                       AttendeeNote[]                @relation("AttendeeNoteAuthor")
+  ledDepartments                      Department[]                  @relation("DepartmentLead")
+  orgMemberships                      OrgMember[]
+  reviewedApplications                VolunteerApplication[]        @relation("VolunteerApplicationReviewer")
+  sessions                            Session[]
+  paymentProviderUpdates              PaymentProviderConfig[]       @relation("PaymentProviderUpdatedBy")
+  organizerPayoutsCreated             OrganizerPayout[]             @relation("OrganizerPayoutCreatedBy")
+  paymentRefundsCreated               PaymentRefund[]               @relation("PaymentRefundCreatedBy")
+  paymentExceptionsResolved           PaymentException[]            @relation("PaymentExceptionResolvedBy")
+  organizationStatusUpdates           Organization[]                @relation("OrganizationStatusUpdatedBy")
+  customDomainsVerified               Organization[]                @relation("OrganizationCustomDomainVerifiedBy")
+  customDomainsActivated              Organization[]                @relation("OrganizationCustomDomainActivatedBy")
+  orgInvitationsSent                  OrgInvitation[]               @relation("OrgInvitationInvitedBy")
+  orgInvitationsAccepted              OrgInvitation[]               @relation("OrgInvitationAcceptedBy")
+  orgInvitationsRevoked               OrgInvitation[]               @relation("OrgInvitationRevokedBy")
+  registrationTransferRequestsCreated RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
+  emailDeliveriesReplayed             EmailDelivery[]               @relation("EmailDeliveryReplayedBy")
 
   @@map("users")
+}
+
+model PortalAccount {
+  id                       String                        @id @default(uuid()) @db.Uuid
+  orgId                    String                        @db.Uuid
+  email                    String // normalizeIdentityEmail()
+  name                     String?
+  passwordHash             String? // null = unclaimed (walk-in or setup not finished)
+  emailVerifiedAt          DateTime? // set together with passwordHash
+  authVersion              Int                           @default(0)
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  org                      Organization                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sessions                 PortalSession[]
+  tokens                   PortalAccountToken[]
+  registrations            Registration[]
+  carts                    Cart[]
+  orders                   Order[]
+  hotelBookings            HotelBooking[]
+  volunteerApplications    VolunteerApplication[]
+  vendorApplications       VendorApplication[]
+  staffAssignments         StaffAssignment[]
+  raffleEntries            RaffleEntry[]
+  raffleWins               RaffleDrawResult[]
+  transferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
+
+  @@unique([orgId, email])
+  @@unique([orgId, id])
+  @@map("portal_accounts")
+}
+
+model PortalSession {
+  id              String        @id @default(uuid()) @db.Uuid
+  orgId           String        @db.Uuid
+  portalAccountId String        @db.Uuid
+  tokenHash       String        @unique @db.Char(64) // SHA-256 hex of the cookie value
+  authVersion     Int
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  portalAccount   PortalAccount @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+
+  @@index([portalAccountId])
+  @@index([expiresAt])
+  @@map("portal_sessions")
+}
+
+model PortalAccountToken {
+  id              String                    @id @default(uuid()) @db.Uuid
+  orgId           String                    @db.Uuid
+  portalAccountId String                    @db.Uuid
+  purpose         PortalAccountTokenPurpose
+  tokenHash       String                    @unique @db.Char(64)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime                   @default(now())
+  portalAccount   PortalAccount             @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+
+  @@index([portalAccountId, purpose])
+  @@index([expiresAt])
+  @@map("portal_account_tokens")
 }
 
 model Organization {
@@ -275,6 +327,7 @@ model Organization {
   members                      OrgMember[]
   orderItems                   OrderItem[]
   orders                       Order[]
+  portalAccounts               PortalAccount[]
   raffleEntries                RaffleEntry[]
   raffleDrawResults            RaffleDrawResult[]
   raffles                      Raffle[]
@@ -335,38 +388,18 @@ model Session {
   authVersion        Int                 @default(0)
   expires            DateTime
   revokedAt          DateTime?
+  /// OIDC `sid` from the studio identity provider; back-channel logout revokes by it.
+  oidcSid            String?
+  /// ID token kept only as the logout `id_token_hint`; cleared on revocation.
+  idToken            String?             @db.Text
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  authorizationCodes AuthorizationCode[]
 
   @@index([userId])
   @@index([userId, revokedAt, expires])
+  @@index([oidcSid])
   @@map("sessions")
-}
-
-model AuthorizationCode {
-  id                String    @id @default(uuid()) @db.Uuid
-  codeHash          String    @unique @db.Char(64)
-  userId            String    @db.Uuid
-  identitySessionId String    @db.Uuid
-  clientId          String
-  audience          String
-  redirectUri       String    @db.Text
-  codeChallenge     String    @db.VarChar(128)
-  authVersion       Int
-  issuedAt          DateTime
-  expiresAt         DateTime
-  consumedAt        DateTime?
-  createdAt         DateTime  @default(now())
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  identitySession   Session   @relation(fields: [identitySessionId], references: [id], onDelete: Cascade)
-
-  @@index([identitySessionId])
-  @@index([userId])
-  @@index([clientId, audience, expiresAt])
-  @@index([expiresAt])
-  @@map("authorization_codes")
 }
 
 model ControlPlaneOutboxEvent {
@@ -413,30 +446,6 @@ model ControlPlaneEventReceipt {
   @@unique([eventId, consumer])
   @@index([consumer, processedAt])
   @@map("control_plane_event_receipts")
-}
-
-model VerificationToken {
-  identifier String
-  token      String
-  expires    DateTime
-
-  @@unique([identifier, token])
-  @@map("verification_tokens")
-}
-
-model Authenticator {
-  credentialID         String  @unique
-  userId               String  @db.Uuid
-  providerAccountId    String
-  credentialPublicKey  String
-  counter              Int
-  credentialDeviceType String
-  credentialBackedUp   Boolean
-  transports           String?
-  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([userId, credentialID])
-  @@map("authenticators")
 }
 
 model OrgMember {
@@ -644,7 +653,7 @@ model Registration {
   id                String                        @id @default(uuid()) @db.Uuid
   orgId             String                        @db.Uuid
   eventId           String                        @db.Uuid
-  userId            String                        @db.Uuid
+  portalAccountId   String                        @db.Uuid
   typeId            String                        @db.Uuid
   status            RegistrationStatus            @default(PENDING)
   approvalStatus    RegistrationApprovalStatus    @default(APPROVED)
@@ -663,16 +672,16 @@ model Registration {
   transferredTo     Registration[]                @relation("RegistrationTransfer")
   transferRequests  RegistrationTransferRequest[] @relation("RegistrationTransferSource")
   type              RegistrationType              @relation(fields: [typeId], references: [id])
-  user              User                          @relation(fields: [userId], references: [id])
+  portalAccount     PortalAccount                 @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@unique([eventId, badgeNumber])
   @@index([orgId])
   @@index([eventId])
   @@index([eventId, status])
-  @@index([eventId, userId, status])
+  @@index([eventId, portalAccountId, status])
   @@index([eventId, createdAt])
   @@index([eventId, checkedInAt])
-  @@index([userId])
+  @@index([portalAccountId])
   @@index([typeId])
   @@index([typeId, status])
   @@map("registrations")
@@ -685,7 +694,7 @@ model RegistrationTransferRequest {
   sourceRegistrationId String                            @db.Uuid
   requesterUserId      String                            @db.Uuid
   recipientEmail       String
-  recipientUserId      String?                           @db.Uuid
+  recipientAccountId   String?                           @db.Uuid
   tokenHash            String                            @unique @db.Char(64)
   status               RegistrationTransferRequestStatus @default(PENDING)
   expiresAt            DateTime
@@ -697,7 +706,7 @@ model RegistrationTransferRequest {
   org                  Organization                      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   sourceRegistration   Registration                      @relation("RegistrationTransferSource", fields: [sourceRegistrationId], references: [id], onDelete: Cascade)
   requester            User                              @relation("RegistrationTransferRequester", fields: [requesterUserId], references: [id])
-  recipient            User?                             @relation("RegistrationTransferRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  recipient            PortalAccount?                    @relation("RegistrationTransferRecipient", fields: [orgId, recipientAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@index([eventId, status])
   @@index([orgId, status])
@@ -791,7 +800,7 @@ model Department {
 model VolunteerApplication {
   id               String                     @id @default(uuid()) @db.Uuid
   orgId            String                     @db.Uuid
-  userId           String                     @db.Uuid
+  portalAccountId  String                     @db.Uuid
   departmentId     String                     @db.Uuid
   eventId          String                     @db.Uuid
   formResponses    Json                       @default("{}")
@@ -806,12 +815,12 @@ model VolunteerApplication {
   org              Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
   reviewedBy       User?                      @relation("VolunteerApplicationReviewer", fields: [reviewedById], references: [id])
   staffAssignments StaffAssignment[]
-  user             User                       @relation(fields: [userId], references: [id])
+  portalAccount    PortalAccount              @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@index([orgId])
   @@index([eventId])
   @@index([departmentId])
-  @@index([userId])
+  @@index([portalAccountId])
   @@index([eventId, status])
   @@map("volunteer_applications")
 }
@@ -837,7 +846,7 @@ model StaffRole {
 model StaffAssignment {
   id                     String                @id @default(uuid()) @db.Uuid
   orgId                  String                @db.Uuid
-  userId                 String                @db.Uuid
+  portalAccountId        String                @db.Uuid
   roleId                 String                @db.Uuid
   volunteerApplicationId String?               @db.Uuid
   shiftSlot              Json
@@ -846,12 +855,12 @@ model StaffAssignment {
   updatedAt              DateTime              @updatedAt
   org                    Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
   role                   StaffRole             @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  user                   User                  @relation(fields: [userId], references: [id])
+  portalAccount          PortalAccount         @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
   volunteerApplication   VolunteerApplication? @relation(fields: [volunteerApplicationId], references: [id])
 
   @@index([orgId])
   @@index([roleId])
-  @@index([userId])
+  @@index([portalAccountId])
   @@index([volunteerApplicationId])
   @@map("staff_assignments")
 }
@@ -860,7 +869,7 @@ model VendorApplication {
   id                 String                  @id @default(uuid()) @db.Uuid
   orgId              String                  @db.Uuid
   eventId            String                  @db.Uuid
-  userId             String                  @db.Uuid
+  portalAccountId    String                  @db.Uuid
   businessName       String
   contactName        String?
   contactEmail       String?
@@ -880,11 +889,11 @@ model VendorApplication {
   updatedAt          DateTime                @updatedAt
   event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   org                Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user               User                    @relation(fields: [userId], references: [id])
+  portalAccount      PortalAccount           @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@index([orgId])
   @@index([eventId])
-  @@index([userId])
+  @@index([portalAccountId])
   @@index([paymentOrderId])
   @@index([eventId, status])
   @@map("vendor_applications")
@@ -917,21 +926,21 @@ model StoreProduct {
 }
 
 model Cart {
-  id        String       @id @default(uuid()) @db.Uuid
-  orgId     String       @db.Uuid
-  userId    String       @db.Uuid
-  eventId   String       @db.Uuid
-  voucherId String?      @db.Uuid
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  items     CartItem[]
-  orders    Order[]
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voucher   Voucher?     @relation(fields: [voucherId], references: [id])
+  id              String        @id @default(uuid()) @db.Uuid
+  orgId           String        @db.Uuid
+  portalAccountId String        @db.Uuid
+  eventId         String        @db.Uuid
+  voucherId       String?       @db.Uuid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items           CartItem[]
+  orders          Order[]
+  org             Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  portalAccount   PortalAccount @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
+  voucher         Voucher?      @relation(fields: [voucherId], references: [id])
 
-  @@unique([userId, eventId])
+  @@unique([portalAccountId, eventId])
   @@index([orgId])
   @@index([eventId])
   @@index([voucherId])
@@ -964,7 +973,7 @@ model CartItem {
 model Order {
   id                    String                 @id @default(uuid()) @db.Uuid
   orgId                 String                 @db.Uuid
-  userId                String                 @db.Uuid
+  portalAccountId       String                 @db.Uuid
   eventId               String                 @db.Uuid
   cartId                String?                @db.Uuid
   total                 Int
@@ -987,7 +996,7 @@ model Order {
   event                 Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   items                 OrderItem[]
   org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user                  User                   @relation(fields: [userId], references: [id])
+  portalAccount         PortalAccount          @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
   voucher               Voucher?               @relation(fields: [voucherId], references: [id])
   paymentAttempts       PaymentAttempt[]
   paymentExceptions     PaymentException[]
@@ -996,7 +1005,7 @@ model Order {
 
   @@index([orgId])
   @@index([eventId])
-  @@index([userId])
+  @@index([portalAccountId])
   @@index([cartId])
   @@index([voucherId])
   @@index([eventId, status, createdAt])
@@ -1217,23 +1226,23 @@ model HotelBlock {
 }
 
 model HotelBooking {
-  id               String       @id @default(uuid()) @db.Uuid
-  orgId            String       @db.Uuid
-  userId           String       @db.Uuid
-  blockId          String       @db.Uuid
+  id               String        @id @default(uuid()) @db.Uuid
+  orgId            String        @db.Uuid
+  portalAccountId  String        @db.Uuid
+  blockId          String        @db.Uuid
   roomType         String
   checkIn          DateTime
   checkOut         DateTime
   confirmationCode String?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  block            HotelBlock   @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user             User         @relation(fields: [userId], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  block            HotelBlock    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  org              Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  portalAccount    PortalAccount @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@index([orgId])
   @@index([blockId])
-  @@index([userId])
+  @@index([portalAccountId])
   @@map("hotel_bookings")
 }
 
@@ -1259,24 +1268,24 @@ model Raffle {
 }
 
 model RaffleEntry {
-  id          String            @id @default(uuid()) @db.Uuid
-  orgId       String            @db.Uuid
-  raffleId    String            @db.Uuid
-  userId      String            @db.Uuid
-  entryMethod RaffleEntryMethod
-  quantity    Int               @default(1)
-  orderItemId String?           @db.Uuid
-  purchaseKey String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @default(now()) @updatedAt
-  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orderItem   OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  raffle      Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
-  user        User              @relation(fields: [userId], references: [id])
+  id              String            @id @default(uuid()) @db.Uuid
+  orgId           String            @db.Uuid
+  raffleId        String            @db.Uuid
+  portalAccountId String            @db.Uuid
+  entryMethod     RaffleEntryMethod
+  quantity        Int               @default(1)
+  orderItemId     String?           @db.Uuid
+  purchaseKey     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @default(now()) @updatedAt
+  org             Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orderItem       OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  raffle          Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  portalAccount   PortalAccount     @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@index([orgId])
-  @@index([userId])
-  @@index([raffleId, userId])
+  @@index([portalAccountId])
+  @@index([raffleId, portalAccountId])
   @@index([raffleId, orderItemId])
   @@index([orderItemId])
   @@index([purchaseKey])
@@ -1284,24 +1293,24 @@ model RaffleEntry {
 }
 
 model RaffleDrawResult {
-  id           String       @id @default(uuid()) @db.Uuid
-  orgId        String       @db.Uuid
-  eventId      String       @db.Uuid
-  raffleId     String       @db.Uuid
-  prizeName    String
-  awardNumber  Int
-  winnerUserId String       @db.Uuid
-  drawnAt      DateTime     @default(now())
-  notifiedAt   DateTime?
-  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  raffle       Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
-  winner       User         @relation(fields: [winnerUserId], references: [id])
+  id              String        @id @default(uuid()) @db.Uuid
+  orgId           String        @db.Uuid
+  eventId         String        @db.Uuid
+  raffleId        String        @db.Uuid
+  prizeName       String
+  awardNumber     Int
+  winnerAccountId String        @db.Uuid
+  drawnAt         DateTime      @default(now())
+  notifiedAt      DateTime?
+  org             Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  raffle          Raffle        @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  winner          PortalAccount @relation(fields: [orgId, winnerAccountId], references: [orgId, id], onDelete: NoAction)
 
   @@unique([raffleId, prizeName, awardNumber])
-  @@unique([raffleId, winnerUserId])
+  @@unique([raffleId, winnerAccountId])
   @@index([orgId, eventId])
-  @@index([winnerUserId])
+  @@index([winnerAccountId])
   @@map("raffle_draw_results")
 }
 

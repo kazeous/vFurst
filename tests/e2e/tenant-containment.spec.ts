@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -22,13 +22,12 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [platformAdmin, owner, member, foreignOwner, publicUser] = await Promise.all([
     prisma.user.create({
       data: {
         email: platformAdminEmail,
         name: "Containment Platform Admin",
-        passwordHash,
+        ...staffIdentityData(),
         platformRole: "PLATFORM_ADMIN"
       }
     }),
@@ -36,28 +35,28 @@ test.beforeAll(async () => {
       data: {
         email: ownerEmail,
         name: "Containment Owner",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: memberEmail,
         name: "Containment Member",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: foreignOwnerEmail,
         name: "Containment Foreign Owner",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: publicEmail,
         name: "Containment Public User",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -139,16 +138,12 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function loginAs(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/, { timeout: 30_000 });
+async function loginAs(page: Page, email: string, expectPath = "/dashboard") {
+  await loginAsStaffEmail(page, email, { expectPath });
 }
 
 test("platform admin enters the control plane but not tenant organizer routes without membership", async ({ page }) => {
-  await loginAs(page, platformAdminEmail);
+  await loginAs(page, platformAdminEmail, "/platform");
   await expect(page).toHaveURL(/\/platform$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Platform overview" })).toBeVisible({ timeout: 30_000 });
 
@@ -213,7 +208,8 @@ test("member role cannot enter owner-admin organization or event-management rout
   await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
   await expect(page.getByText(memberEmail)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open my account" })).toHaveAttribute("href", "/account");
+  await expect(page.getByRole("link", { name: "Return to vFurst" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Open my account" })).toHaveCount(0);
   expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
   expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(403);
   expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);

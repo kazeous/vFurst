@@ -8,7 +8,7 @@ The canonical `apps/web` runtime, worker, organizer platform, payments, and core
 
 ## Implemented inventory by area
 
-**Identity & account** — Credentials auth (Auth.js v5), register/login/forgot/reset (hashed one-hour single-use tokens, `authVersion` JWT invalidation), central `/account` area: overview, profile, registrations + detail, orders + detail, hotel bookings, volunteer/vendor application status, transfers (accept/decline), raffles. Public flows require a session; records bind to `session.user.id` with owner-bound reads.
+**Identity & account (Phase 1B, 2026-10)** — Two audiences, two systems. Staff and operators sign in only through the studio authentik over OIDC (Auth.js v5 authentik provider, PKCE + state, token-free adapter, claims synced at every sign-in including `PLATFORM_ADMIN` from the `vfurst-platform-admins` group, 12-hour DB-bound identity sessions, single logout through end-session, back-channel logout at `/api/oidc/backchannel-logout`, invitations require a verified studio email); vFurst stores no staff password, and central `/register`, `/forgot-password`, `/reset-password`, `/account`, `/checkout`, and `/transfer` are gone. Attendees, volunteers, and vendors use tenant-scoped `PortalAccount`s (unique per organization and email, email-first setup, hashed single-use setup/reset tokens, host-only portal session cookie bound to the host's organization) on the canonical portal host `{subdomain}.<root-domain>` or an active custom domain; central-path portal URLs 308 there. Attendee-owned rows reference the account through `(orgId, portalAccountId)` composite foreign keys. The portal `/account` area has overview, profile, registrations + detail, orders + detail, hotel bookings, applications, transfers, and raffles; checkout runs on the portal host.
 
 **Tenancy & platform** — Managed invite-only provisioning (`/platform/organizations`), org lifecycle (PROVISIONING/ACTIVE/SUSPENDED/RETIRED), hashed single-use org invitations, member management, custom-domain request → platform verification/activation with audit, `/platform/payments` (provider config, exceptions, payouts, refunds), `/platform/operations/email`. Platform routes separately guarded.
 
@@ -26,7 +26,7 @@ The canonical `apps/web` runtime, worker, organizer platform, payments, and core
 
 **API/SaaS** — Read-only REST `/api/v1` (events, registrations, attendees, vendors, store, badges) + OpenAPI, scoped hashed API keys, signed outbound webhooks, shared Redis rate limits (fail-closed auth/API/payment, fail-open signed webhooks), Sentry wiring, marketing/legal/docs pages. It does not yet provide the broader legacy/v0 role, volunteer, department, current-user, or stable business-error surface catalogued in `02-concat-parity.md`.
 
-**Split runtime (frozen)** — `apps/platform-manager` (identity issuer: PKCE, Ed25519 assertions, central session revocation) + `apps/tenant-web` + `@vfurst/auth`/`contracts`/`tenant-context` + edge topology on ports 3200/3201/3100. No production traffic; `apps/web` remains canonical. Eleven SPL defects catalogued; do not advance without a recorded cutover decision (phase-1).
+**Split runtime** — removed in Phase 1B unit 1B.1 (2026-10-13); apps/web is the only serving runtime.
 
 ## Evidence snapshot
 
@@ -34,7 +34,6 @@ The canonical `apps/web` runtime, worker, organizer platform, payments, and core
 |---|---|
 | `turbo run type-check`, `lint`, `test` | 9/9, 9/9, 14/14 (web 190/190) on 2026-07-29 |
 | `turbo run build` | 10/10 on 2026-07-29 (known BullMQ dynamic-dependency warning) |
-| `npm run test:split-topology` | 5/5 |
 | Full E2E (`E2E_PRODUCTION=1`) | **118 passed / 0 failed / 0 did not run** on 2026-07-29 (one worker) |
 | Load proof (2026-07-14, 500 reg + 50 check-in VUs, 6 replicas, pool 4) | 198,024 requests, 0.00% failures, 396,045/396,045 checks, overall p95 409.88 ms (gate 1.5 s) |
 | `npm audit --audit-level=moderate` | 0 vulnerabilities (clean install verified 2026-07-29) |
