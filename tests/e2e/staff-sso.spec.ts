@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
+import { createHash, randomBytes } from "node:crypto";
 import { createStaffFixture, loginAsStaff, STAFF_ADMIN_GROUP, type StaffFixture } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -12,7 +13,9 @@ const emails = {
   demoted: `staff-sso-demoted-${run}@example.com`,
   conflict: `staff-sso-conflict-${run}@example.com`,
   newcomer: `staff-sso-new-${run}@example.com`,
-  leaver: `staff-sso-leaver-${run}@example.com`
+  leaver: `staff-sso-leaver-${run}@example.com`,
+  invitedVerified: `staff-sso-invited-${run}@example.com`,
+  invitedUnverified: `staff-sso-unverified-${run}@example.com`
 };
 let orgId: string;
 let admin: StaffFixture;
@@ -21,18 +24,22 @@ let outsider: StaffFixture;
 let demoted: StaffFixture;
 let conflict: StaffFixture;
 let leaver: StaffFixture;
+let invitedVerified: StaffFixture;
+let invitedUnverified: StaffFixture;
 
 test.describe.configure({ mode: "serial" });
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  [admin, owner, outsider, demoted, conflict, leaver] = await Promise.all([
+  [admin, owner, outsider, demoted, conflict, leaver, invitedVerified, invitedUnverified] = await Promise.all([
     createStaffFixture(prisma, { email: emails.admin, name: "SSO Admin", platformRole: "PLATFORM_ADMIN" }),
     createStaffFixture(prisma, { email: emails.owner, name: "SSO Owner" }),
     createStaffFixture(prisma, { email: emails.outsider, name: "SSO Outsider" }),
     createStaffFixture(prisma, { email: emails.demoted, name: "SSO Demoted", platformRole: "PLATFORM_ADMIN" }),
     createStaffFixture(prisma, { email: emails.conflict, name: "SSO Conflict Owner" }),
-    createStaffFixture(prisma, { email: emails.leaver, name: "SSO Leaver" })
+    createStaffFixture(prisma, { email: emails.leaver, name: "SSO Leaver" }),
+    createStaffFixture(prisma, { email: emails.invitedVerified, name: "SSO Invited" }),
+    createStaffFixture(prisma, { email: emails.invitedUnverified, name: "SSO Unverified", emailVerified: false })
   ]);
   const org = await prisma.organization.create({
     data: {
@@ -145,4 +152,45 @@ test("logging out revokes the session and returns through the identity provider"
 
   await page.goto("/dashboard");
   await expect(page).toHaveURL((url) => url.pathname === "/login");
+});
+
+async function inviteToken(email: string) {
+  const token = randomBytes(32).toString("base64url");
+  await prisma.orgInvitation.create({
+    data: {
+      orgId,
+      email,
+      role: "ADMIN",
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      invitedById: owner.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+    }
+  });
+  return token;
+}
+
+test("a verified studio email accepts an invitation", async ({ page }) => {
+  const token = await inviteToken(emails.invitedVerified);
+  await loginAsStaff(page, invitedVerified, { returnTo: `/invitations/${token}` });
+
+  await page.getByRole("button", { name: "Accept invitation" }).click();
+  await page.waitForURL((url) => url.pathname === `/dashboard/organizations/${orgId}`, { waitUntil: "load" });
+  const membership = await prisma.orgMember.findUnique({ where: { userId_orgId: { userId: invitedVerified.id, orgId } } });
+  expect(membership?.role).toBe("ADMIN");
+});
+
+test("an unverified studio email cannot accept an invitation", async ({ page }) => {
+  const token = await inviteToken(emails.invitedUnverified);
+  await loginAsStaff(page, invitedUnverified, { returnTo: `/invitations/${token}` });
+
+  await expect(page.getByTestId("invitation-email-unverified")).toContainText(
+    "Your Reyuu Games account email is not verified yet. Verify it in your Reyuu Games account, then sign in again to accept this invitation."
+  );
+  await expect(page.getByRole("link", { name: "Manage your Reyuu Games account" })).toHaveAttribute(
+    "href",
+    "http://localhost:8090/if/user/"
+  );
+  await expect(page.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+  expect(await prisma.orgMember.count({ where: { userId: invitedUnverified.id } })).toBe(0);
+  expect((await prisma.user.findUniqueOrThrow({ where: { id: invitedUnverified.id } })).emailVerified).toBeNull();
 });

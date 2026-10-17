@@ -29,7 +29,8 @@ export async function acceptOrganizationInvitation(formData: FormData) {
     },
     select: {
       id: true,
-      email: true
+      email: true,
+      emailVerified: true
     }
   });
 
@@ -40,7 +41,8 @@ export async function acceptOrganizationInvitation(formData: FormData) {
   const result = await acceptInvitation({
     token,
     userId: user.id,
-    userEmail: user.email
+    userEmail: user.email,
+    userEmailVerified: user.emailVerified !== null
   })
     .then((accepted) => ({ ok: true as const, accepted }))
     .catch((error: unknown) => ({

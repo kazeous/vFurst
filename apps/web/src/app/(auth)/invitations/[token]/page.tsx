@@ -2,6 +2,8 @@ import { acceptOrganizationInvitation } from "@/actions/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { auth } from "@/lib/auth";
+import { getStaffAccountManagementUrl } from "@/lib/staff-oidc";
+import { prisma } from "@vfurst/db";
 import {
   getOrganizationInvitationByToken,
   getOrganizationInvitationState,
@@ -11,6 +13,7 @@ import {
 const errorMessages: Record<string, string> = {
   ALREADY_ACCEPTED: "This invitation has already been accepted.",
   EMAIL_MISMATCH: "Sign in with the email address that received this invitation.",
+  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Verify it in your Reyuu Games account, then sign in again to accept this invitation.",
   EXPIRED: "This invitation has expired.",
   INVALID: "This invitation is invalid.",
   REVOKED: "This invitation has been revoked.",
@@ -46,7 +49,13 @@ export default async function OrganizationInvitationPage({
   const state = getOrganizationInvitationState(invitation);
   const signedInEmail = session?.user?.email ? normalizeInvitationEmail(session.user.email) : null;
   const matchesRecipient = signedInEmail === normalizeInvitationEmail(invitation.email);
-  const canAccept = state === "PENDING" && matchesRecipient && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
+  const signedInUser = session?.user?.id
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { emailVerified: true } })
+    : null;
+  const emailVerified = Boolean(signedInUser?.emailVerified);
+  const canAccept =
+    state === "PENDING" && matchesRecipient && emailVerified && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
+  const accountManagementUrl = getStaffAccountManagementUrl();
 
   return (
     <Card className="vf-auth-card" maxWidth={520}>
@@ -63,7 +72,9 @@ export default async function OrganizationInvitationPage({
           <dt>Expires</dt>
           <dd>{invitation.expiresAt.toLocaleString()}</dd>
         </dl>
-        {errorCode && errorMessages[errorCode] ? <div className="vf-banner vf-banner-warning">{errorMessages[errorCode]}</div> : null}
+        {errorCode && errorMessages[errorCode] && !(errorCode === "EMAIL_UNVERIFIED" && session?.user && !emailVerified) ? (
+          <div className="vf-banner vf-banner-warning">{errorMessages[errorCode]}</div>
+        ) : null}
         {state === "ACCEPTED" ? (
           <div className="vf-stack">
             <div className="vf-banner vf-banner-success">This invitation has already been accepted.</div>
@@ -77,13 +88,17 @@ export default async function OrganizationInvitationPage({
           <div className="vf-banner vf-banner-warning">This organization is not currently accepting invitations.</div>
         ) : !session?.user ? (
           <div className="vf-stack">
-            <p>Log in or create the public account for <strong>{invitation.email}</strong> before accepting.</p>
-            <Button href={`/login?returnTo=${encodeURIComponent(returnTo)}`} label="Log in" variant="primary" />
-            <Button href={`/register?returnTo=${encodeURIComponent(returnTo)}`} label="Create account" />
+            <p>Sign in with the Reyuu Games account for <strong>{invitation.email}</strong> before accepting.</p>
+            <Button href={`/login?returnTo=${encodeURIComponent(returnTo)}`} label="Sign in with your Reyuu Games account" variant="primary" />
           </div>
         ) : !matchesRecipient ? (
           <div className="vf-banner vf-banner-warning">
             You are signed in as {session.user.email}. Sign in with {invitation.email} to accept this invitation.
+          </div>
+        ) : !emailVerified ? (
+          <div className="vf-stack" data-testid="invitation-email-unverified">
+            <div className="vf-banner vf-banner-warning">{errorMessages.EMAIL_UNVERIFIED}</div>
+            <Button href={accountManagementUrl} label="Manage your Reyuu Games account" />
           </div>
         ) : canAccept ? (
           <form action={acceptOrganizationInvitation}>
