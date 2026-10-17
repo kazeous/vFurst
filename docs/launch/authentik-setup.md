@@ -24,24 +24,28 @@ Local development and E2E use the `mock-oidc` service instead (see `AGENTS.md`).
 In the authentik admin interface, create an **OAuth2/OpenID Provider**:
 
 1. **Name:** `vFurst`. **Client type:** Confidential.
-2. **Redirect URIs/Origins:** mode *Strict*, value `https://vfurst.reyuugames.com/api/auth/callback/authentik`.
-3. **Signing key:** an RS256 certificate (the default self-signed certificate is fine).
-4. **Subject mode:** *Based on the User's hashed ID* or *Based on the User's UUID*.
+2. **Authorization flow:** `default-provider-authorization-implicit-consent`. vFurst is a
+   first-party studio application, so a consent screen adds a click without protecting
+   anything. Never reuse another application's flow (such as Pawket's): its stages and
+   policies would apply to vFurst too.
+3. **Redirect URIs/Origins:** mode *Strict*, value `https://vfurst.reyuugames.com/api/auth/callback/authentik`.
+4. **Signing key:** an RS256 certificate (the default self-signed certificate is fine).
+5. **Subject mode:** *Based on the User's hashed ID* or *Based on the User's UUID*.
    **Never** email or username, and **never change it after go-live**: vFurst links
    each staff user to the `sub` claim, and a new subject mode orphans every staff
    account (an email that already exists then hits the `StudioAccountConflict` rule).
-5. **Scopes:** `openid`, `email`, `profile`. authentik's default `profile` scope
+6. **Scopes:** `openid`, `email`, `profile`. authentik's default `profile` scope
    carries `groups`; confirm it in the scope mapping's preview.
-6. **Email verification:** authentik's default `email` mapping always sends
+7. **Email verification:** authentik's default `email` mapping always sends
    `email_verified: false`. Replace it with a mapping that emits the user's real
    verification state, following authentik's "verify email address" guide, and add
    an **email stage** to the enrollment flow so new accounts verify their address.
    Until this is done, invitation acceptance fails closed with `EMAIL_UNVERIFIED`.
-7. **Invalidation flow:** create a dedicated flow for this provider that contains a
+8. **Invalidation flow:** create a dedicated flow for this provider that contains a
    **User Logout** stage, and select it as the provider's invalidation flow. Signing
    out of vFurst then ends the authentik session without changing the studio's
    default flow for other applications.
-8. **Logout:** Logout URI `https://vfurst.reyuugames.com/api/oidc/backchannel-logout`,
+9. **Logout:** Logout URI `https://vfurst.reyuugames.com/api/oidc/backchannel-logout`,
    method **Back-channel**.
 
 Read the **Client ID** and **Client Secret** from the provider page. They go into the
