@@ -1,10 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomUUID } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
 import { createPortalAccountFixture, loginAsAttendee as loginPortalAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -27,7 +26,7 @@ test.beforeAll(async () => {
     data: {
       email: adminEmail,
       name: "Launch Accessibility Admin",
-      passwordHash: await bcrypt.hash(password, 12)
+      ...staffIdentityData()
     }
   });
 
@@ -162,7 +161,7 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await loginWithCredentials(page, adminEmail, password);
+  await loginAsStaffEmail(page, adminEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 

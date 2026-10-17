@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
 import { createPortalAccountFixture, E2E_PORTAL_PASSWORD, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const run = `${Date.now()}-${process.pid}`;
@@ -32,7 +31,7 @@ test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
   const owner = await prisma.user.create({
-    data: { email: ownerEmail, name: "Portal Cashier", passwordHash: await bcrypt.hash(E2E_PORTAL_PASSWORD, 12) }
+    data: { email: ownerEmail, name: "Portal Cashier", ...staffIdentityData() }
   });
   ownerId = owner.id;
   [orgA, orgB] = await Promise.all([subA, subB].map((subdomain) => prisma.organization.create({
@@ -116,7 +115,7 @@ test("checkout runs on the portal host and rejects another organization's order"
 });
 
 test("a cashier walk-in can be claimed through sign-up and shows the registration", async ({ page, browser }) => {
-  await loginWithCredentials(page, ownerEmail, E2E_PORTAL_PASSWORD);
+  await loginAsStaffEmail(page, ownerEmail);
   await page.goto(`/dashboard/events/${eventA.id}/check-in/cashier`);
   await page.getByLabel("Attendee name", { exact: true }).fill("Claimed Walk-in");
   await page.getByLabel("Attendee email", { exact: true }).fill(`Walk.In-${run}@Example.COM`);

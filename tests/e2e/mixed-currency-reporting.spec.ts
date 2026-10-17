@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createPortalAccountFixture } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -20,20 +20,16 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 async function login(page: Page) {
-  await page.goto("/login?returnTo=%2Fdashboard");
-  await page.getByLabel("Email").fill(ownerEmail);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await loginAsStaffEmail(page, ownerEmail, { returnTo: "/dashboard" });
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const owner = await prisma.user.create({
     data: {
       email: ownerEmail,
       name: "Currency Report Owner",
-      passwordHash
+      ...staffIdentityData()
     }
   });
   const org = await prisma.organization.create({

@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
 import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -27,8 +26,7 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Raffle Owner", passwordHash } });
+  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Raffle Owner", ...staffIdentityData() } });
   ownerId = owner.id;
 
   const org = await prisma.organization.create({
@@ -146,7 +144,7 @@ async function login(page: Page, email: string) {
   if (email === attendeeEmail) {
     await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
   } else {
-    await loginWithCredentials(page, email, password);
+    await loginAsStaffEmail(page, email);
   }
 }
 

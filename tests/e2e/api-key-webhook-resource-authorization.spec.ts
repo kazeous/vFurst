@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { Queue } from "bullmq";
-import { loginWithCredentials } from "./support/credentials-login";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 type TestWebhookJob = {
   createdAt?: string;
@@ -55,10 +54,9 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "API Webhook Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "API Webhook Owner B", passwordHash } })
+    prisma.user.create({ data: { email: ownerAEmail, name: "API Webhook Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "API Webhook Owner B", ...staffIdentityData() } })
   ]);
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
@@ -163,7 +161,7 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await loginWithCredentials(page, ownerAEmail, password);
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 

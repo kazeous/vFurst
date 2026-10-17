@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
 import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -34,7 +33,7 @@ test.beforeAll(async () => {
     data: {
       email: adminEmail,
       name: "Launch Admin",
-      passwordHash: await bcrypt.hash(password, 12),
+      ...staffIdentityData(),
       platformRole: "PLATFORM_ADMIN"
     }
   });
@@ -151,7 +150,7 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await loginWithCredentials(page, adminEmail, password);
+  await loginAsStaffEmail(page, adminEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/dashboard$/);
 }
@@ -254,7 +253,9 @@ test("public registration completes and creates a paid zero-dollar order", async
     }
   });
 
-  await page.goto(`${portalOrigin(orgSlug)}/register?success=${registration.id}`);
+  // The action itself navigates to the success page (window.location.replace);
+  // a second page.goto to the same URL would race that navigation.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/register?success=${registration.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
 
   registrationId = registration.id;
@@ -322,7 +323,8 @@ test("public vendor application submits for organizer review", async ({ page }) 
     }
   });
 
-  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply?success=${application.id}`);
+  // The action itself navigates to the success page; waiting avoids racing it.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/vendor-apply?success=${application.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
 
   expect(application.status).toBe("PENDING");

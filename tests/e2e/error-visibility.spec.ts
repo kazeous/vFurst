@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -19,10 +19,9 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [user, member] = await Promise.all([
-    prisma.user.create({ data: { email: userEmail, name: "Error Visibility User", passwordHash } }),
-    prisma.user.create({ data: { email: memberEmail, name: "Error Visibility Member", passwordHash } })
+    prisma.user.create({ data: { email: userEmail, name: "Error Visibility User", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: memberEmail, name: "Error Visibility Member", ...staffIdentityData() } })
   ]);
   userId = user.id;
   memberId = member.id;
@@ -76,42 +75,29 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function submitLogin(page: Page) {
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-}
-
 async function login(page: Page, returnTo: string) {
-  await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-  await page.getByLabel("Email").fill(userEmail);
-  await page.getByLabel("Password").fill(password);
-  await submitLogin(page);
-  await page.waitForURL((url) => url.pathname.startsWith(returnTo));
+  await loginAsStaffEmail(page, userEmail, { returnTo });
 }
 
-test("a wrong password stays on /login with an accessible message and no 500", async ({ page }) => {
+test("an identity-provider error renders inline on /login with no 500", async ({ page }) => {
   const serverErrors: number[] = [];
   page.on("response", (response) => {
     if (response.status() >= 500) serverErrors.push(response.status());
   });
 
-  await page.goto("/login?returnTo=%2Faccount");
-  await page.getByLabel("Email").fill(userEmail);
-  await page.getByLabel("Password").fill("WrongPassword123!");
-  await submitLogin(page);
-
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount$/);
+  await page.goto("/login?error=OAuthCallbackError&returnTo=%2Fdashboard");
   const alert = page.getByTestId("login-error");
-  await expect(alert).toContainText("The email or password was not accepted.");
-  await expect(page.getByRole("heading", { name: "Log in to vFurst" })).toBeVisible();
+  await expect(alert).toHaveAttribute("role", "alert");
+  await expect(alert).toHaveText("Sign-in did not complete. Try again.");
+  await expect(page.getByRole("heading", { name: "Sign in to vFurst" })).toBeVisible();
+
+  await page.goto("/login?error=StudioAccountConflict");
+  await expect(page.getByTestId("login-error")).toHaveText(
+    "This Reyuu Games account uses an email that already belongs to another vFurst staff account. Contact a platform administrator."
+  );
   expect(serverErrors).toEqual([]);
 
-  await page.getByLabel("Email").fill(userEmail);
-  await page.getByLabel("Password").fill(password);
-  await submitLogin(page);
-  await page.waitForURL((url) => url.pathname.startsWith("/account"));
+  await loginAsStaffEmail(page, userEmail, { returnTo: "/dashboard" });
 });
 
 test("an invalid voucher renders inline, keeps entered values, and allows retry", async ({ page }) => {

@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac } from "node:crypto";
-import { loginWithCredentials } from "./support/credentials-login";
 import { createPortalAccountFixture, loginAsAttendee } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -27,9 +26,8 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { email: userEmail, name: "Routing Checkout Owner", passwordHash }
+    data: { email: userEmail, name: "Routing Checkout Owner", ...staffIdentityData() }
   });
   userId = user.id;
 
@@ -139,7 +137,7 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await loginWithCredentials(page, userEmail, password);
+  await loginAsStaffEmail(page, userEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 

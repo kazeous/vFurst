@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient, type OrgRole } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -52,11 +52,7 @@ async function seedInvitation(input: {
 }
 
 async function loginAs(page: Page, email: string, returnTo = "/dashboard") {
-  await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(new RegExp(returnTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), { timeout: 30_000 });
+  await loginAsStaffEmail(page, email, { returnTo });
 }
 
 test.describe.configure({ mode: "serial" });
@@ -64,13 +60,12 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [owner, invitee, wrongUser, platformAdmin] = await Promise.all([
-    prisma.user.create({ data: { email: ownerEmail, name: "Invitation Owner", passwordHash } }),
-    prisma.user.create({ data: { email: inviteeEmail, name: "Invitation Recipient", passwordHash } }),
-    prisma.user.create({ data: { email: wrongEmail, name: "Wrong Recipient", passwordHash } }),
+    prisma.user.create({ data: { email: ownerEmail, name: "Invitation Owner", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: inviteeEmail, name: "Invitation Recipient", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: wrongEmail, name: "Wrong Recipient", ...staffIdentityData() } }),
     prisma.user.create({
-      data: { email: platformEmail, name: "Invitation Platform Admin", passwordHash, platformRole: "PLATFORM_ADMIN" }
+      data: { email: platformEmail, name: "Invitation Platform Admin", ...staffIdentityData(), platformRole: "PLATFORM_ADMIN" }
     })
   ]);
   const org = await prisma.organization.create({
@@ -125,8 +120,11 @@ test("a public visitor can inspect an invitation without receiving membership", 
   await page.goto(`/invitations/${acceptanceToken}`);
 
   await expect(page.getByRole("heading", { name: "Join Invitation Test Organization" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Log in" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Create account" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in with your Reyuu Games account" })).toHaveAttribute(
+    "href",
+    `/login?returnTo=${encodeURIComponent(`/invitations/${acceptanceToken}`)}`
+  );
+  await expect(page.getByRole("link", { name: "Create account" })).toHaveCount(0);
   await expect.poll(() => prisma.orgMember.count({ where: { userId: inviteeId, orgId } })).toBe(0);
 });
 
