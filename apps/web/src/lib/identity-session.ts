@@ -1,7 +1,8 @@
 import { createHashedOpaqueToken, type PlatformRole } from "@vfurst/auth/core";
 import { prisma } from "@vfurst/db";
+import { STAFF_SESSION_MAX_AGE_SECONDS } from "@/lib/staff-identity";
 
-export const IDENTITY_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const IDENTITY_SESSION_MAX_AGE_SECONDS = STAFF_SESSION_MAX_AGE_SECONDS;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -53,6 +54,8 @@ export async function issueIdentitySession(input: {
   expires: Date;
   platformRole: PlatformRole;
   userId: string;
+  oidcSid?: string | null;
+  idToken?: string | null;
   now?: Date;
 }): Promise<BoundIdentity> {
   const now = input.now ?? new Date();
@@ -69,7 +72,9 @@ export async function issueIdentitySession(input: {
       sessionToken: createHashedOpaqueToken().tokenHash,
       userId: input.userId,
       authVersion: input.authVersion,
-      expires: input.expires
+      expires: input.expires,
+      oidcSid: input.oidcSid ?? null,
+      idToken: input.idToken ?? null
     },
     select: {
       id: true,
@@ -134,7 +139,7 @@ export async function validateIdentitySession(input: {
     ) {
       await prisma.session.updateMany({
         where: { id: session.id, revokedAt: null },
-        data: { revokedAt: now }
+        data: { revokedAt: now, idToken: null }
       });
     }
     return null;
@@ -156,14 +161,15 @@ export async function revokeIdentitySession(identitySessionId: string, now = new
 
   await prisma.session.updateMany({
     where: { id: identitySessionId, revokedAt: null },
-    data: { revokedAt: now }
+    data: { revokedAt: now, idToken: null }
   });
 }
 
 export async function bindIdentitySessionToJwt<T extends IdentityJwtClaims>(
   token: T,
   signedInUserId?: string,
-  now = new Date()
+  now = new Date(),
+  oidc?: { sid: string | null; idToken: string | null }
 ): Promise<T & IdentityJwtClaims> {
   if (signedInUserId) {
     token.sub = signedInUserId;
@@ -187,6 +193,8 @@ export async function bindIdentitySessionToJwt<T extends IdentityJwtClaims>(
       authVersion: account.authVersion,
       platformRole: account.platformRole,
       expires,
+      oidcSid: oidc?.sid,
+      idToken: oidc?.idToken,
       now
     });
 

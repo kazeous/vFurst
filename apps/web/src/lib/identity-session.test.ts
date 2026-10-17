@@ -52,7 +52,9 @@ describe("identity-session registry", () => {
         sessionToken: expect.stringMatching(/^[0-9a-f]{64}$/),
         userId,
         authVersion: 3,
-        expires: new Date("2026-08-16T00:00:00.000Z")
+        expires: new Date("2026-07-17T12:00:00.000Z"),
+        oidcSid: null,
+        idToken: null
       },
       select: { id: true, userId: true, authVersion: true, expires: true }
     });
@@ -102,7 +104,7 @@ describe("identity-session registry", () => {
     expect(token.platformRole).toBeUndefined();
     expect(mocks.session.updateMany).toHaveBeenCalledWith({
       where: { id: sessionId, revokedAt: null },
-      data: { revokedAt: now }
+      data: { revokedAt: now, idToken: null }
     });
   });
 
@@ -121,7 +123,7 @@ describe("identity-session registry", () => {
     ).resolves.toBeNull();
     expect(mocks.session.updateMany).toHaveBeenCalledWith({
       where: { id: sessionId, revokedAt: null },
-      data: { revokedAt: now }
+      data: { revokedAt: now, idToken: null }
     });
   });
 
@@ -184,11 +186,29 @@ describe("identity-session registry", () => {
   });
 
   it("caps registry expiry and refuses an already-expired JWT", () => {
-    expect(resolveIdentitySessionExpiry(undefined, now)).toEqual(new Date("2026-08-16T00:00:00.000Z"));
+    expect(resolveIdentitySessionExpiry(undefined, now)).toEqual(new Date("2026-07-17T12:00:00.000Z"));
     expect(resolveIdentitySessionExpiry(Math.floor(now.getTime() / 1_000), now)).toBeNull();
     expect(resolveIdentitySessionExpiry(Math.floor(new Date("2027-01-01").getTime() / 1_000), now)).toEqual(
-      new Date("2026-08-16T00:00:00.000Z")
+      new Date("2026-07-17T12:00:00.000Z")
     );
+  });
+
+  it("stores the OIDC sid and ID token on a new identity session", async () => {
+    await bindIdentitySessionToJwt({}, userId, now, { sid: "authentik-sid-1", idToken: "id.token.value" });
+
+    expect(mocks.session.create.mock.calls[0]?.[0].data).toMatchObject({
+      oidcSid: "authentik-sid-1",
+      idToken: "id.token.value"
+    });
+  });
+
+  it("revoking a session clears its ID token", async () => {
+    await revokeIdentitySession(sessionId, now);
+
+    expect(mocks.session.updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: { id: sessionId, revokedAt: null },
+      data: { revokedAt: now, idToken: null }
+    });
   });
 
   it("revokes only well-formed identity-session ids", async () => {
@@ -198,7 +218,7 @@ describe("identity-session registry", () => {
     await revokeIdentitySession(sessionId, now);
     expect(mocks.session.updateMany).toHaveBeenCalledWith({
       where: { id: sessionId, revokedAt: null },
-      data: { revokedAt: now }
+      data: { revokedAt: now, idToken: null }
     });
   });
 });
