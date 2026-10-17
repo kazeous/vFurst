@@ -13,7 +13,6 @@ import { staffMessageTemplate } from "./templates/staff-message.js";
 import { vendorApplicationDecisionTemplate } from "./templates/vendor-application-decision.js";
 import { volunteerApplicationDecisionTemplate } from "./templates/volunteer-application-decision.js";
 import { volunteerShiftAssignmentTemplate } from "./templates/volunteer-shift-assignment.js";
-import { welcomeTemplate } from "./templates/welcome.js";
 import type { EmailProviderConfig, EmailTemplateName } from "./types.js";
 import { renderCustomEmailTemplate, type EventEmailTemplateOverride } from "./custom.js";
 
@@ -50,10 +49,6 @@ export function createEmailProvider(config: EmailProviderConfig) {
 
 export function renderEmailTemplate(template: EmailTemplateName, data: Record<string, unknown>) {
   switch (template) {
-    case "welcome":
-      return welcomeTemplate({
-        name: typeof data.name === "string" ? data.name : null
-      });
     case "registration-confirmation":
       return registrationConfirmationTemplate({
         eventName: typeof data.eventName === "string" ? data.eventName : "your event",

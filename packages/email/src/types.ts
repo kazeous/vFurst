@@ -1,5 +1,4 @@
 export type EmailTemplateName =
-  | "welcome"
   | "registration-confirmation"
   | "payment-receipt"
   | "hotel-booking-confirmation"

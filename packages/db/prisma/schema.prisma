@@ -197,17 +197,14 @@ model User {
   id                                  String                        @id @default(uuid()) @db.Uuid
   email                               String                        @unique
   name                                String?
-  avatar                              String?
   image                               String?
   emailVerified                       DateTime?
-  passwordHash                        String?
   authVersion                         Int                           @default(0)
   platformRole                        PlatformRole                  @default(USER)
   createdAt                           DateTime                      @default(now())
   updatedAt                           DateTime                      @updatedAt
   accounts                            Account[]
   attendeeNotes                       AttendeeNote[]                @relation("AttendeeNoteAuthor")
-  authenticators                      Authenticator[]
   ledDepartments                      Department[]                  @relation("DepartmentLead")
   orgMemberships                      OrgMember[]
   reviewedApplications                VolunteerApplication[]        @relation("VolunteerApplicationReviewer")
@@ -449,30 +446,6 @@ model ControlPlaneEventReceipt {
   @@unique([eventId, consumer])
   @@index([consumer, processedAt])
   @@map("control_plane_event_receipts")
-}
-
-model VerificationToken {
-  identifier String
-  token      String
-  expires    DateTime
-
-  @@unique([identifier, token])
-  @@map("verification_tokens")
-}
-
-model Authenticator {
-  credentialID         String  @unique
-  userId               String  @db.Uuid
-  providerAccountId    String
-  credentialPublicKey  String
-  counter              Int
-  credentialDeviceType String
-  credentialBackedUp   Boolean
-  transports           String?
-  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([userId, credentialID])
-  @@map("authenticators")
 }
 
 model OrgMember {

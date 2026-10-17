@@ -15,7 +15,7 @@ Configure SePay to send webhooks to `POST /api/webhooks/sepay`. The signed messa
 ## Activation order
 
 1. Back up PostgreSQL and deploy the additive Prisma schema.
-2. Run `npm run platform-admin -- grant admin@example.com` for the initial administrator.
+2. Add the initial administrator to the authentik group named by `VFURST_PLATFORM_ADMIN_GROUP` (default `vfurst-platform-admins`); the role applies at their next sign-in.
 3. In Dashboard → Settings, enter the central bank code, account number, holder, SePay bank-account ID, memo prefix, and VND registration/hotel fees.
 4. Configure the same payment-code prefix in SePay and confirm the central account is connected.
 5. Send sandbox transfers covering exact, duplicate, underpaid, overpaid, unmatched, and late cases. Confirm only exact, timely transfers fulfill orders.

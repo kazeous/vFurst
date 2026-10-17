@@ -36,7 +36,6 @@
     "fixtures:cleanup": "npm run cleanup:test-fixtures --workspace @vfurst/db",
     "fixtures:cleanup:dry-run": "node packages/db/scripts/cleanup-test-fixtures.mjs",
     "check:launch": "node scripts/check-launch-readiness.mjs",
-    "platform-admin": "node scripts/manage-platform-admin.mjs",
     "db:validate": "npm run validate --workspace @vfurst/db"
   },
   "devDependencies": {
