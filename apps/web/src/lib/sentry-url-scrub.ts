@@ -5,13 +5,30 @@ const SENSITIVE_KEYS = new Set<string>(SENSITIVE_QUERY_KEYS);
 const INVITATION_TOKEN_SEGMENT = /(\/invitations\/)[^/?#]+/g;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const BREADCRUMB_URL_KEYS = ["url", "from", "to"] as const;
+// OpenTelemetry HTTP attributes that Sentry copies into transaction span data.
+const SPAN_URL_KEYS = ["url", "http.url", "http.target", "http.query", "url.full", "url.path", "url.query"] as const;
 
 type QueryParams = string | Array<[string, string]> | Record<string, string>;
 
 type ScrubbableEvent = {
+  transaction?: unknown;
   request?: { url?: unknown; query_string?: unknown; headers?: Record<string, unknown> };
   breadcrumbs?: Array<{ data?: Record<string, unknown> }>;
+  contexts?: { trace?: { data?: Record<string, unknown> } };
+  spans?: Array<{ description?: unknown; data?: Record<string, unknown> }>;
 };
+
+function scrubStringValues(data: Record<string, unknown> | undefined, keys: readonly string[]) {
+  if (!data) {
+    return;
+  }
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string") {
+      data[key] = scrubSensitiveUrl(value);
+    }
+  }
+}
 
 function scrubQueryString(query: string): string {
   const params = new URLSearchParams(query);
@@ -59,9 +76,17 @@ export function scrubSensitiveUrl(value: string): string {
   return `${path}?${scrubQueryString(beforeHash.slice(queryIndex + 1))}${hash}`;
 }
 
-/** Scrubs the URL-bearing fields of a Sentry error or transaction event in place. */
+/**
+ * Scrubs the URL-bearing fields of a Sentry error or transaction event in place: the request,
+ * referers, breadcrumbs, the transaction name, and the trace and span URL attributes.
+ */
 export function scrubSentryEventUrls<T extends object>(event: T): T {
-  const { request, breadcrumbs } = event as ScrubbableEvent;
+  const scrubbable = event as ScrubbableEvent;
+  const { request, breadcrumbs, contexts, spans } = scrubbable;
+
+  if (typeof scrubbable.transaction === "string") {
+    scrubbable.transaction = scrubSensitiveUrl(scrubbable.transaction);
+  }
 
   if (request) {
     if (typeof request.url === "string") {
@@ -78,16 +103,15 @@ export function scrubSentryEventUrls<T extends object>(event: T): T {
   }
 
   for (const breadcrumb of breadcrumbs ?? []) {
-    const data = breadcrumb.data;
-    if (!data) {
-      continue;
+    scrubStringValues(breadcrumb.data, BREADCRUMB_URL_KEYS);
+  }
+
+  scrubStringValues(contexts?.trace?.data, SPAN_URL_KEYS);
+  for (const span of spans ?? []) {
+    if (typeof span.description === "string") {
+      span.description = scrubSensitiveUrl(span.description);
     }
-    for (const key of BREADCRUMB_URL_KEYS) {
-      const value = data[key];
-      if (typeof value === "string") {
-        data[key] = scrubSensitiveUrl(value);
-      }
-    }
+    scrubStringValues(span.data, SPAN_URL_KEYS);
   }
 
   return event;
