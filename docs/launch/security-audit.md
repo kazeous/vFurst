@@ -8,6 +8,8 @@ Last repository remediation update: July 29, 2026
 
 **Public launch remains blocked only on Phase 6 external evidence.** The current inventory has remediated `SEC-01` organization containment, `SEC-02` resource-derived authorization, constrained upload families, outbound webhook SSRF/signing, `SEC-03` fail-closed Stripe webhook verification, managed lifecycle/control-plane separation, currency-safe reporting, schema-backed payment-attempt serialization, shared production rate limiting, unbounded Prisma connection growth, and the dependency advisories reopened on July 29. The fresh supported-topology 500/50 load proof also passes its correctness, HTTP-error, and p95 latency gates. The original findings are preserved in `docs/launch/full-system-audit-2026-07-13.md`; implementation evidence is recorded chronologically in `PROGRESS.md`.
 
+Phase 1B (October 2026) replaced staff password sign-in with the studio OIDC provider and moved attendees to per-organization portal accounts. The identification row below describes the July design; this audit has not been rerun against Phase 1B, whose identity evidence is in the Phase 1B entries of `PROGRESS.md`.
+
 ## Scope
 
 - Next.js app routes, middleware, API routes, and server actions.

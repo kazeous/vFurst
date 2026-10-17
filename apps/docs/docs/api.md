@@ -28,3 +28,5 @@ Keys are scoped per organization and rate limited to 100 requests per minute by 
 - `GET /api/v1/openapi.json`
 
 List endpoints support `page` and `pageSize`; resource-specific filters include `eventId`, `status`, `category`, `printed`, and text query where applicable.
+
+Since Phase 1B, every `userId` in a response is the attendee's portal account ID, scoped to the API key's organization (formerly a platform user ID).

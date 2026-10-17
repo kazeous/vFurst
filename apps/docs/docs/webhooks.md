@@ -29,6 +29,8 @@ Verify the timestamp and signature against the exact raw request body before par
 
 ## Payload
 
+Since Phase 1B, every `userId` in a payload is the attendee's portal account ID, scoped to the endpoint's organization (formerly a platform user ID).
+
 ```json
 {
   "id": "uuid",

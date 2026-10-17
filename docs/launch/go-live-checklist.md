@@ -22,13 +22,16 @@ record these manually before Phase 6 can close:
 
 - Physical badge output with event/template/badge identifiers, printer model, browser, direct WebUSB result, legible image/barcode evidence, and tester/timestamp. If direct Zebra output is unavailable, record an explicit successful PDF fallback print before confirming the badge as printed.
 - Real SePay Sandbox QR, signed-webhook, reconciliation, expiry, exception, payout, and refund evidence before SePay is enabled.
-- A production transactional email provider tested through password recovery: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
+- A production transactional email provider tested through portal account setup and portal password reset: either SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL`) or SES (`AWS_REGION` plus the runtime AWS credential chain), with delivery and bounce/complaint monitoring enabled.
 - The deployed persona/tenant-isolation matrix, and the final full-system audit rerun against the deployed environment.
 - Production PostgreSQL backups and a recorded restore drill. The single-resource Compose topology has no Coolify-managed database backups (decided 2026-10-13).
+- The production authentik provider follows `docs/launch/authentik-setup.md`: the `email` mapping emits the true `email_verified` state, the enrollment flow verifies email, the dedicated invalidation flow logs out, back-channel logout points at production, and the subject mode is hashed ID or UUID and recorded as never to change.
+- The `vfurst-platform-admins` group membership is reviewed and limited to the people who operate `/platform`.
+- The portal wildcard host serves a valid certificate for a newly provisioned subdomain without manual steps (`docs/launch/staging-coolify-setup.md` §8).
 
 The following managed-tenant gates are also mandatory. They require automated regression evidence even if the current readiness script has not yet been extended to parse every result:
 
-- Public registration creates an identity only and cannot enter `/dashboard`, create an organization, or create an event.
+- A portal account (attendee, volunteer, or vendor) can never gain membership, enter `/dashboard`, create an organization, or create an event; staff identities exist only through authentik.
 - `/platform/*` requires `PLATFORM_ADMIN`; `/dashboard/*` requires an explicit organization membership and returns only membership-scoped tenants/events.
 - Platform provisioning → single-use initial-owner invitation → acceptance → tenant activation → first event creation passes end to end.
 - Org A cannot enumerate, read, mutate, export, upload into, or trigger an operation for Org B across every action/API family recorded in the full-system audit.
