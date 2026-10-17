@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import process from "node:process";
 import { PrismaClient } from "@prisma/client";
+import { loginStaffThroughMockOidc } from "./lib/staff-oidc-login.mjs";
 
 const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
@@ -42,17 +43,20 @@ function readConfig() {
     "6"
   );
   const slug = process.env.VFURST_LOAD_ORG_SLUG ?? `load-full-${Date.now()}`;
+  const baseUrl = process.env.VFURST_BASE_URL ?? `http://${appHost}:${port}`;
+  const loopbackBaseUrl = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i.test(baseUrl);
 
   return {
     serverHost,
     appHost,
     port,
     serverReplicas,
-    baseUrl: process.env.VFURST_BASE_URL ?? `http://${appHost}:${port}`,
+    baseUrl,
+    // Production middleware routes by Host, and a loopback IP is not the central host.
+    hostHeader: process.env.VFURST_HOST_HEADER ?? (loopbackBaseUrl ? `localhost:${port}` : ""),
     registrations: process.env.VFURST_LOAD_SEED_REGISTRATIONS ?? "1500",
     slug,
     staffEmail: process.env.VFURST_STAFF_EMAIL ?? `load-admin-${slug}@example.com`,
-    staffPassword: process.env.VFURST_STAFF_PASSWORD ?? "LoadPass123!",
     loadProfile: process.env.VFURST_LOAD_PROFILE ?? "full",
     registrationVus: process.env.VFURST_REGISTRATION_VUS ?? "500",
     checkInVus: process.env.VFURST_CHECKIN_VUS ?? "50",
@@ -397,12 +401,40 @@ function stopServer() {
   serverProcesses = [];
 }
 
+async function assertMockOidcReachable() {
+  const issuer = process.env.AUTH_AUTHENTIK_ISSUER?.trim().replace(/\/+$/, "");
+
+  if (!issuer) {
+    throw new Error("AUTH_AUTHENTIK_ISSUER is required for the launch load proof (the local mock OIDC issuer).");
+  }
+
+  try {
+    const response = await fetch(`${issuer}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5_000) });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+  } catch (error) {
+    throw new Error(`Start the mock OIDC: docker compose up -d mock-oidc (${issuer}: ${error.message})`);
+  }
+}
+
+function seedOutputValue(stdout, name) {
+  const match = stdout.match(new RegExp(`${name}="([^"]+)"`));
+
+  if (!match) {
+    throw new Error(`Could not parse ${name} from seed output.`);
+  }
+
+  return match[1];
+}
+
 async function seedLoadData() {
   const result = await run(process.execPath, ["scripts/seed-load-test.mjs", `--registrations=${config.registrations}`, `--slug=${config.slug}`], {
     env: {
       ...process.env,
       VFURST_STAFF_EMAIL: config.staffEmail,
-      VFURST_STAFF_PASSWORD: config.staffPassword
+      VFURST_LOAD_SERVER_PORT: config.port
     },
     stdio: ["ignore", "pipe", "inherit"],
     echoStdout: true
@@ -412,13 +444,12 @@ async function seedLoadData() {
     throw new Error(`Load seed failed with exit code ${result.code}.`);
   }
 
-  const eventMatch = result.stdout.match(/VFURST_LOAD_EVENT_ID="([^"]+)"/);
-
-  if (!eventMatch) {
-    throw new Error("Could not parse VFURST_LOAD_EVENT_ID from seed output.");
-  }
-
-  return eventMatch[1];
+  return {
+    eventId: seedOutputValue(result.stdout, "VFURST_LOAD_EVENT_ID"),
+    staffSub: seedOutputValue(result.stdout, "VFURST_STAFF_SUB"),
+    portalHost: seedOutputValue(result.stdout, "VFURST_PORTAL_HOST"),
+    portalSessionCookie: seedOutputValue(result.stdout, "VFURST_PORTAL_SESSION_COOKIE")
+  };
 }
 
 async function cleanupTestFixtures() {
@@ -442,6 +473,7 @@ async function main() {
   await loadDotEnv(".env.local");
   config = readConfig();
   process.env.NODE_ENV = "production";
+  await assertMockOidcReachable();
   const databasePolicy = applyDatabaseConnectionLimit();
   await inspectDatabaseCapacity(databasePolicy);
   await cleanupTestFixtures();
@@ -454,7 +486,7 @@ async function main() {
     }
   }
 
-  const eventId = await seedLoadData();
+  const seed = await seedLoadData();
 
   try {
     if (!config.skipLocalServer && !(await canReachApp())) {
@@ -462,14 +494,22 @@ async function main() {
       await waitForApp();
     }
 
+    const staffCookie = await loginStaffThroughMockOidc({
+      baseUrl: config.baseUrl,
+      sub: seed.staffSub,
+      email: config.staffEmail
+    });
+    console.log(`Signed ${config.staffEmail} in through the mock OIDC provider.`);
+
     const load = await run(process.execPath, ["scripts/run-load-test.mjs", ...k6Args], {
       env: {
         ...process.env,
         VFURST_BASE_URL: config.baseUrl,
-        VFURST_LOAD_ORG_SLUG: config.slug,
-        VFURST_LOAD_EVENT_ID: eventId,
-        VFURST_STAFF_EMAIL: config.staffEmail,
-        VFURST_STAFF_PASSWORD: config.staffPassword,
+        VFURST_LOAD_EVENT_ID: seed.eventId,
+        VFURST_STAFF_COOKIE: staffCookie,
+        VFURST_PORTAL_HOST: seed.portalHost,
+        VFURST_PORTAL_SESSION_COOKIE: seed.portalSessionCookie,
+        ...(config.hostHeader ? { VFURST_HOST_HEADER: config.hostHeader } : {}),
         VFURST_LOAD_PROFILE: config.loadProfile,
         VFURST_REGISTRATION_VUS: config.registrationVus,
         VFURST_CHECKIN_VUS: config.checkInVus
