@@ -37,6 +37,17 @@ test("a slug host redirects to the canonical subdomain host", async ({ page }) =
   await expect(page).toHaveURL(`http://${subdomain}.localhost:3000/register`);
 });
 
+test("the tenant registration page is served from the ISR cache", async ({ request }) => {
+  test.skip(process.env.E2E_PRODUCTION !== "1", "ISR serves cached pages only in a production build");
+  const headers = { host: `${subdomain}.localhost:3000` };
+  const first = await request.get("http://localhost:3000/register", { headers, maxRedirects: 0 });
+  expect(first.status()).toBe(200);
+  const second = await request.get("http://localhost:3000/register", { headers, maxRedirects: 0 });
+  expect(second.status()).toBe(200);
+  expect(second.headers()["x-nextjs-cache"]).toMatch(/^(HIT|STALE)$/);
+  expect(second.headers()["cache-control"]).not.toContain("private");
+});
+
 test("a central route is not treated as a portal", async ({ page }) => {
   const response = await page.goto("http://localhost:3000/pricing");
   expect(response?.status()).toBe(200);

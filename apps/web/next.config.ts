@@ -14,6 +14,22 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true
   },
   reactStrictMode: true,
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          // The middleware sets this header (after scrubbing every client-sent
+          // x-vfurst-* header) on tenant-host page requests; see PORTAL_SLUG_HEADER
+          // in src/middleware.ts. Rewriting here keeps portal pages in the ISR cache.
+          source: "/:path*",
+          has: [{ type: "header", key: "x-vfurst-portal-slug", value: "(?<portalSlug>[a-z0-9][a-z0-9.-]*)" }],
+          destination: "/:portalSlug/:path*"
+        }
+      ],
+      afterFiles: [],
+      fallback: []
+    };
+  },
   async headers() {
     return [
       {

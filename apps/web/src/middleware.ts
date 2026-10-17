@@ -6,6 +6,10 @@ import { lookupPortalHostOrganization } from "./lib/portal-host-directory";
 import { scrubVfurstInternalHeaders } from "./lib/request-headers";
 
 const ROOT_DOMAIN = getRootDomain();
+// next.config.ts rewrites a request carrying this header to /<portal key><path>.
+// A NextResponse.rewrite here would skip the ISR cache: Next 15.5 matches the
+// prerender manifest against the pre-rewrite pathname ("/register").
+export const PORTAL_SLUG_HEADER = "x-vfurst-portal-slug";
 const STATIC_FILE_EXTENSION =
   /[.](?:avif|bmp|css|csv|gif|ico|jpe?g|js|json|map|mjs|pdf|png|svg|txt|webmanifest|webp|woff2?|ttf|xml|zip)$/i;
 
@@ -83,14 +87,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const rewriteUrl = request.nextUrl.clone();
-  rewriteUrl.pathname = `/${slug}${pathname === "/" ? "" : pathname}`;
+  requestHeaders.set(PORTAL_SLUG_HEADER, slug);
 
-  return NextResponse.rewrite(rewriteUrl, {
-    request: {
-      headers: requestHeaders
-    }
-  });
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

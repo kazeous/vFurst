@@ -7,8 +7,8 @@ vi.mock("./lib/portal-host-directory", () => ({ lookupPortalHostOrganization: mo
 
 let middleware: typeof middlewareFunction;
 const org = { id: "org-acme", subdomain: "acme", customDomain: null, customDomainStatus: null };
-function request(path: string, hostname = "localhost", method = "GET") {
-  return new NextRequest(`http://${hostname}:3000${path}`, { method, headers: { host: `${hostname}:3000` } });
+function request(path: string, hostname = "localhost", method = "GET", headers: Record<string, string> = {}) {
+  return new NextRequest(`http://${hostname}:3000${path}`, { method, headers: { ...headers, host: `${hostname}:3000` } });
 }
 
 beforeEach(async () => {
@@ -29,6 +29,7 @@ describe("canonical host middleware", () => {
     expect(response.headers.get("x-middleware-request-x-vfurst-org-slug")).toBe("acme");
     expect(response.headers.get("x-middleware-request-x-vfurst-org-host")).toBe("acme.localhost");
     expect(response.headers.get("x-middleware-request-x-vfurst-domain-mode")).toBe("subdomain");
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
     expect(mocks.lookup).not.toHaveBeenCalled();
   });
 
@@ -58,27 +59,47 @@ describe("canonical host middleware", () => {
     expect(response.headers.get("location")).toBe("http://tickets.acme.test:3000/register");
   });
 
-  it("rewrites a canonical tenant request as before", async () => {
+  it("hands a canonical tenant request to the config portal rewrite", async () => {
+    // next.config.ts rewrites on this header. A middleware rewrite would make Next
+    // match the prerender manifest against "/register" and skip the ISR cache.
     const response = await middleware(request("/register?x=1", "acme.localhost"));
     expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.get("x-middleware-rewrite")).toBe("http://acme.localhost:3000/acme/register?x=1");
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("acme");
     expect(response.headers.get("x-middleware-request-x-vfurst-org-slug")).toBe("acme");
   });
 
-  it("redirects HEAD but only rewrites tenant POST", async () => {
+  it("names the custom domain as the portal key on a custom-domain host", async () => {
+    mocks.lookup.mockResolvedValue({ ...org, customDomain: "tickets.acme.test", customDomainStatus: "ACTIVE" });
+    const response = await middleware(request("/", "tickets.acme.test"));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("tickets.acme.test");
+    expect(response.headers.get("x-middleware-request-x-vfurst-domain-mode")).toBe("custom-domain");
+  });
+
+  it("redirects HEAD but only hands tenant POST to the portal rewrite", async () => {
     expect((await middleware(request("/acme/register", "localhost", "HEAD"))).status).toBe(308);
     mocks.lookup.mockClear();
     const response = await middleware(request("/register", "acme.localhost", "POST"));
-    expect(response.headers.get("x-middleware-rewrite")).toBe("http://acme.localhost:3000/acme/register");
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("acme");
     expect(mocks.lookup).not.toHaveBeenCalled();
+  });
+
+  it("drops a client-supplied portal slug header on central routes", async () => {
+    const response = await middleware(request("/dashboard", "localhost", "GET", { "x-vfurst-portal-slug": "evil" }));
+    expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
+    expect(response.headers.get("x-middleware-override-headers")?.split(",")).not.toContain("x-vfurst-portal-slug");
   });
 
   it("preserves invalid-host rejection and static/API bypasses", async () => {
     const invalid = new NextRequest("http://localhost:3000/", { headers: { host: "bad/host" } });
     expect((await middleware(invalid)).status).toBe(400);
     for (const path of ["/_next/test", "/logo.svg", "/api/portal/session"]) {
-      const response = await middleware(request(path));
+      const response = await middleware(request(path, "acme.localhost"));
       expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
     }
     expect(mocks.lookup).not.toHaveBeenCalled();
   });

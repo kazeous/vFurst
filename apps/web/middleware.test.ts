@@ -49,10 +49,10 @@ describe("legacy web middleware host safety", () => {
   });
 
   it.each(["/schedule.v2", "/people/sam.smith", "/events/2027.08/register"])(
-    "rewrites route paths containing a non-asset dot: %s",
+    "hands route paths containing a non-asset dot to the portal rewrite: %s",
     async (pathname) => {
       const response = await middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
-      expect(response.headers.get("x-middleware-rewrite")).toContain(`/tenant-a${pathname}`);
+      expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBe("tenant-a");
     }
   );
 
@@ -62,6 +62,7 @@ describe("legacy web middleware host safety", () => {
       expect(isKnownStaticAssetPath(pathname)).toBe(true);
       const response = await middleware(requestWithHost("tenant-a.vfurst.reyuugames.com", undefined, pathname));
       expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-middleware-request-x-vfurst-portal-slug")).toBeNull();
     }
   );
 });
