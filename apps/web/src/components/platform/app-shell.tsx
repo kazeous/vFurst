@@ -51,7 +51,7 @@ export function PlatformAppShell({
           </div>
         </nav>
 
-        <div className="vf-app-sidebar-footer">
+        <div className="vf-app-sidebar-footer vf-app-sidebar-footer-stacked">
           <div className="vf-app-user-trigger">
             <span className="vf-user-avatar">{(userName ?? userEmail ?? "PA").slice(0, 2).toUpperCase()}</span>
             <span className="vf-app-user-copy"><strong>{userName ?? "Platform admin"}</strong><span>{userEmail}</span></span>

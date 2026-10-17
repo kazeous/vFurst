@@ -88,6 +88,13 @@ test("a platform-admin group member lands on /platform", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Platform overview" })).toBeVisible();
   expect((await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).platformRole).toBe("PLATFORM_ADMIN");
+
+  // The sidebar's "Log out" is a form button styled as a navigation row.
+  const logout = page.getByRole("button", { name: "Log out" });
+  const manageAccount = page.getByRole("link", { name: "Manage your Reyuu Games account" });
+  await expect(logout).toHaveCSS("border-top-style", "none");
+  await expect(logout).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  expect((await logout.boundingBox())?.width).toBe((await manageAccount.boundingBox())?.width);
 });
 
 test("an organization owner lands on /dashboard", async ({ page }) => {
