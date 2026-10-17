@@ -53,6 +53,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
     7. Pass — hotel booking confirmed (rooms 5 → 4); a blank required volunteer field is blocked by the browser and, with that bypassed, inline "Experience summary is required."
     8. Pass — staff sign-in through the mock reaches `/dashboard`; logout goes through end-session to `/`, and `/dashboard` then redirects to `/login`.
     No blank Application error, no console errors, no server errors.
+- **Self-review fix after the gate (`dfb9113`):** Sentry transactions carried raw request URLs in OpenTelemetry span attributes (`http.target`, `http.url`, `url.full`, `url.query`, `http.query`); `beforeSendTransaction` now scrubs those, the transaction name, and span descriptions. Web suite **383/383**.
 - **Deferred minor:** the store's empty cart says "Sign in, then add products to your cart." to signed-in visitors who have no cart yet (`apps/web/src/components/store/cart.tsx`).
 - **Next:** Task 6, the operator release steps, each only with the user's go. No push or merge was performed.
 
