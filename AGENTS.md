@@ -62,6 +62,8 @@ runtime-only injection does nothing in production builds.
 
 Ports in local development: `apps/web` 3000. `apps/web` silently retries onto another port when 3000 is taken, while `AUTH_URL` keeps pointing at 3000.
 
+Staff sign-in uses the studio authentik over OIDC (`AUTH_AUTHENTIK_ISSUER`, `AUTH_AUTHENTIK_ID`, `AUTH_AUTHENTIK_SECRET`). Local development and E2E use the `mock-oidc` service from `docker-compose.yml` on **8090** (issuer `http://localhost:8090/vfurst`). Its sign-in form accepts any subject plus a JSON claims object: put `vfurst-platform-admins` (`VFURST_PLATFORM_ADMIN_GROUP`) in `groups` to sign in as a platform administrator. Staff sessions last at most `VFURST_STAFF_SESSION_MAX_AGE_SECONDS` (default 43200).
+
 ## Commands
 
 - `turbo run dev` — start all apps
