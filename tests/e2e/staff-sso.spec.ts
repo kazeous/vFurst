@@ -11,7 +11,8 @@ const emails = {
   outsider: `staff-sso-outsider-${run}@example.com`,
   demoted: `staff-sso-demoted-${run}@example.com`,
   conflict: `staff-sso-conflict-${run}@example.com`,
-  newcomer: `staff-sso-new-${run}@example.com`
+  newcomer: `staff-sso-new-${run}@example.com`,
+  leaver: `staff-sso-leaver-${run}@example.com`
 };
 let orgId: string;
 let admin: StaffFixture;
@@ -19,17 +20,19 @@ let owner: StaffFixture;
 let outsider: StaffFixture;
 let demoted: StaffFixture;
 let conflict: StaffFixture;
+let leaver: StaffFixture;
 
 test.describe.configure({ mode: "serial" });
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  [admin, owner, outsider, demoted, conflict] = await Promise.all([
+  [admin, owner, outsider, demoted, conflict, leaver] = await Promise.all([
     createStaffFixture(prisma, { email: emails.admin, name: "SSO Admin", platformRole: "PLATFORM_ADMIN" }),
     createStaffFixture(prisma, { email: emails.owner, name: "SSO Owner" }),
     createStaffFixture(prisma, { email: emails.outsider, name: "SSO Outsider" }),
     createStaffFixture(prisma, { email: emails.demoted, name: "SSO Demoted", platformRole: "PLATFORM_ADMIN" }),
-    createStaffFixture(prisma, { email: emails.conflict, name: "SSO Conflict Owner" })
+    createStaffFixture(prisma, { email: emails.conflict, name: "SSO Conflict Owner" }),
+    createStaffFixture(prisma, { email: emails.leaver, name: "SSO Leaver" })
   ]);
   const org = await prisma.organization.create({
     data: {
@@ -38,7 +41,12 @@ test.beforeAll(async () => {
       subdomain: orgSlug,
       status: "ACTIVE",
       contactEmail: `contact-${orgSlug}@example.com`,
-      members: { create: { userId: owner.id, role: "OWNER" } }
+      members: {
+        create: [
+          { userId: owner.id, role: "OWNER" },
+          { userId: leaver.id, role: "OWNER" }
+        ]
+      }
     }
   });
   orgId = org.id;
@@ -110,4 +118,31 @@ test("an email owned by another subject is denied", async ({ page }) => {
   const accounts = await prisma.account.findMany({ where: { userId: conflict.id } });
   expect(accounts.map((account) => account.providerAccountId)).toEqual([conflict.sub]);
   expect((await prisma.user.findUniqueOrThrow({ where: { id: conflict.id } })).platformRole).toBe("USER");
+});
+
+test("logging out revokes the session and returns through the identity provider", async ({ page }) => {
+  const sid = `sid-${run}`;
+  const endSessionRequests: URL[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("http://localhost:8090/vfurst/endsession")) endSessionRequests.push(new URL(request.url()));
+  });
+  await loginAsStaff(page, { ...leaver, sid });
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+  const session = await prisma.session.findFirstOrThrow({ where: { userId: leaver.id, oidcSid: sid } });
+  expect(session.idToken).toBeTruthy();
+
+  await page.locator(".vf-app-user-trigger").click();
+  await page.getByRole("button", { name: "Log out" }).click();
+  await page.waitForURL("http://localhost:3000/", { waitUntil: "load" });
+
+  expect(endSessionRequests).toHaveLength(1);
+  expect(endSessionRequests[0]?.searchParams.get("id_token_hint")).toBe(session.idToken);
+  expect(endSessionRequests[0]?.searchParams.get("client_id")).toBe("vfurst-local");
+  expect(endSessionRequests[0]?.searchParams.get("post_logout_redirect_uri")).toBe("http://localhost:3000/");
+  const revoked = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
+  expect(revoked.revokedAt).not.toBeNull();
+  expect(revoked.idToken).toBeNull();
+
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL((url) => url.pathname === "/login");
 });

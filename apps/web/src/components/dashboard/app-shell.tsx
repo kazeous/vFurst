@@ -18,6 +18,7 @@ import {
   Sparkles,
   Store,
   TicketCheck,
+  UserCog,
   Users,
   X
 } from "lucide-react";
@@ -141,7 +142,8 @@ export function DashboardAppShell({
   userEmail,
   isPlatformAdmin,
   workspace,
-  logoutAction
+  logoutAction,
+  accountManagementUrl
 }: Readonly<{
   children: ReactNode;
   userName?: string | null;
@@ -149,6 +151,7 @@ export function DashboardAppShell({
   isPlatformAdmin: boolean;
   workspace: DashboardWorkspaceData;
   logoutAction: () => Promise<void>;
+  accountManagementUrl: string;
 }>) {
   const pathname = usePathname();
   const router = useRouter();
@@ -292,6 +295,7 @@ export function DashboardAppShell({
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start">
               <DropdownMenuItem asChild><Link href="/dashboard/settings"><Settings size={16} />Account settings</Link></DropdownMenuItem>
+              <DropdownMenuItem asChild><a href={accountManagementUrl}><UserCog size={16} />Manage your Reyuu Games account</a></DropdownMenuItem>
               <form action={logoutAction}>
                 <button className="vf-dropdown-item" type="submit"><LogOut size={16} />Log out</button>
               </form>
