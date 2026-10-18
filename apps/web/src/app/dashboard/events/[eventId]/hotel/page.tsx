@@ -1,5 +1,6 @@
 import { cancelBooking, createHotelBlock, updateHotelBlock } from "@/actions/hotel-actions";
 import { ActionStateForm } from "@/components/action-state-form";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency, formatMoneyInput, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                       {booking.portalAccount.name ?? booking.portalAccount.email} - {booking.roomType}
                     </span>
                     <small>
-                      {booking.checkIn.toLocaleDateString()} to {booking.checkOut.toLocaleDateString()} - {booking.confirmationCode ?? "Pending"}
+                      {formatDate(booking.checkIn)} to {formatDate(booking.checkOut)} - {booking.confirmationCode ?? "Pending"}
                     </small>
                     <form action={cancelBooking}>
                       <input type="hidden" name="bookingId" value={booking.id} />

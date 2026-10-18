@@ -2,6 +2,7 @@ import { acceptRegistrationTransfer, declineRegistrationTransfer } from "@/actio
 import { Alert } from "@/components/ui/alert";
 import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import {
   getRegistrationTransferPath,
@@ -84,7 +85,7 @@ export default async function AccountTransferDecisionPage({
         <dt>Invited account</dt>
         <dd>{request.recipientEmail}</dd>
         <dt>Expires</dt>
-        <dd>{request.expiresAt.toLocaleString()}</dd>
+        <dd>{formatDate(request.expiresAt, { dateStyle: "medium", timeStyle: "short" })}</dd>
         <dt>Status</dt>
         <dd>{status}</dd>
       </dl>

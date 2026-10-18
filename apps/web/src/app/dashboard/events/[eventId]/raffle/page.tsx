@@ -4,6 +4,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
+import { formatDate } from "@/lib/i18n";
 import { getCoreRegistrationEligibilityDescription, parseRaffleEligibility } from "@/lib/raffle-policy";
 
 export const dynamic = "force-dynamic";
@@ -141,7 +142,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
               <div key={item.id} className="vf-list-row">
                 <span>{item.prizeName} (award {item.awardNumber})</span>
                 <small>
-                  {item.winner.name ?? item.winner.email} - {item.raffle.name} - {item.drawnAt.toLocaleString()}
+                  {item.winner.name ?? item.winner.email} - {item.raffle.name} - {formatDate(item.drawnAt, { dateStyle: "medium", timeStyle: "short" })}
                 </small>
               </div>
             ))}
@@ -160,7 +161,7 @@ export default async function RafflePage({ params }: { params: Promise<{ eventId
               <article key={raffle.id} className="vf-schedule-role">
                 <h3>{raffle.name}</h3>
                 <p className="vf-muted">
-                  {raffle.entries.length} entries - draw {raffle.drawDate.toLocaleString()}
+                  {raffle.entries.length} entries - draw {formatDate(raffle.drawDate, { dateStyle: "medium", timeStyle: "short" })}
                 </p>
                 <p className="vf-muted">
                   Eligibility: {(() => { try { return getCoreRegistrationEligibilityDescription(parseRaffleEligibility(raffle.eligibility)); } catch { return "Invalid configuration"; } })()} · max {raffle.maxEntriesPerUser} per attendee

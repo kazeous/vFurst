@@ -1,5 +1,6 @@
 import { archiveProduct, createProduct, restoreProduct, updateProduct } from "@/actions/store-actions";
 import { ActionStateForm } from "@/components/action-state-form";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { getSurchargeTotal, parseProductOptions, parseProductSurcharges } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
@@ -248,7 +249,7 @@ export default async function StoreManagementPage({ params }: { params: Promise<
               <div key={product.id} className="vf-list-row">
                 <span>
                   <strong>{product.name}</strong>
-                  <small>Archived {product.archivedAt?.toLocaleString()}</small>
+                  <small>Archived {product.archivedAt ? formatDate(product.archivedAt, { dateStyle: "medium", timeStyle: "short" }) : null}</small>
                 </span>
                 <form action={restoreProduct}>
                   <input type="hidden" name="productId" value={product.id} />

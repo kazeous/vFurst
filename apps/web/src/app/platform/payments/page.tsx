@@ -9,6 +9,7 @@ import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
+import { formatDate } from "@/lib/i18n";
 import { getProviderStates, getSePaySettings, isSePayEnvironmentReady } from "@/lib/payments/platform";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
@@ -209,7 +210,7 @@ export default async function PlatformPaymentsPage({
             {recentPayouts.map((payout) => (
               <div key={payout.id} className="vf-list-row">
                 <span>{payout.org.name} — {formatCurrency(payout.amount, payout.currency)}</span>
-                <small>{payout.reference} · {payout.paidAt.toLocaleDateString()}</small>
+                <small>{payout.reference} · {formatDate(payout.paidAt)}</small>
               </div>
             ))}
             {recentPayouts.length === 0 ? <p className="vf-empty">No payouts recorded.</p> : null}

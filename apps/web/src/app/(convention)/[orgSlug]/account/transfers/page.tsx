@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/i18n";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { normalizeTransferEmail } from "@/lib/registration-transfer";
 import { prisma } from "@vfurst/db";
@@ -50,7 +51,7 @@ export default async function AccountTransfersPage({ params }: { params: Promise
               <strong>{status}</strong>
             </div>
             <p className="vf-muted">
-              Sent {request.createdAt.toLocaleString()} · expires {request.expiresAt.toLocaleString()}
+              Sent {formatDate(request.createdAt, { dateStyle: "medium", timeStyle: "short" })} · expires {formatDate(request.expiresAt, { dateStyle: "medium", timeStyle: "short" })}
             </p>
             {status === "PENDING" ? (
               <p>Open the signed link in your invitation email to accept or decline this transfer.</p>

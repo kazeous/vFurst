@@ -1,6 +1,7 @@
 import { inviteMember, removeMember } from "@/actions/org-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { revokeOrganizationInvitation } from "@/actions/invitation-actions";
+import { formatDate } from "@/lib/i18n";
 import { getOrganizationInvitationState } from "@/lib/organization-invitations";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,7 @@ export default async function OrganizationMembersPage({ params }: { params: Prom
               return (
                 <div className="vf-list-row" key={invitation.id}>
                   <span>{invitation.email}</span>
-                  <small>{invitation.role} · {state === "EXPIRED" ? "Expired" : `Expires ${invitation.expiresAt.toLocaleString()}`}</small>
+                  <small>{invitation.role} · {state === "EXPIRED" ? "Expired" : `Expires ${formatDate(invitation.expiresAt, { dateStyle: "medium", timeStyle: "short" })}`}</small>
                   {state === "PENDING" ? (
                     <form action={revokeOrganizationInvitation}>
                       <input type="hidden" name="orgId" value={org.id} />
