@@ -34,6 +34,15 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-18 — E2E cleanups skip ids that beforeAll never set
+
+- **Executor:** Claude, same session as the entry below, at the user's request; branch `test/e2e-cleanup-guards`, stacked on `test/e2e-scope-dead-letter-assertions`. Test-only. Not pushed.
+- **Hazard:** Prisma treats a filter value of `undefined` as no filter, so when `beforeAll` failed before assigning an id, an `afterAll` like `deleteMany({ where: { id: orgId } })` would delete every row in the shared database. A read-only `count()` with the same filters matched every row (all 474 email deliveries, and the one SEPAY config). `{ in: [undefined] }` throws instead, aborting the rest of the hook.
+- **What changed:** `custom-email-delivery`, `raffle-contract`, `registration-transfer`, `staff-sso`, and `routing-checkout-safety` skip a cleanup whose id is unset (`if (id)`, as `portal-attendee` and `portal-canonical-host` already did). `routing-checkout-safety` also deletes the Stripe config only when its snapshot recorded none (it used to delete an existing config when `beforeAll` failed before the snapshot). `error-visibility`, `public-flow-errors`, `raffle-contract`, `registration-policy`, and `registration-transfer` filter their `in` lists. Every other `afterAll` filters by module-level slugs or emails, or was already guarded. `stripe-webhook-security` takes its snapshot as the first statement, so it was left as is.
+- **Verification:** fresh web build. Full production E2E: **147 passed / 1 failed**, then on rerun **148 passed / 0 failed / 0 did not run**. Gates **29/29** (28 cache hits; same 617 tests as below).
+- **Flake found (unchanged here):** `launch-critical-paths.spec.ts` › "embedded SePay QR fulfills…" can fail with "page.goto … interrupted by another navigation". **Show QR** returns `redirectTo` the same `&sepay=1` URL (`checkout-actions.ts:296`), and the test calls `page.goto` to that URL after polling the database, racing the app's own client navigation.
+- **Next session should:** fix that race by waiting for the app's navigation (for example `page.waitForURL`) instead of calling `goto`. Then continue with Phase 2 unit 2.1.
+
 ### 2026-10-18 — Email operations E2E ignores dead letters it did not create
 
 - **Executor:** Claude, side session started from the portal-registration session; branch `test/e2e-scope-dead-letter-assertions` from `staging` (`8f5efeb`). Test-only; no production code changed. Not pushed.
