@@ -3,7 +3,6 @@ import {
   buildStaffEndSessionUrl,
   clearStaffOidcMetadataCache,
   getStaffAccountManagementUrl,
-  getStaffEmailVerificationUrl,
   getStaffOidcMetadata
 } from "./staff-oidc";
 
@@ -72,14 +71,26 @@ describe("staff OIDC helpers", () => {
   it("accepts an issuer that differs only by a trailing slash", async () => {
     vi.stubEnv("AUTH_AUTHENTIK_ISSUER", "https://account.reyuugames.com/application/o/vfurst/");
     const fetchMock = vi.fn<typeof fetch>(async () =>
-      new Response(JSON.stringify({ ...discovery, issuer: "https://account.reyuugames.com/application/o/vfurst/" }))
+      new Response(JSON.stringify({ issuer: "https://account.reyuugames.com/application/o/vfurst/", jwks_uri: "https://account.reyuugames.com/application/o/vfurst/jwks/" }))
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getStaffOidcMetadata()).resolves.toMatchObject({ jwks_uri: discovery.jwks_uri });
+    await expect(getStaffOidcMetadata()).resolves.toMatchObject({ jwks_uri: "https://account.reyuugames.com/application/o/vfurst/jwks/" });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "https://account.reyuugames.com/application/o/vfurst/.well-known/openid-configuration"
     );
+  });
+
+  it("rejects even a trailing-slash issuer mismatch and foreign logout or JWKS endpoints", async () => {
+    for (const document of [
+      { ...discovery, issuer: `${discovery.issuer}/` },
+      { ...discovery, jwks_uri: "https://other.example/keys" },
+      { ...discovery, end_session_endpoint: "https://other.example/logout" }
+    ]) {
+      clearStaffOidcMetadataCache();
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(document))));
+      await expect(getStaffOidcMetadata()).rejects.toThrow();
+    }
   });
 
   it("links to the authentik user interface on the issuer origin", () => {
@@ -88,9 +99,4 @@ describe("staff OIDC helpers", () => {
     expect(getStaffAccountManagementUrl()).toBe("https://account.reyuugames.com/if/user/");
   });
 
-  it("links to the vfurst-verify-email flow on the issuer origin", () => {
-    vi.stubEnv("AUTH_AUTHENTIK_ISSUER", "https://account.reyuugames.com/application/o/vfurst/");
-
-    expect(getStaffEmailVerificationUrl()).toBe("https://account.reyuugames.com/if/flow/vfurst-verify-email/");
-  });
 });

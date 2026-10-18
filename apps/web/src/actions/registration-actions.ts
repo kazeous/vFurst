@@ -1,5 +1,7 @@
 "use server";
 
+import { requireStaffAssurance } from "@/lib/staff-verification";
+
 import {
   requireAttendeeNoteAccess,
   requireEventAccess,
@@ -439,6 +441,7 @@ export async function bulkUpdateRegistrations(formData: FormData) {
 }
 
 export async function refundRegistration(formData: FormData) {
+  await requireStaffAssurance();
   const registrationId = z.string().uuid().parse(formData.get("registrationId"));
   const { userId, registration, event } = await requireRegistrationAccess(
     registrationId,

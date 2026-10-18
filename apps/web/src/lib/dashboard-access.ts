@@ -1,11 +1,13 @@
 import { auth } from "@/lib/auth";
 import { prisma, type OrgRole } from "@vfurst/db";
 import { notFound, redirect } from "next/navigation";
+import { requireStaffAssurance } from "@/lib/staff-verification";
 
 export async function requireDashboardSession() {
   const session = await auth();
 
   if (!session?.user?.id) {
+    await requireStaffAssurance(false);
     redirect("/login");
   }
 
@@ -532,6 +534,7 @@ export async function requirePlatformAdmin() {
   if (!user || user.platformRole !== "PLATFORM_ADMIN") {
     throw new Error("You do not have permission to manage platform settings.");
   }
+  await requireStaffAssurance();
 
   return user;
 }
@@ -543,6 +546,7 @@ export async function requirePlatformAdminPage() {
   if (!user || user.platformRole !== "PLATFORM_ADMIN") {
     notFound();
   }
+  await requireStaffAssurance();
 
   return user;
 }
@@ -558,6 +562,7 @@ export async function requireOrgAccess(
   if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this organization.");
   }
+  await requireStaffAssurance();
 
   return {
     userId,

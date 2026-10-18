@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   signOut: vi.fn(),
   revokeIdentitySession: vi.fn(),
+  createStaffLogoutFence: vi.fn(),
+  clearStaffOidcFlow: vi.fn(),
+  userUpdate: vi.fn(),
   getStaffOidcMetadata: vi.fn(),
   findUnique: vi.fn(),
   redirect: vi.fn((url: string) => {
@@ -13,13 +16,25 @@ const mocks = vi.hoisted(() => ({
   })
 }));
 
-vi.mock("@/lib/auth", () => ({ auth: mocks.auth, signOut: mocks.signOut }));
+vi.mock("@/lib/auth", () => ({ getStaffSession: mocks.auth, signOut: mocks.signOut }));
 vi.mock("@/lib/identity-session", () => ({ revokeIdentitySession: mocks.revokeIdentitySession }));
+vi.mock("@/lib/staff-oidc-store", () => ({
+  createStaffLogoutFence: mocks.createStaffLogoutFence,
+  staffIdentityTransaction: (operation: (tx: unknown) => unknown) => operation({
+    session: { updateMany: mocks.revokeIdentitySession }, user: { update: mocks.userUpdate }
+  })
+}));
+vi.mock("@/lib/staff-oidc-flow", () => ({ clearStaffOidcFlow: mocks.clearStaffOidcFlow }));
 vi.mock("@/lib/staff-oidc", async (importOriginal) => ({
   ...(await importOriginal<typeof StaffOidc>()),
   getStaffOidcMetadata: mocks.getStaffOidcMetadata
 }));
-vi.mock("@vfurst/db", () => ({ prisma: { session: { findUnique: mocks.findUnique } } }));
+vi.mock("@vfurst/db", () => ({
+  Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } },
+  prisma: { session: { findUnique: mocks.findUnique }, $transaction: (operation: (tx: unknown) => unknown) => operation({
+    session: { updateMany: mocks.revokeIdentitySession }, user: { update: mocks.userUpdate }
+  }) }
+}));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 
 import { staffSignOut } from "./staff-auth-actions";
@@ -31,6 +46,7 @@ beforeEach(() => {
   mocks.calls.length = 0;
   vi.stubEnv("AUTH_AUTHENTIK_ID", "vfurst-local");
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+  vi.stubEnv("AUTH_AUTHENTIK_ISSUER", "http://localhost:8090/vfurst");
   mocks.auth.mockResolvedValue({ identitySessionId: sessionId, user: { id: "user-1" } });
   mocks.findUnique.mockImplementation(async () => {
     mocks.calls.push("read-id-token");
@@ -53,7 +69,8 @@ describe("staffSignOut", () => {
     await expect(staffSignOut()).rejects.toThrow("NEXT_REDIRECT:");
 
     expect(mocks.calls).toEqual(["read-id-token", "revoke", "clear-cookie", "discover"]);
-    expect(mocks.revokeIdentitySession).toHaveBeenCalledWith(sessionId);
+    expect(mocks.revokeIdentitySession).toHaveBeenCalledWith({ where: { userId: "user-1", id: sessionId, revokedAt: null }, data: { revokedAt: expect.any(Date), idToken: null } });
+    expect(mocks.createStaffLogoutFence).toHaveBeenCalledOnce();
     expect(mocks.signOut).toHaveBeenCalledWith({ redirect: false });
     const target = new URL(String(mocks.redirect.mock.calls[0]?.[0]));
     expect(target.origin + target.pathname).toBe("http://localhost:8090/vfurst/endsession");
@@ -69,7 +86,7 @@ describe("staffSignOut", () => {
 
     await expect(staffSignOut()).rejects.toThrow("NEXT_REDIRECT:/");
 
-    expect(mocks.revokeIdentitySession).toHaveBeenCalledWith(sessionId);
+    expect(mocks.revokeIdentitySession).toHaveBeenCalledOnce();
     expect(mocks.signOut).toHaveBeenCalledWith({ redirect: false });
     expect(mocks.redirect).toHaveBeenCalledExactlyOnceWith("/");
   });

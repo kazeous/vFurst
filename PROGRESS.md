@@ -6,6 +6,8 @@
 
 ## Current phase
 
+**User-requested corrective identity unit — staff SSO review against Pawket: In progress (2026-10-19).** The owner explicitly chose Pawket's session policy (5-minute IdP lease and 60-minute sensitive-action proof) in this session. Finish and verify this unit before starting Phase 2. The rollout contract is in `ops/authentik/README.md`; real provider configuration and deployed acceptance are separate from local/mock verification.
+
 **Phase 2 — Attendee & registration parity: Not started** (docs/plan/phase-2-attendee-parity.md). **Next session: unit 2.1 (REG-P1, attendee profiles and the multi-attendee registration flow) only; its plan is written at unit start.** Before it, merge PR #30 (the two staging fixes found by the Phase 1B smoke test) and PR #29 (`docs/` leaves the repository).
 
 **Phase 1B — Identity re-platform: Complete (2026-10-18).** Staff sign in only through the studio authentik; attendees, volunteers, and vendors use tenant-scoped portal accounts on the canonical portal host. Merged to `staging` in PR #28 (`96b99f3`) and smoke-tested on the deployment; the evidence is in the 1B.5 entries below.
@@ -33,6 +35,15 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-19 — Corrective staff SSO audit and Pawket policy alignment (in progress)
+
+- **Authorization/scope:** user requested comparing the completed Reyuu Games Account conversion with `D:/GitHub/pawket`, fixing deficiencies and completing it to the same standard. When asked about the policy difference, the owner explicitly selected Pawket's session policy. This is one corrective identity unit; Phase 2 is untouched. Branch `codex/staff-sso-hardening`, starting at `c539166`. Pre-existing edits to the three local setup/phase documents are preserved and excluded from this unit's commit.
+- **Confirmed defect:** Auth.js re-encoded JWTs whose invalid registry binding had been removed; the legacy JWT upgrade path could subsequently recreate their sessions. Removed that path and clear invalid JWTs. Added repeated-read regressions for revoked, expired, idle and deleted sessions.
+- **Implementation:** browser-bound one-use OIDC intents; actor-bound lease/step-up; issuer/client-bound sessions; 5-minute leases, 30-minute idle and 12-hour maximum absolute deadlines; verified primary/MFA evidence within 60 minutes for sensitive platform/org/payment operations; serializable callback/logout fences and durable replay receipts; current database profile/email on sessions/invitations; host-only staff cookie and tenant API isolation; session management; form-preserving verification. `ops/authentik/` contains the dedicated provider blueprint and rollout/acceptance contract, adapted from Pawket's proven login-event evidence mapping. Existing `prestart` applied additive schema changes without resetting the database.
+- **Verification pending:** full aggregate, production E2E, boot/host probes, launch/audit checks, and fresh load proof. Focused results are not a full-suite pass claim. Initial browser attempts were blocked by sandbox Chromium lookup and Next output-directory permissions; the installed host Chromium and normal execution permissions are used for subsequent runs.
+- **Local test incident (agent error):** the first new fixture setup omitted `Organization.contactEmail`. Its failed-setup cleanup then passed an undefined organization ID to Prisma, which can become an unfiltered local organization deletion. No pre-run row-count snapshot exists, so the number of pre-existing local organizations affected cannot be reconstructed. Fixed the fixture and made cleanup conditional on a known ID plus its exact fixture slug. This involved only the local test database; no staging/production command, push, merge or deployment was issued. The user was informed immediately after identifying the issue.
+- **Next session should:** finish this corrective unit's verification and review the dedicated authentik rollout contract before any deployment; do not start Phase 2 or treat mock success as deployed IdP acceptance.
 
 ### 2026-10-18 — Phase 1B unit 1B.5: release and deployed smoke (Phase 1B complete)
 

@@ -83,13 +83,14 @@ describe("staff identity claims", () => {
     expect(resolveStaffSessionMaxAgeSeconds("0")).toBe(43_200);
     expect(resolveStaffSessionMaxAgeSeconds("-5")).toBe(43_200);
     expect(resolveStaffSessionMaxAgeSeconds("12.5")).toBe(43_200);
+    expect(resolveStaffSessionMaxAgeSeconds("86400")).toBe(43_200);
   });
 });
 
 describe("staff user synchronization", () => {
   it("syncs profile, role, and verified state, keeping an existing verification timestamp", async () => {
     const verifiedAt = new Date("2026-01-01T00:00:00.000Z");
-    mocks.prisma.user.findUnique.mockResolvedValue({ emailVerified: verifiedAt });
+    mocks.prisma.user.findUnique.mockResolvedValue({ email: claims.email, emailVerified: verifiedAt });
 
     await syncStaffUser("user-1", { ...claims, groups: ["vfurst-platform-admins"] }, now);
 

@@ -5,7 +5,7 @@ import { getTenantHostPolicy } from "./tenant-host-policy";
 export const CENTRAL_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   "api", "dashboard", "docs", "platform", "login", "register", "forgot-password", "reset-password",
   "invitations", "dmca", "features", "pricing", "privacy", "request-access", "terms", "account",
-  "checkout", "transfer", "monitoring"
+  "checkout", "transfer", "monitoring", "staff"
 ]);
 
 export function centralPortalCandidate(pathname: string): { key: string; portalPath: string } | null {

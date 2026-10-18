@@ -1,6 +1,6 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { normalizeIdentityEmail, type PlatformRole } from "@vfurst/auth/core";
-import { prisma, type PrismaClient } from "@vfurst/db";
+import { prisma, type Prisma, type PrismaClient } from "@vfurst/db";
 import type { Adapter } from "next-auth/adapters";
 import { z } from "zod";
 
@@ -20,7 +20,7 @@ export type StaffClaims = {
 
 export function resolveStaffSessionMaxAgeSeconds(value: string | undefined): number {
   const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_STAFF_SESSION_MAX_AGE_SECONDS;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, DEFAULT_STAFF_SESSION_MAX_AGE_SECONDS) : DEFAULT_STAFF_SESSION_MAX_AGE_SECONDS;
 }
 
 /** Staff identity-session cap (spec §6.3): 12 hours unless configured otherwise. */
@@ -29,7 +29,7 @@ export const STAFF_SESSION_MAX_AGE_SECONDS = resolveStaffSessionMaxAgeSeconds(
 );
 
 function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
+  return typeof value === "string" && value.trim() && value.length <= 2_048 && !/\p{Cc}/u.test(value) ? value : null;
 }
 
 export function parseStaffClaims(profile: unknown): StaffClaims | null {
@@ -37,7 +37,9 @@ export function parseStaffClaims(profile: unknown): StaffClaims | null {
   const claims = profile as Record<string, unknown>;
   const sub = optionalString(claims.sub);
   const email = optionalString(claims.email);
-  if (!sub || !email) return null;
+  if (!sub || sub.length > 255 || !email || email.length > 254 || typeof claims.email_verified !== "boolean") return null;
+  const sid = optionalString(claims.sid);
+  if (claims.sid !== undefined && (!sid || sid.length > 255)) return null;
 
   const normalizedEmail = normalizeIdentityEmail(email);
   if (!z.string().email().safeParse(normalizedEmail).success) return null;
@@ -49,7 +51,7 @@ export function parseStaffClaims(profile: unknown): StaffClaims | null {
     name: optionalString(claims.name) ?? optionalString(claims.preferred_username),
     image: optionalString(claims.picture),
     groups: Array.isArray(claims.groups) ? claims.groups.filter((group): group is string => typeof group === "string") : [],
-    sid: optionalString(claims.sid)
+    sid
   };
 }
 
@@ -81,16 +83,16 @@ export async function findStaffEmailConflict(
 }
 
 /** Mirrors the identity provider's claims onto the staff user at every sign-in (spec §6.2). */
-export async function syncStaffUser(userId: string, claims: StaffClaims, now = new Date()): Promise<void> {
-  const current = await prisma.user.findUnique({ where: { id: userId }, select: { emailVerified: true } });
+export async function syncStaffUser(userId: string, claims: StaffClaims, now = new Date(), client: Prisma.TransactionClient = prisma): Promise<void> {
+  const current = await client.user.findUnique({ where: { id: userId }, select: { email: true, emailVerified: true } });
 
-  await prisma.user.update({
+  await client.user.update({
     where: { id: userId },
     data: {
       email: claims.email,
       name: claims.name,
       image: claims.image,
-      emailVerified: claims.emailVerified ? (current?.emailVerified ?? now) : null,
+      emailVerified: claims.emailVerified ? (current?.email === claims.email ? current.emailVerified ?? now : now) : null,
       platformRole: staffPlatformRole(claims.groups)
     }
   });

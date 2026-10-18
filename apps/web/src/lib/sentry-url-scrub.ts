@@ -2,6 +2,7 @@ export const SENSITIVE_QUERY_KEYS = ["token", "code", "state", "id_token_hint", 
 
 const FILTERED = "[Filtered]";
 const SENSITIVE_KEYS = new Set<string>(SENSITIVE_QUERY_KEYS);
+const NESTED_URL_KEYS = new Set(["returnTo", "redirectTo", "callbackUrl", "post_logout_redirect_uri", "next", "url"]);
 const INVITATION_TOKEN_SEGMENT = /(\/invitations\/)[^/?#]+/g;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const BREADCRUMB_URL_KEYS = ["url", "from", "to"] as const;
@@ -12,7 +13,7 @@ type QueryParams = string | Array<[string, string]> | Record<string, string>;
 
 type ScrubbableEvent = {
   transaction?: unknown;
-  request?: { url?: unknown; query_string?: unknown; headers?: Record<string, unknown> };
+  request?: { url?: unknown; query_string?: unknown; headers?: Record<string, unknown>; cookies?: unknown; data?: unknown };
   breadcrumbs?: Array<{ data?: Record<string, unknown> }>;
   contexts?: { trace?: { data?: Record<string, unknown> } };
   spans?: Array<{ description?: unknown; data?: Record<string, unknown> }>;
@@ -30,16 +31,23 @@ function scrubStringValues(data: Record<string, unknown> | undefined, keys: read
   }
 }
 
-function scrubQueryString(query: string): string {
+function scrubQueryValue(key: string, value: string, depth: number): string {
+  if (typeof value !== "string") return FILTERED;
+  if (SENSITIVE_KEYS.has(key)) return FILTERED;
+  if (NESTED_URL_KEYS.has(key)) return depth >= 3 ? FILTERED : scrubUrl(value, depth + 1);
+  return value.replace(INVITATION_TOKEN_SEGMENT, `$1${FILTERED}`);
+}
+
+function scrubQueryString(query: string, depth = 0): string {
   const params = new URLSearchParams(query);
-  if (![...params.keys()].some((key) => SENSITIVE_KEYS.has(key))) {
-    return query;
-  }
   const scrubbed = new URLSearchParams();
+  let changed = false;
   for (const [key, value] of params) {
-    scrubbed.append(key, SENSITIVE_KEYS.has(key) ? FILTERED : value);
+    const safe = scrubQueryValue(key, value, depth);
+    changed ||= safe !== value;
+    scrubbed.append(key, safe);
   }
-  return scrubbed.toString();
+  return changed ? scrubbed.toString() : query;
 }
 
 function scrubQueryParams(query: QueryParams): QueryParams {
@@ -47,10 +55,10 @@ function scrubQueryParams(query: QueryParams): QueryParams {
     return scrubQueryString(query);
   }
   if (Array.isArray(query)) {
-    return query.map(([key, value]) => [key, SENSITIVE_KEYS.has(key) ? FILTERED : value]);
+    return query.map(([key, value]) => [key, scrubQueryValue(key, value, 0)]);
   }
   return Object.fromEntries(
-    Object.entries(query).map(([key, value]) => [key, SENSITIVE_KEYS.has(key) ? FILTERED : value])
+    Object.entries(query).map(([key, value]) => [key, scrubQueryValue(key, value, 0)])
   );
 }
 
@@ -59,6 +67,10 @@ function scrubQueryParams(query: QueryParams): QueryParams {
  * the values of SENSITIVE_QUERY_KEYS and the token segment of /invitations/<token>.
  */
 export function scrubSensitiveUrl(value: string): string {
+  return scrubUrl(value, 0);
+}
+
+function scrubUrl(value: string, depth: number): string {
   const hashIndex = value.indexOf("#");
   const beforeHash = hashIndex === -1 ? value : value.slice(0, hashIndex);
   const hash = hashIndex === -1 ? "" : value.slice(hashIndex);
@@ -67,13 +79,13 @@ export function scrubSensitiveUrl(value: string): string {
   if (queryIndex === -1) {
     const isBareQuery = beforeHash.includes("=") && !beforeHash.startsWith("/") && !URL_SCHEME.test(beforeHash);
     if (isBareQuery) {
-      return scrubQueryString(beforeHash) + hash;
+      return scrubQueryString(beforeHash, depth) + hash;
     }
     return beforeHash.replace(INVITATION_TOKEN_SEGMENT, `$1${FILTERED}`) + hash;
   }
 
   const path = beforeHash.slice(0, queryIndex).replace(INVITATION_TOKEN_SEGMENT, `$1${FILTERED}`);
-  return `${path}?${scrubQueryString(beforeHash.slice(queryIndex + 1))}${hash}`;
+  return `${path}?${scrubQueryString(beforeHash.slice(queryIndex + 1), depth)}${hash}`;
 }
 
 /**
@@ -89,6 +101,11 @@ export function scrubSentryEventUrls<T extends object>(event: T): T {
   }
 
   if (request) {
+    // Staff cookies and auth POST bodies must never reach error/trace storage.
+    delete request.cookies;
+    if (typeof request.url === "string" && /\/(?:api\/(?:auth|oidc)|login|signup|set-password|forgot-password)(?:[/?#]|$)/.test(request.url)) {
+      if (request.data !== undefined) request.data = FILTERED;
+    }
     if (typeof request.url === "string") {
       request.url = scrubSensitiveUrl(request.url);
     }
@@ -96,6 +113,10 @@ export function scrubSentryEventUrls<T extends object>(event: T): T {
       request.query_string = scrubQueryParams(request.query_string as QueryParams);
     }
     for (const [name, value] of Object.entries(request.headers ?? {})) {
+      if (["cookie", "authorization", "proxy-authorization"].includes(name.toLowerCase()) && request.headers) {
+        delete request.headers[name];
+        continue;
+      }
       if (name.toLowerCase() === "referer" && typeof value === "string" && request.headers) {
         request.headers[name] = scrubSensitiveUrl(value);
       }

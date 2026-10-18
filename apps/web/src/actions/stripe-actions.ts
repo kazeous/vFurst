@@ -1,11 +1,12 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboard-access";
 import { prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
 import Stripe from "stripe";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
+import { requireStaffAssurance } from "@/lib/staff-verification";
 
 function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -18,7 +19,7 @@ function getStripe() {
 }
 
 async function requireOrgOwner(orgId: string) {
-  const session = await auth();
+  const session = await requireDashboardSession();
 
   if (!session?.user?.id) {
     redirect("/login");
@@ -43,6 +44,7 @@ async function requireOrgOwner(orgId: string) {
   }
 
   assertOrganizationActive(member.org.status);
+  await requireStaffAssurance();
 }
 
 export async function startStripeOnboarding(formData: FormData) {

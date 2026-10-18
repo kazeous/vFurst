@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   incrementSharedFixedWindow: vi.fn()
 }));
 
-vi.mock("@/lib/staff-oidc", () => ({ getStaffOidcMetadata: mocks.getStaffOidcMetadata }));
-vi.mock("jose", () => ({ createRemoteJWKSet: mocks.createRemoteJWKSet }));
+vi.mock("@/lib/staff-oidc", () => ({ getStaffOidcMetadata: mocks.getStaffOidcMetadata, staffOidcFetch: vi.fn() }));
+vi.mock("jose", () => ({ createRemoteJWKSet: mocks.createRemoteJWKSet, customFetch: Symbol("fetch") }));
 vi.mock("@/lib/redis-rate-limit", () => ({ incrementSharedFixedWindow: mocks.incrementSharedFixedWindow }));
 vi.mock("@/lib/staff-backchannel-logout", async () => {
   class LogoutTokenError extends Error {
@@ -62,25 +62,25 @@ describe("POST /api/oidc/backchannel-logout", () => {
     expect(mocks.applyBackchannelLogout).not.toHaveBeenCalled();
   });
 
-  it("rejects a replayed jti", async () => {
-    mocks.incrementSharedFixedWindow.mockResolvedValue({ count: 2, resetAt: 0 });
+  it("rate limits abusive requests before signature verification", async () => {
+    mocks.incrementSharedFixedWindow.mockResolvedValue({ count: 241, resetAt: Date.now() + 60_000 });
 
     const response = await POST(logoutRequest("replayed"));
 
-    expect(response.status).toBe(400);
-    expect(mocks.incrementSharedFixedWindow).toHaveBeenCalledWith("oidc-logout-jti:jti-1", 600_000);
+    expect(response.status).toBe(429);
+    expect(mocks.verifyLogoutToken).not.toHaveBeenCalled();
     expect(mocks.applyBackchannelLogout).not.toHaveBeenCalled();
   });
 
-  it("processes the token when the replay store is unavailable and logs degraded protection", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  it("processes signed logout when Redis is unavailable; DB receipts still protect replay", async () => {
+    const warn = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.incrementSharedFixedWindow.mockRejectedValue(new Error("redis down"));
 
     const response = await POST(logoutRequest("valid"));
 
     expect(response.status).toBe(200);
-    expect(mocks.applyBackchannelLogout).toHaveBeenCalledWith({ sub: "sub-1", sid: "sid-1" });
-    expect(warn).toHaveBeenCalledWith({ event: "oidc_backchannel_replay_check_degraded" });
+    expect(mocks.applyBackchannelLogout).toHaveBeenCalledWith({ sub: "sub-1", sid: "sid-1", jti: "jti-1" });
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
@@ -95,6 +95,15 @@ describe("POST /api/oidc/backchannel-logout", () => {
       clientId: "vfurst-local",
       jwks: "remote-jwks"
     });
-    expect(mocks.applyBackchannelLogout).toHaveBeenCalledWith({ sub: "sub-1", sid: "sid-1" });
+    expect(mocks.applyBackchannelLogout).toHaveBeenCalledWith({ sub: "sub-1", sid: "sid-1", jti: "jti-1" });
+  });
+  it("rejects duplicate fields and oversized bodies before cryptographic work", async () => {
+    for (const body of ["logout_token=a&logout_token=b", `logout_token=${"a".repeat(25_000)}`]) {
+      const response = await POST(new Request("http://localhost:3000/api/oidc/backchannel-logout", {
+        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body
+      }));
+      expect(response.status).toBe(400);
+    }
+    expect(mocks.verifyLogoutToken).not.toHaveBeenCalled();
   });
 });

@@ -38,6 +38,7 @@ export function ActionStateForm({
       {state.error ? (
         <div className="vf-banner vf-banner-error" role="alert" data-testid={errorTestId}>
           {state.error}
+          {state.verificationUrl ? <a href={state.verificationUrl} target="_blank" rel="noopener noreferrer">Verify your account</a> : null}
         </div>
       ) : null}
       {state.success ? (

@@ -26,6 +26,9 @@ function sessionTransaction(
   portalAccountTokenIds: string[] = []
 ) {
   return {
+    staffOidcTransaction: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
+    staffOidcRevocation: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
+    staffOidcLogoutReceipt: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
     session: {
       findMany: vi.fn().mockResolvedValue(selectedIds.map((id) => ({ id }))),
       deleteMany: vi.fn().mockResolvedValue({ count: selectedIds.length })
@@ -42,6 +45,17 @@ function sessionTransaction(
 }
 
 describe("identity protocol retention", () => {
+  it("prunes only bounded expired staff OIDC flows, fences and replay receipts", async () => {
+    const tx = sessionTransaction([]);
+    tx.staffOidcTransaction.findMany.mockResolvedValue([{ id: "flow" }]);
+    tx.staffOidcRevocation.findMany.mockResolvedValue([{ id: "fence" }]);
+    tx.staffOidcLogoutReceipt.findMany.mockResolvedValue([{ id: "receipt" }]);
+    await expect(cleanupIdentityProtocolRecordBatch(clientWithTransaction(tx), { now, batchSize: 1 })).resolves.toMatchObject({ hasMore: true });
+    for (const delegate of [tx.staffOidcTransaction, tx.staffOidcRevocation, tx.staffOidcLogoutReceipt]) {
+      expect(delegate.findMany).toHaveBeenCalledWith({ where: { expiresAt: { lte: now } }, select: { id: true }, orderBy: { expiresAt: "asc" }, take: 1 });
+      expect(delegate.deleteMany).toHaveBeenCalledWith({ where: { expiresAt: { lte: now }, id: { in: [expect.any(String)] } } });
+    }
+  });
   it("deletes only a bounded, rechecked batch of long-expired or long-revoked staff sessions", async () => {
     const tx = sessionTransaction([oldSessionId]);
 

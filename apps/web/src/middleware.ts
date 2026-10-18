@@ -4,6 +4,7 @@ import { getRootDomain, isPlatformHostname, normalizeHostname } from "./lib/plat
 import { canonicalPortalRedirect, centralPortalCandidate, portalHostKey } from "./lib/portal-canonical";
 import { lookupPortalHostOrganization } from "./lib/portal-host-directory";
 import { scrubVfurstInternalHeaders } from "./lib/request-headers";
+import { getCentralAppUrl } from "./lib/central-url";
 
 const ROOT_DOMAIN = getRootDomain();
 // next.config.ts rewrites a request carrying this header to /<portal key><path>.
@@ -57,6 +58,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   const platformHost = isPlatformHostname(hostname);
+  const staffPath = /^\/(?:login|dashboard|platform|invitations|staff)(?:\/|$)/.test(pathname) || /^\/api\/(?:auth|oidc)(?:\/|$)/.test(pathname);
+  if (platformHost && staffPath && hostname !== normalizeHostname(new URL(getCentralAppUrl()).hostname)) {
+    if (request.method === "GET" || request.method === "HEAD") {
+      return NextResponse.redirect(getCentralAppUrl(pathname + request.nextUrl.search), 308);
+    }
+    return NextResponse.json({ error: { code: "central_host_required", message: "Open this page on the central vFurst host." } }, {
+      status: 421, headers: { "cache-control": "no-store" }
+    });
+  }
   const slug = portalHostKey(hostname, ROOT_DOMAIN);
   const domainMode = hostname.endsWith(`.${ROOT_DOMAIN}`) ? "subdomain" : "custom-domain";
 
@@ -67,6 +77,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   if (pathname === "/api" || pathname.startsWith("/api/")) {
+    if (!platformHost && (pathname === "/api/auth" || pathname.startsWith("/api/auth/") ||
+      pathname === "/api/oidc" || pathname.startsWith("/api/oidc/"))) {
+      return NextResponse.json({ error: { code: "not_found", message: "Not found." } }, {
+        status: 404, headers: { "cache-control": "no-store" }
+      });
+    }
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
