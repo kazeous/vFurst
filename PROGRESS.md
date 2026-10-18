@@ -6,7 +6,7 @@
 
 ## Current phase
 
-**Phase 2 — Attendee & registration parity: Not started** (docs/plan/phase-2-attendee-parity.md). **Next session: unit 2.1 (REG-P1, attendee profiles and the multi-attendee registration flow) only; its plan is written at unit start.** Before it, merge PR #30 (the two staging fixes found by the Phase 1B smoke test) and PR #29 (`docs/` leaves the repository).
+**Phase 2 — Attendee & registration parity: Not started** (docs/plan/phase-2-attendee-parity.md). **Next session: unit 2.1 (REG-P1, attendee profiles and the multi-attendee registration flow) only; its plan is written at unit start.** Before it, merge PR #32 (event slug from the name and day-first date entry and display, the remaining 1B.5 staging follow-ups).
 
 **Phase 1B — Identity re-platform: Complete (2026-10-18).** Staff sign in only through the studio authentik; attendees, volunteers, and vendors use tenant-scoped portal accounts on the canonical portal host. Merged to `staging` in PR #28 (`96b99f3`) and smoke-tested on the deployment; the evidence is in the 1B.5 entries below.
 
@@ -36,7 +36,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ### 2026-10-18 — Staging fix: every date display reads day-first
 
-- **Executor:** Claude, inline (TDD), a side session of the slug/date fix below. Branch `claude/adoring-proskuriakova-d8ce27`, cut from `fix/event-form-slug-and-dates` (`a8b8c89`). Not pushed.
+- **Executor:** Claude, inline (TDD), a side session of the slug/date fix below. Branch `claude/adoring-proskuriakova-d8ce27`, cut from `fix/event-form-slug-and-dates` (`a8b8c89`); fast-forwarded into that branch and shipped in PR #32.
 - **What changed:**
   - Every display that called `Date#toLocaleDateString()`/`toLocaleString()` without a locale now goes through `formatDate` (`apps/web/src/lib/i18n.ts`, `en-GB`): 30 calls in 24 files: the portal hotel cutoff label; account hotel, orders, order detail, raffles, registration detail, transfers, transfer detail; the staff invitation page; dashboard events, badges, hotel, raffle, registrations, registration detail, transfers, email settings, staff applications, store, store orders; organization members; platform email operations and payouts; and `BadgePrintControls`. Date-only values use `formatDate(value)` ("14 Mar 2026"); date-times use `{ dateStyle: "medium", timeStyle: "short" }` ("14 Mar 2026, 19:00").
   - `formatTransferExpiry` (`apps/web/src/lib/registration-transfer.ts`), which feeds the registration-transfer email, formatted with `en-US`; it now uses `formatDate` and keeps its explicit UTC zone ("23 Jul 2026, 12:00 UTC").
@@ -52,7 +52,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ### 2026-10-18 — Staging fix: event slug from name, dd/mm/yyyy dates
 
-- **Executor:** Claude, inline (TDD), at the user's request; the first 1B.5 follow-up. Branch `fix/event-form-slug-and-dates` from `origin/staging`, rebased onto `8f5efeb` (PRs #29/#30). Not pushed.
+- **Executor:** Claude, inline (TDD), at the user's request; the first 1B.5 follow-up. Branch `fix/event-form-slug-and-dates` from `origin/staging`, rebased onto `8f5efeb` (PRs #29/#30); PR #32, which also merges `staging` after #31.
 - **What changed:**
   - **Slug:** the organization's Create event card and the event wizard share `EventNameSlugFields` (`apps/web/src/components/forms/event-name-slug-fields.tsx`): the slug follows `slugify(name)` (`apps/web/src/lib/slug.ts`: lowercase ASCII, accents and Vietnamese đ transliterated, hyphen-joined, ≤ 64) until the organizer types one, and follows again once they clear it. The server's event schema is unchanged and still rejects a bad hand-typed slug.
   - **Date entry:** every `<input type="date">` in `apps/web` is now `DateField` (`apps/web/src/components/ui/date-field.tsx`): a text input showing dd/mm/yyyy whatever the browser locale, plus a hidden input carrying ISO yyyy-mm-dd under the original name, so no server action changed. Parsing is `apps/web/src/lib/date-input.ts` (day first; `/`, `.` or `-`; impossible dates and two-digit years rejected through native validation with "Enter the date as dd/mm/yyyy."). Uncontrolled fields (`defaultValue`) restore their default on form reset like native inputs; the controlled hotel booking and volunteer fields (`value`/`onValueChange`) keep typed dates after a rejected submit.
@@ -63,8 +63,20 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
   - Gates on the rebased branch `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached** — web 421, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **652**.
   - Full production E2E (`E2E_PRODUCTION=1`, `--workers=1`, on the gate's fresh web build): the first run was 153/1, the visual test failing on `public-portal-desktop` only in the date line ("Aug 1, 2027 – Aug 4, 2027" → "1 Aug 2027 – 4 Aug 2027"). `--update-snapshots` rewrote only `public-portal-desktop` and `public-portal-mobile` (mobile pixel changes confined to the date line); the other eight baselines matched. Final full run **154 passed / 0 failed / 0 did not run (3.3 m)**.
   - Another local session ran production E2E on port 3000 during this work; `run-e2e.mjs` reuses any reachable server, so every recorded run here started only after the port was free.
-- **Not covered:** about 30 displays still call `toLocaleDateString()`/`toLocaleString()` without a locale (account, dashboard hotel/registrations/raffle/transfers pages, hotel cutoff label, invitation expiry, …) and read month-first on an en-US server; `registration-transfer.ts` formats with `en-US`. Left for a follow-up.
+- **Not covered here:** the remaining locale-less date displays; done in the day-first display entry above (same PR).
 - **Next:** unchanged — merge this branch into `staging` with the user's go, then unit 2.1.
+
+### 2026-10-18 — Portal registration finished state (1B.5 smoke follow-up)
+
+- **Executor:** Claude, inline, at the user's request; branch `feat/registration-success-state` from `staging` (`8f5efeb`). Not pushed.
+- **What changed:** when `/register?success=<id>` finds the registration, the page replaces the flow with a finished state: attendee, event, ticket, and approval status, a primary **View my registrations** link to `/account/registrations`, and a secondary **Register another ticket** link to `/register`. While the lookup is pending it shows "Checking your registration"; a failed lookup still falls back to the flow, and `?cancelled` keeps its alert above the flow. `RegistrationStatusAlert` became `RegistrationOutcome` (`registration-outcome.tsx`), which wraps the page body. The page stays ISR (`revalidate` 15, no `headers()`/`cookies()`) and prerenders the body as the Suspense fallback. Paid checkout is unchanged and returns to the same success path, so a paid registration also lands on the finished state.
+- **Test-first:** the free-registration test in `launch-critical-paths.spec.ts` asserts the finished details, that step 1 is gone once the account check settles, and both links. It failed against the old page (no finished region; with those assertions isolated, step 1 still shown).
+- **Verification (rebased on `8f5efeb`):** gates `npx turbo run type-check lint test build --concurrency=1` **29/29** (web tasks executed; 24 cache hits) — web 386, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **617**; only the known BullMQ warning and Next's workspace-root notice (the nested worktree has its own lockfile). Fresh web build, full production E2E **148 passed / 0 failed / 0 did not run** (also 148/0/0 before the rebase, on `96b99f3`).
+- **Environmental failure on the way:** two earlier rebased runs were 145 passed / 1 failed / 2 did not run. `email-delivery-operations.spec.ts` › "platform operators can inspect and replay safe dead letters…" failed strict mode on two "Single-use content" rows. The platform dead-letter list is global, and the shared local database held an orphaned non-replayable `organization-invitation` dead letter (`582a8e16-9437-41c8-90f2-8b5792826bcb`, `orgId` null, `MISSING_DELIVERY_SCOPE`). Another worktree's concurrent E2E run had enqueued it at 21:28, and this run's worker drained the shared queue at 21:32, after that test's organization was gone. With the user's go, that one row was deleted, giving the green run above.
+- **Notes:**
+  - `scripts/run-e2e.mjs` reuses any server already answering on port 3000, and all worktrees share one Postgres, Redis queue, and Mailpit. Two worktrees running E2E at once test each other's build and leave each other's jobs behind. Check the port first.
+  - The email-delivery spec asserts a single "Single-use content" on a platform-wide page, so any orphaned non-replayable dead letter breaks it.
+  - Unchanged: `/api/public/registration-confirmation` answers for any registration the account owns, including one whose paid order never completed, so a hand-typed success URL shows it as finished.
 
 ### 2026-10-18 — Phase 1B unit 1B.5: release and deployed smoke (Phase 1B complete)
 
