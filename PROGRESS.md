@@ -63,6 +63,7 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
   - Gates on the rebased branch `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached** — web 421, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **652**.
   - Full production E2E (`E2E_PRODUCTION=1`, `--workers=1`, on the gate's fresh web build): the first run was 153/1, the visual test failing on `public-portal-desktop` only in the date line ("Aug 1, 2027 – Aug 4, 2027" → "1 Aug 2027 – 4 Aug 2027"). `--update-snapshots` rewrote only `public-portal-desktop` and `public-portal-mobile` (mobile pixel changes confined to the date line); the other eight baselines matched. Final full run **154 passed / 0 failed / 0 did not run (3.3 m)**.
   - Another local session ran production E2E on port 3000 during this work; `run-e2e.mjs` reuses any reachable server, so every recorded run here started only after the port was free.
+  - After merging `staging` (#31) into the PR branch, which also carries the day-first display commits above: gates `--force` **29/29, 0 cached**, **653** tests (web 422); full production E2E **155 passed / 0 failed / 0 did not run (3.8 m)**.
 - **Not covered here:** the remaining locale-less date displays; done in the day-first display entry above (same PR).
 - **Next:** unchanged — merge this branch into `staging` with the user's go, then unit 2.1.
 
