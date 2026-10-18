@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRegistrationTransferToken,
+  formatTransferExpiry,
   getRegistrationTransferUrl,
   getRegistrationTransferPath,
   hashRegistrationTransferToken,
@@ -46,5 +47,12 @@ describe("registration transfer credentials", () => {
     expect(getRegistrationTransferUrl({ ...org, customDomain: "tickets.acme.test", customDomainStatus: "ACTIVE" }, "r1", token)).toBe(
       `http://tickets.acme.test:3000/account/transfers/r1?token=${token}`
     );
+  });
+});
+
+describe("formatTransferExpiry", () => {
+  it("states the expiry day-first in UTC for the invitation email", () => {
+    expect(formatTransferExpiry(new Date("2026-07-23T12:00:00Z"))).toBe("23 Jul 2026, 12:00 UTC");
+    expect(formatTransferExpiry(new Date("2026-07-23T23:30:00-05:00"))).toBe("24 Jul 2026, 04:30 UTC");
   });
 });

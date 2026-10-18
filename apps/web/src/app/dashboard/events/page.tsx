@@ -1,4 +1,5 @@
 import { EventsTable } from "@/app/dashboard/events/events-table";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,7 @@ export default async function EventsPage() {
             name: event.name,
             orgName: event.org.name,
             status: event.status,
-            startDate: event.startDate.toLocaleDateString(),
+            startDate: formatDate(event.startDate),
             registrationCount: event.registrations.length,
             revenue: formatCurrency(
               event.orders

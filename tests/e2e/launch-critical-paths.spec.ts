@@ -365,13 +365,14 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await wizard.locator('select[name="orgId"]').selectOption(orgId);
   await wizard.getByLabel("Event name").fill(`Invalid event ${runId}`);
   await wizard.getByLabel("Slug").fill(`invalid-event-${runId}`);
-  await wizard.getByLabel("Start date").fill("2028-08-02");
-  await wizard.getByLabel("End date").fill("2028-08-01");
+  await wizard.getByLabel("Start date").fill("02/08/2028");
+  await wizard.getByLabel("End date").fill("01/08/2028");
   await wizard.locator('input[name="tierName"]').first().fill("General");
   await wizard.locator('input[name="tierPrice"]').first().fill("0");
   await wizard.getByRole("button", { name: "Create event" }).click();
   await expect(page.getByTestId("event-wizard-error")).toContainText("End date must be after the start date.");
   await expect(wizard.getByLabel("Event name")).toHaveValue(`Invalid event ${runId}`);
+  await expect(wizard.getByLabel("Start date")).toHaveValue("02/08/2028");
   await expect(wizard.getByRole("button", { name: "Create event" })).toBeEnabled();
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.event.count({ where: { slug: `invalid-event-${runId}` } })).toBe(0);

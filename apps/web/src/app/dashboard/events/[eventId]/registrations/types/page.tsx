@@ -10,6 +10,7 @@ import { SortableTierList } from "@/app/dashboard/events/[eventId]/registrations
 import { formatCurrency, parseScheduledPricing } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { notFound } from "next/navigation";
 
 export default async function RegistrationTypesPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -71,11 +72,11 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
             <div className="vf-subform-row">
               <label>
                 Price start
-                <input name="scheduledStart" type="date" />
+                <DateField name="scheduledStart" />
               </label>
               <label>
                 Price end
-                <input name="scheduledEnd" type="date" />
+                <DateField name="scheduledEnd" />
               </label>
               <label>
                 Scheduled price
@@ -123,11 +124,11 @@ export default async function RegistrationTypesPage({ params }: { params: Promis
                 <div className="vf-subform-row">
                   <label>
                     Price start
-                    <input name="scheduledStart" type="date" defaultValue={schedules[0]?.startDate.slice(0, 10) ?? ""} />
+                    <DateField name="scheduledStart" defaultValue={schedules[0]?.startDate.slice(0, 10) ?? ""} />
                   </label>
                   <label>
                     Price end
-                    <input name="scheduledEnd" type="date" defaultValue={schedules[0]?.endDate.slice(0, 10) ?? ""} />
+                    <DateField name="scheduledEnd" defaultValue={schedules[0]?.endDate.slice(0, 10) ?? ""} />
                   </label>
                   <label>
                     Scheduled price

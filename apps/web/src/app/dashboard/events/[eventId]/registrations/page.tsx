@@ -1,4 +1,5 @@
 import { RegistrationsTable } from "@/app/dashboard/events/[eventId]/registrations/registrations-table";
+import { formatDate } from "@/lib/i18n";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 
@@ -46,7 +47,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
             type: registration.type.name,
             status: registration.status,
             approvalStatus: registration.approvalStatus,
-            createdAt: registration.createdAt.toLocaleDateString()
+            createdAt: formatDate(registration.createdAt)
           }))}
         />
       </section>

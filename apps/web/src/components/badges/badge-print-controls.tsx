@@ -2,6 +2,7 @@
 
 import { confirmBadgePrinted, queueBadgeRender } from "@/actions/phase5-actions";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { getWebUsbSupport, printZplQueue, type PrintJob } from "@/lib/webusb-printer";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -112,7 +113,7 @@ export function BadgePrintControls({
         <Button label={generatedAt ? "Regenerate output" : "Generate output"} type="submit" size="sm" />
       </form>
       <small className="vf-muted" aria-live="polite">
-        {printedAt ? `Printed ${new Date(printedAt).toLocaleString()}. ` : ""}
+        {printedAt ? `Printed ${formatDate(printedAt, { dateStyle: "medium", timeStyle: "short" })}. ` : ""}
         {message}
       </small>
     </div>

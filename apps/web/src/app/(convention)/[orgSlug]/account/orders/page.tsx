@@ -1,5 +1,6 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
@@ -19,7 +20,7 @@ export default async function AccountOrdersPage({ params }: { params: Promise<{ 
       {orders.map((order) => (
         <article key={order.id} className="vf-section">
           <div className="vf-page-header">
-            <div><p className="vf-label">{order.org.name} · {order.createdAt.toLocaleString()}</p><h3>{order.event.name}</h3><p className="vf-muted">{order.items.length} item(s) · {formatCurrency(order.total, order.currency)}</p></div>
+            <div><p className="vf-label">{order.org.name} · {formatDate(order.createdAt, { dateStyle: "medium", timeStyle: "short" })}</p><h3>{order.event.name}</h3><p className="vf-muted">{order.items.length} item(s) · {formatCurrency(order.total, order.currency)}</p></div>
             <AccountStatus status={order.status} />
           </div>
           <Button label="View receipt" href={`/account/orders/${order.id}`} variant="primary" size="sm" />
