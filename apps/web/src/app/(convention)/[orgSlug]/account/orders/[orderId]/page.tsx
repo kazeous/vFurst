@@ -1,5 +1,6 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
@@ -27,7 +28,7 @@ export default async function AccountOrderDetailPage({ params }: { params: Promi
   return (
     <section className="vf-section">
       <div className="vf-page-header">
-        <div><p className="vf-label">Order {order.id.slice(0, 8).toUpperCase()}</p><h2>{order.event.name}</h2><p className="vf-muted">{order.org.name} · {order.createdAt.toLocaleString()}</p></div>
+        <div><p className="vf-label">Order {order.id.slice(0, 8).toUpperCase()}</p><h2>{order.event.name}</h2><p className="vf-muted">{order.org.name} · {formatDate(order.createdAt, { dateStyle: "medium", timeStyle: "short" })}</p></div>
         <AccountStatus status={order.status} />
       </div>
       <div className="vf-table">

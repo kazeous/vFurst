@@ -3,6 +3,7 @@ import { ActionStateForm } from "@/components/action-state-form";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { prisma, type EmailDeliveryStatus } from "@vfurst/db";
 
 export const dynamic = "force-dynamic";
@@ -96,7 +97,7 @@ export default async function PlatformEmailOperationsPage() {
                   <strong>{delivery.event?.name ?? delivery.org?.name ?? "Platform"}</strong>
                   <small>{delivery.org?.name ?? "Central service"}</small>
                 </span>
-                <span><strong>{delivery.template}</strong><small>{maskEmail(delivery.recipient)} · {delivery.createdAt.toLocaleString()}</small></span>
+                <span><strong>{delivery.template}</strong><small>{maskEmail(delivery.recipient)} · {formatDate(delivery.createdAt, { dateStyle: "medium", timeStyle: "short" })}</small></span>
                 <span><Badge label={formatStatus(delivery.status)} variant={statusVariant(delivery.status)} /></span>
                 <span>
                   {latestAttempt ? `#${latestAttempt.attemptNumber} ${formatStatus(latestAttempt.status)}` : "Not started"}

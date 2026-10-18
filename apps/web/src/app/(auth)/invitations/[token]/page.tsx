@@ -2,6 +2,7 @@ import { acceptOrganizationInvitation } from "@/actions/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { auth, signIn } from "@/lib/auth";
+import { formatDate } from "@/lib/i18n";
 import { prisma } from "@vfurst/db";
 import {
   getOrganizationInvitationByToken,
@@ -75,7 +76,7 @@ export default async function OrganizationInvitationPage({
           <dt>Role</dt>
           <dd>{invitation.role}</dd>
           <dt>Expires</dt>
-          <dd>{invitation.expiresAt.toLocaleString()}</dd>
+          <dd>{formatDate(invitation.expiresAt, { dateStyle: "medium", timeStyle: "short" })}</dd>
         </dl>
         {errorCode && errorMessages[errorCode] && !(errorCode === "EMAIL_UNVERIFIED" && session?.user && !emailVerified) ? (
           <div className="vf-banner vf-banner-warning">{errorMessages[errorCode]}</div>

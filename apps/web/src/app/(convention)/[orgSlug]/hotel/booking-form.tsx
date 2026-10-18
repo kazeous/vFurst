@@ -3,6 +3,7 @@
 import { bookRoom } from "@/actions/hotel-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
@@ -60,11 +61,11 @@ export function HotelBookingForm({
       <div className="vf-form-grid">
         <label>
           Check-in
-          <input name="checkIn" type="date" required value={checkIn} onChange={(event) => setCheckIn(event.target.value)} />
+          <DateField name="checkIn" required value={checkIn} onValueChange={setCheckIn} />
         </label>
         <label>
           Check-out
-          <input name="checkOut" type="date" required value={checkOut} onChange={(event) => setCheckOut(event.target.value)} />
+          <DateField name="checkOut" required value={checkOut} onValueChange={setCheckOut} />
         </label>
       </div>
       <div className="vf-form-grid">

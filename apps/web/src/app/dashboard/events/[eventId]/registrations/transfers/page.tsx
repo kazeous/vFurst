@@ -3,6 +3,7 @@ import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { formatDate } from "@/lib/i18n";
 import { cancelRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 
 export const dynamic = "force-dynamic";
@@ -116,7 +117,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
               <div key={request.id} className="vf-list-row">
                 <span>{request.sourceRegistration.portalAccount.email} → {request.recipientEmail}</span>
                 <small>
-                  {request.sourceRegistration.type.name} · {status} · expires {request.expiresAt.toLocaleString()}
+                  {request.sourceRegistration.type.name} · {status} · expires {formatDate(request.expiresAt, { dateStyle: "medium", timeStyle: "short" })}
                   {request.recipient ? ` · claimed by ${request.recipient.email}` : ""}
                 </small>
                 {request.status === "PENDING" ? (

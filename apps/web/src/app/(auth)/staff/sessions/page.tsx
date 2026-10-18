@@ -5,6 +5,7 @@ import { staffSignOut, staffSignOutEverywhere, revokeOtherStaffSession } from "@
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { ActionStateForm } from "@/components/action-state-form";
+import { formatDate } from "@/lib/i18n";
 
 export default async function StaffSessionsPage() {
   const session = await auth();
@@ -20,7 +21,7 @@ export default async function StaffSessionsPage() {
       <p>Staff sessions expire after 30 minutes of inactivity and at most 12 hours.</p>
       <ul className="vf-stack">
         {sessions.map((item) => <li key={item.id}>
-          <p>{item.id === session.identitySessionId ? "This session" : "Another session"} · Started <time dateTime={item.createdAt.toISOString()}>{item.createdAt.toLocaleString("en-GB", { timeZone: "UTC" })} UTC</time></p>
+          <p>{item.id === session.identitySessionId ? "This session" : "Another session"} · Started <time dateTime={item.createdAt.toISOString()}>{formatDate(item.createdAt, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC</time></p>
           {item.id !== session.identitySessionId ? <ActionStateForm action={revokeOtherStaffSession}>
             <input type="hidden" name="sessionId" value={item.id} />
             <Button type="submit" variant="outline" label="End session" />

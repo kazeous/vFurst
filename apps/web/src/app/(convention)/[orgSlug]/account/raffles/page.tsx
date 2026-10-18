@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/i18n";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { getCoreRegistrationEligibilityDescription, parseRaffleEligibility } from "@/lib/raffle-policy";
 import { prisma } from "@vfurst/db";
@@ -51,7 +52,7 @@ export default async function AccountRafflesPage({ params }: { params: Promise<{
           {wins.map((win) => (
             <div key={win.id} className="vf-list-row">
               <span><strong>{win.prizeName}</strong><small>{win.raffle.name} · {win.raffle.event.name}</small></span>
-              <small>Award {win.awardNumber} · {win.drawnAt.toLocaleString()} · {win.notifiedAt ? "Notified" : "Notification pending"}</small>
+              <small>Award {win.awardNumber} · {formatDate(win.drawnAt, { dateStyle: "medium", timeStyle: "short" })} · {win.notifiedAt ? "Notified" : "Notification pending"}</small>
             </div>
           ))}
           {wins.length === 0 ? <p className="vf-empty">No winning results yet.</p> : null}

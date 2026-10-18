@@ -3,6 +3,7 @@ import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -107,7 +108,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
                 <span>{badge?.barcodeData ?? "Not generated"}</span>
                 <span>
                   {badge?.printedAt
-                    ? `Printed ${badge.printedAt.toLocaleString()}`
+                    ? `Printed ${formatDate(badge.printedAt, { dateStyle: "medium", timeStyle: "short" })}`
                     : badge?.generatedAt
                       ? "Output ready"
                       : badge

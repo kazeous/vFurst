@@ -258,6 +258,27 @@ test("public registration completes and creates a paid zero-dollar order", async
   await page.waitForURL(`${portalOrigin(orgSlug)}/register?success=${registration.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
 
+  // A confirmed registration replaces the flow with a finished state instead
+  // of restarting at step 1.
+  const finished = page.getByRole("region", { name: "Registration confirmed" });
+  await expect(finished.getByRole("term")).toHaveText(["Attendee", "Event", "Ticket", "Approval"]);
+  await expect(finished.getByRole("definition")).toHaveText(["Launch Attendee", "Launch Test 2027", "Launch General", "Approved"]);
+  await expect(finished.getByRole("link", { name: "View my registrations" })).toHaveAttribute("href", "/account/registrations");
+  // Once no account check is pending, a flow rendered beside the finished
+  // state would already show its first step.
+  await expect(page.getByRole("heading", { name: "Checking your account" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toHaveCount(0);
+
+  await finished.getByRole("link", { name: "Register another ticket" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/register`);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Registration confirmed" })).toHaveCount(0);
+
+  await page.goto(`${portalOrigin(orgSlug)}/register?success=${registration.id}`);
+  await page.getByRole("region", { name: "Registration confirmed" }).getByRole("link", { name: "View my registrations" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/account/registrations`);
+  await expect(page.getByRole("heading", { name: "Launch Test 2027", level: 3, exact: true })).toBeVisible({ timeout: 30_000 });
+
   registrationId = registration.id;
   expect(registration.typeId).toBe(registrationTypeId);
   expect(registration.status).toBe("CONFIRMED");
@@ -344,13 +365,14 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await wizard.locator('select[name="orgId"]').selectOption(orgId);
   await wizard.getByLabel("Event name").fill(`Invalid event ${runId}`);
   await wizard.getByLabel("Slug").fill(`invalid-event-${runId}`);
-  await wizard.getByLabel("Start date").fill("2028-08-02");
-  await wizard.getByLabel("End date").fill("2028-08-01");
+  await wizard.getByLabel("Start date").fill("02/08/2028");
+  await wizard.getByLabel("End date").fill("01/08/2028");
   await wizard.locator('input[name="tierName"]').first().fill("General");
   await wizard.locator('input[name="tierPrice"]').first().fill("0");
   await wizard.getByRole("button", { name: "Create event" }).click();
   await expect(page.getByTestId("event-wizard-error")).toContainText("End date must be after the start date.");
   await expect(wizard.getByLabel("Event name")).toHaveValue(`Invalid event ${runId}`);
+  await expect(wizard.getByLabel("Start date")).toHaveValue("02/08/2028");
   await expect(wizard.getByRole("button", { name: "Create event" })).toBeEnabled();
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.event.count({ where: { slug: `invalid-event-${runId}` } })).toBe(0);

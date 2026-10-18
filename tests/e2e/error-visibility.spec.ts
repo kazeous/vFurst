@@ -71,7 +71,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: { in: [orgSlug, boundaryOrgSlug] } } });
-  await prisma.user.deleteMany({ where: { id: { in: [userId, memberId] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [userId, memberId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 

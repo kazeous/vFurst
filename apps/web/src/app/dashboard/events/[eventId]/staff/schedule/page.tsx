@@ -2,6 +2,7 @@ import { assignShift, createStaffRole, deleteStaffRole, massEmailDepartment, rem
 import { ShiftAssignmentBoard } from "@/app/dashboard/events/[eventId]/staff/schedule/shift-assignment-board";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -162,7 +163,7 @@ export default async function StaffSchedulePage({ params }: { params: Promise<{ 
           <div className="vf-subform-row">
             <label>
               Date
-              <input name="shiftDate" type="date" defaultValue={today} required />
+              <DateField name="shiftDate" defaultValue={today} required />
             </label>
             <label>
               Start
