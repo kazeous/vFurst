@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma, type CurrencyCode } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { notFound } from "next/navigation";
 
 function discountLabel(voucher: { discountType: "PERCENT" | "AMOUNT"; discountValue: number; restrictions: unknown }, currency: CurrencyCode) {
@@ -80,7 +81,7 @@ export default async function VouchersPage({ params }: { params: Promise<{ event
               </label>
               <label>
                 Expires
-                <input name="expiresAt" type="date" />
+                <DateField name="expiresAt" />
               </label>
             </div>
             <div className="vf-stack">

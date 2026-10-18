@@ -2,6 +2,8 @@
 
 import { createEventWithRegistrationTypes } from "@/actions/event-actions";
 import { ActionStateForm } from "@/components/action-state-form";
+import { EventNameSlugFields } from "@/components/forms/event-name-slug-fields";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl, SegmentedControlItem } from "@/components/ui/segmented-control";
 import { useState } from "react";
@@ -54,14 +56,7 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
             <option value="VND">VND - Vietnamese dong</option>
           </select>
         </label>
-        <label>
-          Event name
-          <input name="name" required placeholder="vFurstCon 2027" />
-        </label>
-        <label>
-          Slug
-          <input name="slug" required placeholder="vfurstcon-2027" />
-        </label>
+        <EventNameSlugFields nameLabel="Event name" />
         <label>
           Description
           <textarea name="description" rows={4} placeholder="A concise public event description." />
@@ -73,11 +68,11 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
         <div className="vf-form-grid">
           <label>
             Start date
-            <input name="startDate" type="date" required />
+            <DateField name="startDate" required />
           </label>
           <label>
             End date
-            <input name="endDate" type="date" required />
+            <DateField name="endDate" required />
           </label>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
 import { getProviderStates, getSePaySettings, isSePayEnvironmentReady } from "@/lib/payments/platform";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
@@ -150,7 +151,7 @@ export default async function PlatformPaymentsPage({
                   />
                 </label>
                 <label>Bank transfer reference<input name="reference" required /></label>
-                <label>Paid date<input name="paidAt" type="date" defaultValue={today} required /></label>
+                <label>Paid date<DateField name="paidAt" defaultValue={today} required /></label>
               </div>
               <Button label="Record payout" type="submit" variant="primary" />
             </ActionStateForm>
@@ -171,7 +172,7 @@ export default async function PlatformPaymentsPage({
               <p className="vf-muted">{order.org.name} · order {order.id}</p>
               <div className="vf-form-grid">
                 <label>Refund transfer reference<input name="reference" required /></label>
-                <label>Processed date<input name="processedAt" type="date" defaultValue={today} required /></label>
+                <label>Processed date<DateField name="processedAt" defaultValue={today} required /></label>
               </div>
               <label>Reason<input name="reason" /></label>
               <Button label="Record full refund" type="submit" variant="destructive" />

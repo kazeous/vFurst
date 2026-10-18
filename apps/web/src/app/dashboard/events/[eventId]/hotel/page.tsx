@@ -3,6 +3,7 @@ import { ActionStateForm } from "@/components/action-state-form";
 import { formatCurrency, formatMoneyInput, parseRoomTypes } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { notFound } from "next/navigation";
 
 export default async function HotelManagementPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -55,7 +56,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
             </label>
             <label>
               Cutoff date
-              <input name="cutoffDate" type="date" required />
+              <DateField name="cutoffDate" required />
             </label>
             {[0, 1, 2].map((index) => (
               <div key={index} className="vf-subform-row">
@@ -111,7 +112,7 @@ export default async function HotelManagementPage({ params }: { params: Promise<
                   </label>
                   <label>
                     Cutoff date
-                    <input name="cutoffDate" type="date" defaultValue={block.cutoffDate.toISOString().slice(0, 10)} required />
+                    <DateField name="cutoffDate" defaultValue={block.cutoffDate.toISOString().slice(0, 10)} required />
                   </label>
                 </div>
                 {roomTypes.map((room) => {
