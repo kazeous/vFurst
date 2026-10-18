@@ -186,18 +186,34 @@ test("a verified studio email accepts an invitation", async ({ page }) => {
   expect(membership?.role).toBe("ADMIN");
 });
 
-test("an unverified studio email cannot accept an invitation", async ({ page }) => {
+test("an unverified studio email verifies, signs in again, then accepts the invitation", async ({ page }) => {
   const token = await inviteToken(emails.invitedUnverified);
   await loginAsStaff(page, invitedUnverified, { returnTo: `/invitations/${token}` });
 
-  await expect(page.getByTestId("invitation-email-unverified")).toContainText(
-    "Your Reyuu Games account email is not verified yet. Verify it in your Reyuu Games account, then sign in again to accept this invitation."
+  const unverified = page.getByTestId("invitation-email-unverified");
+  await expect(unverified).toContainText(
+    "Your Reyuu Games account email is not verified yet. Verify it, then sign in again here to accept this invitation."
   );
-  await expect(page.getByRole("link", { name: "Manage your Reyuu Games account" })).toHaveAttribute(
+  await expect(unverified).toContainText("If you cannot verify it yourself, ask a Reyuu Games administrator.");
+  await expect(page.getByRole("link", { name: "Verify your email" })).toHaveAttribute(
     "href",
-    "http://localhost:8090/if/user/"
+    "http://localhost:8090/if/flow/vfurst-verify-email/"
   );
   await expect(page.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
   expect(await prisma.orgMember.count({ where: { userId: invitedUnverified.id } })).toBe(0);
   expect((await prisma.user.findUniqueOrThrow({ where: { id: invitedUnverified.id } })).emailVerified).toBeNull();
+
+  // The studio account is verified now: signing in again re-reads the claim and returns here.
+  await page.getByRole("button", { name: "Sign in again" }).click();
+  await page.waitForURL((url) => url.port === "8090");
+  await page.locator('input[name="username"]').fill(invitedUnverified.sub);
+  await page
+    .locator('textarea[name="claims"]')
+    .fill(JSON.stringify({ email: emails.invitedUnverified, email_verified: true, groups: [] }));
+  await page.locator('input[type="submit"]').click();
+  await page.waitForURL((url) => url.pathname === `/invitations/${token}`, { waitUntil: "load" });
+
+  await page.getByRole("button", { name: "Accept invitation" }).click();
+  await page.waitForURL((url) => url.pathname === `/dashboard/organizations/${orgId}`, { waitUntil: "load" });
+  expect(await prisma.orgMember.count({ where: { userId: invitedUnverified.id, orgId } })).toBe(1);
 });

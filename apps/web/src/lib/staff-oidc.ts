@@ -63,3 +63,10 @@ export function buildStaffEndSessionUrl(
 export function getStaffAccountManagementUrl(): string {
   return new URL("/if/user/", new URL(configuredIssuer()).origin).toString();
 }
+
+/** The authentik flow that verifies a staff email; set up per docs/launch/authentik-setup.md. */
+export const STAFF_EMAIL_VERIFICATION_FLOW_SLUG = "vfurst-verify-email";
+
+export function getStaffEmailVerificationUrl(): string {
+  return new URL(`/if/flow/${STAFF_EMAIL_VERIFICATION_FLOW_SLUG}/`, new URL(configuredIssuer()).origin).toString();
+}

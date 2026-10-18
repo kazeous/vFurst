@@ -3,6 +3,7 @@ import {
   buildStaffEndSessionUrl,
   clearStaffOidcMetadataCache,
   getStaffAccountManagementUrl,
+  getStaffEmailVerificationUrl,
   getStaffOidcMetadata
 } from "./staff-oidc";
 
@@ -85,5 +86,11 @@ describe("staff OIDC helpers", () => {
     vi.stubEnv("AUTH_AUTHENTIK_ISSUER", "https://account.reyuugames.com/application/o/vfurst/");
 
     expect(getStaffAccountManagementUrl()).toBe("https://account.reyuugames.com/if/user/");
+  });
+
+  it("links to the vfurst-verify-email flow on the issuer origin", () => {
+    vi.stubEnv("AUTH_AUTHENTIK_ISSUER", "https://account.reyuugames.com/application/o/vfurst/");
+
+    expect(getStaffEmailVerificationUrl()).toBe("https://account.reyuugames.com/if/flow/vfurst-verify-email/");
   });
 });

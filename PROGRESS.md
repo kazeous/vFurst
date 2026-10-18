@@ -6,17 +6,21 @@
 
 ## Current phase
 
-**Phase 1B — Identity re-platform: In progress** (docs/plan/phase-1b-identity.md; design docs/superpowers/specs/2026-10-13-identity-replatform-design.md). Units 1B.1–1B.4 complete on `feat/identity-replatform` (not merged). Unit 1B.4 (staff SSO) closed with clean serial gates **29/29**, **606/606 tests**, boot configuration PASS, and fresh full production E2E **147 passed / 0 failed / 0 did not run**. Unit 1B.5 (closeout and deploy, plan `docs/superpowers/plans/2026-10-17-phase-1b-unit-5-closeout-and-deploy.md`) passed its local gate: gates **29/29**, **613/613 tests**, full production E2E **148 passed / 0 failed / 0 did not run**, 500/50 load proof p95 **816.66 ms**. **Next: 1B.5 Task 6 — the operator release steps (push and PR into `staging`, authentik, DNS/TLS, Coolify environment, staging database reset, merge), each only with the user's go.**
+**Phase 2 — Attendee & registration parity: Not started** (docs/plan/phase-2-attendee-parity.md). **Next session: unit 2.1 (REG-P1, attendee profiles and the multi-attendee registration flow) only; its plan is written at unit start.** Before it, merge PR #30 (the two staging fixes found by the Phase 1B smoke test) and PR #29 (`docs/` leaves the repository).
 
-Phase 1 (Stabilize) remains complete, as recorded below. Phase 2 is **blocked on Phase 1B**: its identity assumptions changed (a central `User` becomes tenant `PortalAccount`s for attendees, and authentik serves staff).
+**Phase 1B — Identity re-platform: Complete (2026-10-18).** Staff sign in only through the studio authentik; attendees, volunteers, and vendors use tenant-scoped portal accounts on the canonical portal host. Merged to `staging` in PR #28 (`96b99f3`) and smoke-tested on the deployment; the evidence is in the 1B.5 entries below.
+
+Since PR #29, `docs/` (plans, specs, runbooks, contracts) is kept locally and is not in the repository: read the local copies the paths below name.
+
+Phase 1 (Stabilize) remains complete, as recorded below.
 
 ## Status by phase
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1 — Stabilize | Complete | Units 1.1–1.6, full plain-dev walkthrough, dependency remediation, and complete closeout regression passed; audit Batch 6 withdrawn in Phase 1B (split runtime removed) |
-| 1B — Identity re-platform | In progress | 1B.1–1B.4 complete; 1B.5 local gate passed, release and deployed smoke remain; merge to staging once in 1B.5 |
-| 2 — Attendee & registration parity | Not started | Blocked on Phase 1B; its 2026-07-30 identity decisions are amended in unit 1B.1 |
+| 1B — Identity re-platform | Complete | 1B.1–1B.5 complete; merged to staging in PR #28 and smoke-tested there; staging fixes in PR #30; back-channel logout on user deactivation not observed (R2, recorded) |
+| 2 — Attendee & registration parity | Not started | Unblocked; next unit 2.1. Its 2026-07-30 identity decisions were amended in unit 1B.1 |
 | 3 — Commerce & product parity | Not started | Blocked on Phase 1B; age rules depend on Phase 2 DOB |
 | 4 — Event-day & operations parity | Not started | Depends on Phase 2 (DOB) and Phase 3 (fulfillment) items as noted |
 | 5 — Registration lottery | Not started | Product contract in the phase file needs confirmation before build |
@@ -29,6 +33,30 @@ Legend: Not started · In progress · Blocked · Complete (only after the phase'
 Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topology 5/5; **full E2E 88 passed / 5 failed / 6 did not run** (known: TST-01 assertions, DAT-01 teardown FK, one contention flake); 500/50 load proof passed 2026-07-14. Local Docker volumes and build caches were wiped during the rebuild — re-run gates before relying on baseline numbers.
 
 ## Session log
+
+### 2026-10-18 — Phase 1B unit 1B.5: release and deployed smoke (Phase 1B complete)
+
+- **Release:** PR #28 merged `feat/identity-replatform` into `staging` (merge commit `96b99f3`). Before the merge the user set up authentik (provider, implicit-consent authorization flow, group, application), the DNS-only `*.vfurst.reyuugames.com` record with a Coolify-issued wildcard certificate (Let's Encrypt via a separate `letsencrypt-dns` Traefik resolver and a Cloudflare token), the five runtime-only staff identity keys, and deleted the staging `postgres_data` volume from the server terminal (Coolify cannot delete Compose volumes). `migrate` built the schema on the empty database.
+- **Deployment problems found and resolved:**
+  - Worker crash-looped on invalid `S3_ENDPOINT`, `S3_PUBLIC_URL`, and `SMTP_SECURE` values in Coolify (user fixed the values; the worker validator was unchanged).
+  - `NEXT_PUBLIC_ROOT_DOMAIN` was `reyuugames.com`, so every portal host was served as the central site; set to `vfurst.reyuugames.com` (build-time) and rebuilt.
+  - Portal routing is a Traefik dynamic configuration (`vfurst-portals.yaml`) whose service is Coolify's generated `https-0-<uuid>-web-<n>@docker`: compose container names carry the deployment timestamp, so a container URL broke on every redeploy.
+  - The Traefik DNS-01 flags and Cloudflare token had first landed in the `traefik-logrotate` service.
+  - Server-action `redirect()` rendered a 404 for staff and platform actions (provision organization, accept invitation, create event; a reload worked): Next fetches the redirect target from its bind address `0.0.0.0`, Node's `fetch` drops the `Host` header, and the middleware classified `0.0.0.0` as a portal. **Fixed in PR #30** (the middleware classifies a request from the server's own bind address by `x-forwarded-host`; the production E2E server binds `127.0.0.1` to reproduce it on every OS).
+  - authentik 2025.10 always sends `email_verified: false`, and its user interface cannot verify an address. authentik now has an attribute-backed mapping, an admin `email_verified` flag, no self-service email changes, and a `vfurst-verify-email` flow; **PR #30** makes the invitation page link to that flow and offer **Sign in again**.
+- **Deployed smoke (all on `smoke-1`, kept as the staging demo):**
+  - `/api/healthz` reported the merge commit with database and Redis ok; `/api/v1/events` 401; `/` and `/login` 200; the removed central `/register`, `/forgot-password`, `/reset-password` return 404.
+  - Admin signed in and landed on `/platform`; an account outside the group got the organizer-access screen.
+  - Provisioning, invitation (unverified → verified through the flow → accepted), and activation worked, each post-action redirect needing a reload until PR #30.
+  - `/smoke-1/register?probe=1` answers 308 to `https://smoke-1.vfurst.reyuugames.com/register?probe=1`; tenant `/register` is served from the ISR cache (`x-nextjs-cache: HIT`).
+  - Portal sign-up with a real inbox, setup link, password, and a free registration worked; it shows under `/account/registrations`. The portal cookie is `__Host-vfurst-portal`, Secure, HttpOnly, SameSite=Lax, path `/`, host-only, 30 days.
+  - Logout passed through authentik's end-session. **Deactivating a signed-in user in authentik did not end the vFurst session** (back-channel, R2 Preview); not retested with an explicit session revoke. The 12-hour staff session cap remains the guarantee.
+- **Follow-ups:**
+  - Event slug is not derived from the event name; dates must read dd/mm/yyyy (native date inputs follow the browser locale). Running as a separate session.
+  - A completed free registration resets the portal flow to step 1 under the confirmation banner. Running as a separate session.
+  - Retest back-channel logout with an authentik session revoke or sign-out.
+  - Minor: a newly activated portal can serve its cached pre-activation 404 for up to 15 s; the store's empty cart tells signed-in visitors to sign in (`apps/web/src/components/store/cart.tsx`); staff Auth.js cookies (`__Host-authjs.csrf-token`, `__Secure-authjs.callback-url`) are set on portal hosts; from 1B.4, `loginAsStaffEmail`'s PrismaClient is never disconnected and `getStaffAccountManagementUrl` throws when the issuer is unset.
+- **Repository:** PR #29 removes `docs/` from the repository (kept locally; `/docs/` is ignored at the root). PR #30 carries the two staging fixes and this entry.
 
 ### 2026-10-17 — Phase 1B unit 1B.5: local gate (unit in progress)
 
