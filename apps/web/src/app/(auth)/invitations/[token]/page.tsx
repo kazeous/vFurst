@@ -1,8 +1,8 @@
 import { acceptOrganizationInvitation } from "@/actions/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { auth } from "@/lib/auth";
-import { getStaffAccountManagementUrl } from "@/lib/staff-oidc";
+import { auth, signIn } from "@/lib/auth";
+import { getStaffEmailVerificationUrl } from "@/lib/staff-oidc";
 import { prisma } from "@vfurst/db";
 import {
   getOrganizationInvitationByToken,
@@ -13,7 +13,7 @@ import {
 const errorMessages: Record<string, string> = {
   ALREADY_ACCEPTED: "This invitation has already been accepted.",
   EMAIL_MISMATCH: "Sign in with the email address that received this invitation.",
-  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Verify it in your Reyuu Games account, then sign in again to accept this invitation.",
+  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Verify it, then sign in again here to accept this invitation.",
   EXPIRED: "This invitation has expired.",
   INVALID: "This invitation is invalid.",
   REVOKED: "This invitation has been revoked.",
@@ -55,7 +55,13 @@ export default async function OrganizationInvitationPage({
   const emailVerified = Boolean(signedInUser?.emailVerified);
   const canAccept =
     state === "PENDING" && matchesRecipient && emailVerified && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
-  const accountManagementUrl = getStaffAccountManagementUrl();
+
+  async function signInAgain() {
+    "use server";
+
+    // A new sign-in re-reads the email_verified claim before returning to this invitation.
+    await signIn("authentik", { redirectTo: returnTo });
+  }
 
   return (
     <Card className="vf-auth-card" maxWidth={520}>
@@ -97,8 +103,14 @@ export default async function OrganizationInvitationPage({
           </div>
         ) : !emailVerified ? (
           <div className="vf-stack" data-testid="invitation-email-unverified">
-            <div className="vf-banner vf-banner-warning">{errorMessages.EMAIL_UNVERIFIED}</div>
-            <Button href={accountManagementUrl} label="Manage your Reyuu Games account" />
+            <div className="vf-banner vf-banner-warning">
+              <p>{errorMessages.EMAIL_UNVERIFIED}</p>
+              <p>If you cannot verify it yourself, ask a Reyuu Games administrator.</p>
+            </div>
+            <Button href={getStaffEmailVerificationUrl()} label="Verify your email" variant="primary" />
+            <form action={signInAgain}>
+              <Button label="Sign in again" type="submit" />
+            </form>
           </div>
         ) : canAccept ? (
           <form action={acceptOrganizationInvitation}>
