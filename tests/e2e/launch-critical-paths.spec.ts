@@ -258,6 +258,27 @@ test("public registration completes and creates a paid zero-dollar order", async
   await page.waitForURL(`${portalOrigin(orgSlug)}/register?success=${registration.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
 
+  // A confirmed registration replaces the flow with a finished state instead
+  // of restarting at step 1.
+  const finished = page.getByRole("region", { name: "Registration confirmed" });
+  await expect(finished.getByRole("term")).toHaveText(["Attendee", "Event", "Ticket", "Approval"]);
+  await expect(finished.getByRole("definition")).toHaveText(["Launch Attendee", "Launch Test 2027", "Launch General", "Approved"]);
+  await expect(finished.getByRole("link", { name: "View my registrations" })).toHaveAttribute("href", "/account/registrations");
+  // Once no account check is pending, a flow rendered beside the finished
+  // state would already show its first step.
+  await expect(page.getByRole("heading", { name: "Checking your account" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toHaveCount(0);
+
+  await finished.getByRole("link", { name: "Register another ticket" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/register`);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Registration confirmed" })).toHaveCount(0);
+
+  await page.goto(`${portalOrigin(orgSlug)}/register?success=${registration.id}`);
+  await page.getByRole("region", { name: "Registration confirmed" }).getByRole("link", { name: "View my registrations" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/account/registrations`);
+  await expect(page.getByRole("heading", { name: "Launch Test 2027", level: 3, exact: true })).toBeVisible({ timeout: 30_000 });
+
   registrationId = registration.id;
   expect(registration.typeId).toBe(registrationTypeId);
   expect(registration.status).toBe("CONFIRMED");
