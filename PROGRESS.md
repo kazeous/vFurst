@@ -34,6 +34,17 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-18 — Email operations E2E ignores dead letters it did not create
+
+- **Executor:** Claude, side session started from the portal-registration session; branch `test/e2e-scope-dead-letter-assertions` from `staging` (`8f5efeb`). Test-only; no production code changed. Not pushed.
+- **What changed:** `tests/e2e/email-delivery-operations.spec.ts` gives its own dead letters a per-run `lastErrorMessage` and finds their rows on the platform-wide `/platform/operations/email` list by it (Single-use content, masked recipient, both Replay clicks). Its `beforeAll` also seeds an orphaned non-replayable `organization-invitation` dead letter (`orgId` null, `MISSING_DELIVERY_SCOPE`) and a neighbor organization's replayable `staff-message`, so every run proves the scoping. The organizer test is unchanged: that page is scoped to the run's event.
+- **Test-first:** with only the seeded rows added, the old spec failed strict mode on two "Single-use content" elements (the 2026-10-18 failure); with that assertion scoped, it failed strict mode on two Replay buttons; fully scoped, it passed 3/3 with both rows present. The spec's cleanup left no `email-ops-*` rows.
+- **Verification:** gates `npx turbo run type-check lint test build --concurrency=1` **29/29** (web tasks executed; 24 cache hits): web 386, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **617**. Fresh web build, full production E2E **148 passed / 0 failed / 0 did not run**.
+- **Notes:**
+  - Prisma: `deleteMany({ where: { id: undefined } })` matches every row, while an undefined condition inside `OR` matches none (checked read-only on the local database). This spec's organization cleanup now uses `OR`. The `afterAll` hooks of `custom-email-delivery`, `raffle-contract`, `registration-transfer`, `staff-sso` (organizations by an id that may be unset) and `routing-checkout-safety` (users) still use the bare form and would wipe shared tables if `beforeAll` failed before the id was set.
+  - While this ran, three other worktrees' E2E runs held port 3000 in turn, and `goofy-cannon-b1a889`'s worker was consuming the shared queue.
+- **Next session should:** merge this with the portal-registration branch's full-suite result in mind (that run's one failure was this spec). Then continue with Phase 2 unit 2.1.
+
 ### 2026-10-18 — Phase 1B unit 1B.5: release and deployed smoke (Phase 1B complete)
 
 - **Release:** PR #28 merged `feat/identity-replatform` into `staging` (merge commit `96b99f3`). Before the merge the user set up authentik (provider, implicit-consent authorization flow, group, application), the DNS-only `*.vfurst.reyuugames.com` record with a Coolify-issued wildcard certificate (Let's Encrypt via a separate `letsencrypt-dns` Traefik resolver and a Cloudflare token), the five runtime-only staff identity keys, and deleted the staging `postgres_data` volume from the server terminal (Coolify cannot delete Compose volumes). `migrate` built the schema on the empty database.
