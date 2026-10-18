@@ -72,7 +72,8 @@ test.beforeAll(async () => {
         orgId,
         eventId,
         hotelName: "Cutoff Hotel",
-        cutoffDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        // A day after the 12th reads differently day-first and month-first; midday UTC keeps the day in any server zone.
+        cutoffDate: new Date("2024-03-14T12:00:00Z"),
         roomTypes: [{ name: "Double", rate: 10_000, totalRooms: 5, bookedRooms: 0 }]
       }
     }),
@@ -98,6 +99,7 @@ test.beforeAll(async () => {
       recipientEmail: attendeeEmail,
       status: "PENDING",
       tokenHash: createHash("sha256").update(transferToken).digest("hex"),
+      createdAt: new Date("2026-03-14T12:00:00Z"),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     }
   });
@@ -151,11 +153,14 @@ test("booking past the hotel cutoff reports the cutoff error inline", async ({ p
   await login(page);
   await page.goto(`${portalOrigin(orgSlug)}/hotel`);
   await expect(page.getByRole("heading", { name: "Cutoff Hotel" })).toBeVisible();
-  await page.locator('input[name="checkIn"]').fill("2028-06-01");
-  await page.locator('input[name="checkOut"]').fill("2028-06-03");
+  await expect(page.getByText("Cutoff 14 Mar 2024", { exact: true })).toBeVisible();
+  await page.getByLabel("Check-in").fill("01/06/2028");
+  await page.getByLabel("Check-out").fill("03/06/2028");
   await page.getByRole("button", { name: "Continue to checkout" }).click();
 
   await expect(page.getByTestId("hotel-booking-error")).toContainText("past its booking cutoff");
+  await expect(page.getByLabel("Check-in")).toHaveValue("01/06/2028");
+  await expect(page.getByLabel("Check-out")).toHaveValue("03/06/2028");
   await expect(page.getByTestId("route-error")).toHaveCount(0);
 });
 
@@ -164,9 +169,11 @@ test("a required volunteer field left blank reports the field error inline", asy
   await page.goto(`${portalOrigin(orgSlug)}/volunteer`);
   await expect(page.getByRole("heading", { name: "Volunteer application" })).toBeVisible();
   await page.getByLabel("Experience summary").fill(" ");
+  await page.getByLabel("Date", { exact: true }).first().fill("02/06/2028");
   await page.getByRole("button", { name: "Submit application" }).click();
 
   await expect(page.getByTestId("volunteer-error")).toContainText("Experience summary is required.");
+  await expect(page.getByLabel("Date", { exact: true }).first()).toHaveValue("02/06/2028");
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit application" })).toBeEnabled();
 });
@@ -182,6 +189,16 @@ test("a too-short vendor product description reports the validation error inline
   await expect(page.getByTestId("vendor-error")).toContainText(">=10 characters");
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   await expect(page.getByLabel("Business name")).toHaveValue("Public Flow Business");
+});
+
+test("the account transfer list reads its dates day-first", async ({ page }) => {
+  await login(page);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers`);
+  await expect(page.getByRole("heading", { name: "Transfer invitations" })).toBeVisible();
+
+  // en-GB writes "Sept" for September, hence three or four letters.
+  const dateTime = String.raw`\d{1,2} [A-Z][a-z]{2,3} \d{4}, \d{2}:\d{2}`;
+  await expect(page.getByText(new RegExp(String.raw`^Sent 14 Mar 2026, \d{2}:\d{2} · expires ${dateTime}$`))).toBeVisible();
 });
 
 test("a double-submitted transfer decision shows the refreshed request state, not an error page", async ({ browser }) => {

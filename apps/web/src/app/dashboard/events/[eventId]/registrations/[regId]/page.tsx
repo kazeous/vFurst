@@ -10,6 +10,7 @@ import {
 } from "@/actions/registration-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { formatDate } from "@/lib/i18n";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -101,7 +102,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         <div className="vf-stat-card">
           <p className="vf-label">Check-in</p>
           <strong>{registration.checkedInAt ? "Checked in" : "Not checked in"}</strong>
-          <span>{registration.checkedInAt?.toLocaleString() ?? "Ready for Phase 5 scanner"}</span>
+          <span>{registration.checkedInAt ? formatDate(registration.checkedInAt, { dateStyle: "medium", timeStyle: "short" }) : "Ready for Phase 5 scanner"}</span>
         </div>
       </section>
       <section className="vf-two-column">
@@ -113,7 +114,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
             <dt>Tier</dt>
             <dd>{registration.type.name}</dd>
             <dt>Created</dt>
-            <dd>{registration.createdAt.toLocaleString()}</dd>
+            <dd>{formatDate(registration.createdAt, { dateStyle: "medium", timeStyle: "short" })}</dd>
           </dl>
           <h3>Add-ons</h3>
           <div className="vf-list">
@@ -181,7 +182,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
             <div key={note.id} className="vf-list-row">
               <span>{note.content}</span>
               <small>
-                {note.author.name ?? note.author.email} - {note.createdAt.toLocaleString()}
+                {note.author.name ?? note.author.email} - {formatDate(note.createdAt, { dateStyle: "medium", timeStyle: "short" })}
               </small>
               <form action={deleteAttendeeNote}>
                 <input type="hidden" name="noteId" value={note.id} />

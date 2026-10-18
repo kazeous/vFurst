@@ -3,6 +3,7 @@
 import { submitVolunteerApplication } from "@/actions/staff-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
@@ -171,12 +172,7 @@ export function VolunteerForm({
           <div key={index} className="vf-subform-row">
             <label>
               Date
-              <input
-                name="availabilityDate"
-                type="date"
-                value={row.date}
-                onChange={(event) => setAvailabilityRow(index, { date: event.target.value })}
-              />
+              <DateField name="availabilityDate" value={row.date} onValueChange={(date) => setAvailabilityRow(index, { date })} />
             </label>
             <label>
               Slots

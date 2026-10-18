@@ -1,4 +1,5 @@
 import { partialRefund, refundOrder } from "@/actions/store-actions";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
@@ -105,7 +106,7 @@ export default async function StoreOrdersPage({
           <div key={order.id} className="vf-section">
             <div className="vf-page-header">
               <div>
-                <p className="vf-label">{order.createdAt.toLocaleString()}</p>
+                <p className="vf-label">{formatDate(order.createdAt, { dateStyle: "medium", timeStyle: "short" })}</p>
                 <h2>{order.portalAccount.name ?? order.portalAccount.email}</h2>
                 <p className="vf-muted">
                   Total {formatCurrency(order.total, order.currency)} - platform fee {formatCurrency(order.platformFee, order.currency)}

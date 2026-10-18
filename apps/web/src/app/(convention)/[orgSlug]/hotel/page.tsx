@@ -1,4 +1,5 @@
 import { HotelBookingForm } from "./booking-form";
+import { formatDate } from "@/lib/i18n";
 import { getPortalPageContext } from "@/lib/portal-context";
 import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
 import { formatCurrency, parseRoomTypes } from "@/lib/registration/pricing";
@@ -117,7 +118,7 @@ export default async function PublicHotelPage({
                 eventId={event.id}
                 blockId={block.id}
                 hotelName={block.hotelName}
-                cutoffLabel={block.cutoffDate.toLocaleDateString()}
+                cutoffLabel={formatDate(block.cutoffDate)}
                 roomTypes={roomTypes.map((roomType) => {
                   const booked = block.bookings.filter((booking) => booking.roomType === roomType.name).length;
 

@@ -1,5 +1,6 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
 
@@ -18,7 +19,7 @@ export default async function AccountHotelPage({ params }: { params: Promise<{ o
       {bookings.map((booking) => (
         <article key={booking.id} className="vf-section">
           <div className="vf-page-header">
-            <div><p className="vf-label">{booking.block.org.name}</p><h3>{booking.block.hotelName}</h3><p className="vf-muted">{booking.block.event.name} · {booking.roomType} · {booking.checkIn.toLocaleDateString()}–{booking.checkOut.toLocaleDateString()}</p></div>
+            <div><p className="vf-label">{booking.block.org.name}</p><h3>{booking.block.hotelName}</h3><p className="vf-muted">{booking.block.event.name} · {booking.roomType} · {formatDate(booking.checkIn)}–{formatDate(booking.checkOut)}</p></div>
             <AccountStatus status={booking.confirmationCode === "PENDING" ? "PENDING" : "CONFIRMED"} />
           </div>
           <p>Confirmation: <strong>{booking.confirmationCode ?? "Pending"}</strong></p>

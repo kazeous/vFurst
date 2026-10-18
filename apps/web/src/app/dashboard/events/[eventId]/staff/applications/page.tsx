@@ -2,6 +2,8 @@ import { approveApplication, bulkReviewApplications, rejectApplication } from "@
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
+import { formatDate } from "@/lib/i18n";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -143,7 +145,7 @@ export default async function StaffApplicationsPage({
             </label>
             <label>
               Date
-              <input name="shiftDate" type="date" defaultValue={today} />
+              <DateField name="shiftDate" defaultValue={today} />
             </label>
             <label>
               Start
@@ -173,7 +175,7 @@ export default async function StaffApplicationsPage({
                 <p className="vf-label">{application.department.name}</p>
                 <h2>{application.portalAccount.name ?? application.portalAccount.email}</h2>
                 <p className="vf-muted">
-                  Applied {application.createdAt.toLocaleDateString()} - Reviewed by{" "}
+                  Applied {formatDate(application.createdAt)} - Reviewed by{" "}
                   {application.reviewedBy?.name ?? application.reviewedBy?.email ?? "nobody yet"}
                 </p>
               </div>
@@ -207,7 +209,7 @@ export default async function StaffApplicationsPage({
                 <div className="vf-subform-row">
                   <label>
                     Date
-                    <input name="shiftDate" type="date" defaultValue={today} />
+                    <DateField name="shiftDate" defaultValue={today} />
                   </label>
                   <label>
                     Start

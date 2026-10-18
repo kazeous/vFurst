@@ -1,5 +1,6 @@
 import { saveEmailTemplate } from "@/actions/phase5-actions";
 import { requireEventPageAccess } from "@/lib/dashboard-access";
+import { formatDate } from "@/lib/i18n";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
@@ -183,7 +184,7 @@ export default async function EmailSettingsPage({ params }: { params: Promise<{ 
 
             return (
               <div className="vf-table-row vf-five-col" key={delivery.id}>
-                <span><strong>{delivery.template}</strong><small>{delivery.createdAt.toLocaleString()}</small></span>
+                <span><strong>{delivery.template}</strong><small>{formatDate(delivery.createdAt, { dateStyle: "medium", timeStyle: "short" })}</small></span>
                 <span>{delivery.recipient}</span>
                 <span><Badge label={formatStatus(delivery.status)} variant={statusVariant(delivery.status)} /></span>
                 <span>

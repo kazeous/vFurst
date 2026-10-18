@@ -18,11 +18,14 @@ export const messages = {
   }
 } as const;
 
+// Dates read day-first (dd/mm/yyyy) whatever the interface language.
+const dateLocale = "en-GB";
+
 export function formatDate(value: Date | string, options?: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat(defaultLocale, options ?? { dateStyle: "medium" }).format(new Date(value));
+  return new Intl.DateTimeFormat(dateLocale, options ?? { dateStyle: "medium" }).format(new Date(value));
 }
 
 export function formatDateRange(start: Date | string, end: Date | string) {
-  const formatter = new Intl.DateTimeFormat(defaultLocale, { month: "short", day: "numeric", year: "numeric" });
+  const formatter = new Intl.DateTimeFormat(dateLocale, { month: "short", day: "numeric", year: "numeric" });
   return `${formatter.format(new Date(start))} – ${formatter.format(new Date(end))}`;
 }

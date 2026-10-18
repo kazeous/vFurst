@@ -1,5 +1,6 @@
 import { AccountStatus } from "@/components/account/account-status";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { requirePortalPageContext } from "@/lib/portal-context";
 import { prisma } from "@vfurst/db";
@@ -31,7 +32,7 @@ export default async function AccountRegistrationDetailPage({ params }: { params
       </div>
       <dl className="vf-review-list">
         <div><dt>Registration ID</dt><dd>{registration.id}</dd></div>
-        <div><dt>Check-in</dt><dd>{registration.checkedInAt ? registration.checkedInAt.toLocaleString() : "Not checked in"}</dd></div>
+        <div><dt>Check-in</dt><dd>{registration.checkedInAt ? formatDate(registration.checkedInAt, { dateStyle: "medium", timeStyle: "short" }) : "Not checked in"}</dd></div>
         <div><dt>Badge</dt><dd>{registration.badgeNumber ?? registration.badges[0]?.barcodeData ?? "Not generated"}</dd></div>
         <div><dt>Payment</dt><dd>{order ? `${order.status} · ${formatCurrency(order.total, order.currency)}` : "No linked order"}</dd></div>
         <div><dt>Approval</dt><dd>{registration.approvalStatus}</dd></div>

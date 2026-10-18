@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { formatDate } from "@/lib/i18n";
 import { getPortalUrl, type PortalUrlOrganization } from "@/lib/portal-url";
 
 export const REGISTRATION_TRANSFER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,7 +30,7 @@ export function getRegistrationTransferUrl(org: PortalUrlOrganization, requestId
 }
 
 export function formatTransferExpiry(expiresAt: Date) {
-  return expiresAt.toLocaleString("en-US", {
+  return formatDate(expiresAt, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "UTC"
