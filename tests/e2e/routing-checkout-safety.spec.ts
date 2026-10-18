@@ -19,7 +19,8 @@ let cartId: string;
 let unsafePersistedOrderId: string;
 let previousStripeConfig:
   | { enabled: boolean; settings: Prisma.JsonValue; updatedById: string | null }
-  | null;
+  | null
+  | undefined;
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(120_000);
@@ -127,12 +128,14 @@ test.afterAll(async () => {
         updatedById: previousStripeConfig.updatedById
       }
     });
-  } else {
+  } else if (previousStripeConfig === null) {
+    // Undefined means beforeAll failed before the snapshot, so the existing config is not ours to delete.
     await prisma.paymentProviderConfig.deleteMany({ where: { provider: "STRIPE" } });
   }
 
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { id: userId } });
+  // userId stays unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (userId) await prisma.user.deleteMany({ where: { id: userId } });
   await prisma.$disconnect();
 });
 

@@ -134,9 +134,12 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await prisma.paymentProviderConfig.updateMany({ where: { provider: "SEPAY", updatedById: ownerId }, data: { updatedById: null } });
-  await prisma.organization.deleteMany({ where: { id: orgId } });
-  await prisma.user.deleteMany({ where: { id: { in: [ownerId] } } });
+  // Ids stay unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (ownerId) {
+    await prisma.paymentProviderConfig.updateMany({ where: { provider: "SEPAY", updatedById: ownerId }, data: { updatedById: null } });
+  }
+  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId } });
+  await prisma.user.deleteMany({ where: { id: { in: [ownerId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 
