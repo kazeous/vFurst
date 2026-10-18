@@ -5,6 +5,19 @@ export const STAFF_PROOF_FRESH_MS = 60 * 60_000;
 export const STAFF_FLOW_MS = 10 * 60_000;
 export const STAFF_ASSURANCE_POLICY = "vfurst-v1";
 
+/** Every OIDC cookie is host-only; sibling portal hosts cannot shadow state/nonce/PKCE. */
+export function staffOidcCookiePolicy(baseUrl: string) {
+  const secure = new URL(baseUrl).protocol === "https:";
+  const cookie = (name: string, ephemeral = false) => ({
+    name: `${secure ? "__Host-" : ""}vfurst-${name}`,
+    options: { httpOnly: true, secure, sameSite: "lax" as const, path: "/", ...(ephemeral ? { maxAge: STAFF_FLOW_MS / 1_000 } : {}) }
+  });
+  return {
+    sessionToken: cookie("staff"), csrfToken: cookie("csrf"), callbackUrl: cookie("callback", true),
+    pkceCodeVerifier: cookie("pkce", true), state: cookie("state", true), nonce: cookie("nonce", true)
+  };
+}
+
 export type StaffAssurance = {
   primaryAuthenticatedAt: Date;
   mfaVerifiedAt: Date | null;

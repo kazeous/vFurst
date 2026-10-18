@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertStaffStepUp, hasFreshStaffProof, parseStaffAssurance } from "./staff-session-policy";
+import { assertStaffStepUp, hasFreshStaffProof, parseStaffAssurance, staffOidcCookiePolicy } from "./staff-session-policy";
 
 const now = new Date("2026-10-19T10:00:00Z");
 const primary = now.getTime() / 1_000;
@@ -9,6 +9,24 @@ function claims(overrides = {}) {
   }, ...overrides };
 }
 describe("Pawket-compatible staff assurance", () => {
+  it("protects every production OIDC cookie against sibling-host shadowing", () => {
+    const policy = staffOidcCookiePolicy("https://vfurst.reyuugames.com");
+    for (const cookie of Object.values(policy)) {
+      expect(cookie.name).toMatch(/^__Host-vfurst-/);
+      expect(cookie.options).toMatchObject({ httpOnly: true, secure: true, path: "/", sameSite: "lax" });
+      expect(cookie.options).not.toHaveProperty("domain");
+    }
+    expect(policy.state.options.maxAge).toBe(600);
+    expect(policy.nonce.options.maxAge).toBe(600);
+    expect(policy.pkceCodeVerifier.options.maxAge).toBe(600);
+  });
+  it("uses the same cookie separation on plain HTTP loopback for the real local OIDC flow", () => {
+    for (const cookie of Object.values(staffOidcCookiePolicy("http://localhost:3000"))) {
+      expect(cookie.name).toMatch(/^vfurst-/);
+      expect(cookie.options.secure).toBe(false);
+      expect(cookie.options).not.toHaveProperty("domain");
+    }
+  });
   it("accepts real MFA evidence and requires new primary authentication for step-up", () => {
     const evidence = parseStaffAssurance(claims(), now);
     expect(hasFreshStaffProof(evidence, now)).toBe(true);

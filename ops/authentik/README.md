@@ -6,6 +6,18 @@ volunteer and vendor portal accounts keep their independent identity system.
 
 ## Review outcome
 
+Read-only deployed-provider probe, **2026-10-19 (Asia/Saigon)**:
+
+- [vFurst discovery](https://account.reyuugames.com/application/o/vfurst/.well-known/openid-configuration)
+  reports only `HS256`, with scopes `openid profile email`. `client_secret_post`,
+  PKCE S256 and back-channel support are advertised; `vfurst_assurance` is absent.
+- [vFurst JWKS](https://account.reyuugames.com/application/o/vfurst/jwks/)
+  returns HTTP 200 with `{}`, containing no `keys` array. The old receiver uses
+  `createRemoteJWKSet`, so this cannot verify its logout tokens. This is a concrete
+  configuration defect, beyond the earlier unobserved Preview/deactivation smoke.
+- No credentials were requested or sent and no provider setting was changed.
+  The new signing-key and assurance settings below are required before rollout.
+
 The existing integration had a session-resurrection defect: rejecting a JWT
 removed its registry ID, Auth.js re-encoded it, and the legacy upgrade path could
 issue another session on the next read. Revocation and the 12-hour cap therefore
@@ -18,10 +30,13 @@ invitation page reads the current database email; subject-wide revocation clears
 logout hints; logout receipts commit with revocation; late callbacks are fenced;
 discovery, JWKS and logout URLs stay on the configured origin; signatures are
 pinned to RS256, with state, nonce and PKCE; staff APIs and cookies are isolated
-from tenant hosts. Staff session cookies use `__Host-vfurst-staff` on HTTPS and
+from tenant hosts. Staff session cookies use `__Host-vfurst-staff` on HTTPS;
+state, nonce, PKCE, CSRF and callback cookies also use `__Host-` names, and
 staff routes canonicalize platform aliases before those cookies are issued.
 Sentry scrubs nested invitation/token return URLs and removes bearer headers,
-cookies and authentication POST payloads.
+cookies and authentication POST payloads. Its browser Replay/telemetry exclusion
+also covers invitation links and login/verification pages carrying those links;
+client errors and transactions use the same scrubber as server and edge events.
 
 Added policy:
 
@@ -30,10 +45,13 @@ Added policy:
 - 30-minute idle and at most 12-hour absolute lifetime (the existing environment
   override may shorten the absolute cap). A lease or step-up preserves both
   deadlines; ordinary activity touches idle expiry at most once per minute.
-- Platform mutations, org settings/membership/Stripe changes and refunds need
+- Platform operations and owner/admin-only org/event/resource mutations and
+  sensitive exports, including settings, membership, Stripe and refunds, need
   a verified email plus primary and second-factor evidence under 60 minutes old.
   Step-up uses `prompt=login` and `max_age=10` and rejects old `auth_time`, missing
   MFA, account changes and revoked sessions.
+- Member-level event-day capabilities retain their existing membership checks
+  and the 5-minute IdP lease; ordinary workspace pages do not force MFA step-up.
 - `/staff/sessions` lists only the current user's sessions, supports ending
   another session and logging out all vFurst sessions. Logout happens locally
   before the provider is contacted.
@@ -42,8 +60,10 @@ Added policy:
 
 ## Configure the existing authentik provider before deploying the web change
 
-1. Export the current **vFurst provider** settings for rollback. Keep the existing
-   immutable issuer, client ID, subject mode, group mapping and membership rows.
+1. Export the current **vFurst provider** settings for rollback. Keep its identity,
+   client ID, subject mode, group mapping and membership rows. Configure the exact
+   discovery issuer `https://account.reyuugames.com/application/o/vfurst/`, including
+   its trailing slash; do not repoint existing accounts to a different issuer.
    This is additive schema synchronization; do not reset the database.
 2. Import `vfurst-flows-v1.yaml` into authentik 2025.10.3. It creates only dedicated
    vFurst flows/stages/mappings. It does not edit the shared Brand, Pawket, default
@@ -58,14 +78,26 @@ Added policy:
    `vfurst_assurance`). Do not select two mappings for the same email claim.
    Evidence comes from the actual login event and confirmed TOTP/WebAuthn
    devices; editable user attributes never assert MFA or email verification.
-5. Use an RS256 signing key, preferably the already proven RSA-2048 studio key.
+5. Set an **RS256 signing key**; the current HS256-only configuration must change.
+   Select an existing RSA-2048 studio signing key, or generate a dedicated key in
+   the authentik server container without printing its private material:
+
+   ```sh
+   ak shell -c "from authentik.crypto.builder import CertificateBuilder; from cryptography.hazmat.primitives.asymmetric import rsa; b=CertificateBuilder('vfurst-oidc-signing-rsa2048-v1'); b.generate_private_key=lambda: rsa.generate_private_key(public_exponent=65537, key_size=2048); b.build(validity_days=3650); c=b.save(); print('created', c.name, 'bits', c.private_key.key_size)"
+   ```
+
+   Generate it once, select it on the vFurst provider, and confirm discovery
+   advertises RS256 and JWKS has a public RSA-2048 key. No private key goes in Git.
    Keep client authentication confidential; vFurst uses `client_secret_post`.
    This avoids authentik 2025.10's HTTP Basic form-decoding issue, as on Pawket.
 6. Confirm the provider's back-channel logout URI is
    `https://vfurst.reyuugames.com/api/oidc/backchannel-logout` and the selected
    logout method is back-channel. Provider logout behavior determines whether
-   the shared studio session is also ended; preserve the owner's chosen SLO
-   behavior. See [authentik logout documentation](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/frontchannel_and_backchannel_logout/).
+   the shared studio session is also ended. The standing vFurst contract ends
+   that session too: select its intended studio invalidation/SLO flow, without
+   editing Pawket or the shared defaults. Verify a vFurst logout really ends the
+   studio session instead of immediately reusing it on the next sign-in.
+   See [authentik logout documentation](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/frontchannel_and_backchannel_logout/).
 7. Verify an ordinary login, password + TOTP and password + WebAuthn step-up on
    this provider **before** deploying. A provider preview is insufficient:
    verify real signed ID-token claims, `auth_time`, the `amr` MFA marker, the

@@ -8,6 +8,7 @@ let owner: StaffFixture;
 let admin: StaffFixture;
 let other: StaffFixture;
 let orgId: string;
+let eventId: string;
 test.describe.configure({ mode: "serial" });
 test.use({ serviceWorkers: "block" });
 test.beforeAll(async () => {
@@ -17,6 +18,9 @@ test.beforeAll(async () => {
     createStaffFixture(prisma, { email: `${run}-other@example.com` })
   ]);
   orgId = (await prisma.organization.create({ data: { name: run, slug: run, subdomain: run, status: "ACTIVE", contactEmail: `${run}@example.com`, members: { create: { userId: owner.id, role: "OWNER" } } } })).id;
+  eventId = (await prisma.event.create({ data: {
+    orgId, name: run, slug: `${run}-event`, startDate: new Date("2026-11-01T12:00:00Z"), endDate: new Date("2026-11-02T12:00:00Z")
+  } })).id;
 });
 test.afterAll(async () => {
   if (orgId) await prisma.organization.deleteMany({ where: { id: orgId, slug: run } });
@@ -147,6 +151,19 @@ test("session management cannot revoke a different staff user's session", async 
   } finally { await otherContext.close(); }
 });
 
+test("organization event mutations require recent MFA and retain the submitted form", async ({ page }) => {
+  await loginAsStaff(page, owner);
+  await page.goto(`/dashboard/events/${eventId}/settings`);
+  await page.getByLabel("Name", { exact: true }).fill("Blocked by expired MFA");
+  const session = await storedSession(owner.id);
+  const stale = new Date(Date.now() - 3_600_000);
+  await prisma.session.update({ where: { id: session.id }, data: { primaryAuthenticatedAt: stale, mfaVerifiedAt: stale } });
+  await page.getByRole("button", { name: "Save event settings" }).click();
+  await expect(page.getByTestId("event-settings-error")).toContainText("Verify your Reyuu Games account");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Blocked by expired MFA");
+  expect((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).name).toBe(run);
+});
+
 test("logout everywhere rejects another live session and an earlier in-flight sign-in", async ({ page, browser }) => {
   await loginAsStaff(page, owner);
   const pendingContext = await browser.newContext();
@@ -166,7 +183,9 @@ test("logout everywhere rejects another live session and an earlier in-flight si
 
 test("tenant hosts never expose staff Auth.js routes or set staff cookies", async ({ request }) => {
   for (const path of ["/api/auth/session", "/api/auth/csrf", "/api/oidc/backchannel-logout"]) {
-    const response = await request.get(`http://${run}.localhost:3000${path}`);
+    // Chromium resolves *.localhost itself; Node's API client needs the
+    // loopback connection plus the real tenant Host header on Windows.
+    const response = await request.get(`http://127.0.0.1:3000${path}`, { headers: { Host: `${run}.localhost:3000` } });
     expect(response.status()).toBe(404);
     expect(response.headers()["set-cookie"]).toBeUndefined();
   }

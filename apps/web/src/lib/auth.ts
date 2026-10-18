@@ -18,14 +18,12 @@ import {
 import { staffOidcFetch, verifyStaffIdentityToken } from "@/lib/staff-oidc";
 import { beginStaffOidcFlow, clearStaffOidcFlow, currentStaffOidcTransaction } from "@/lib/staff-oidc-flow";
 import { completeStaffOidcTransaction, createStaffLogoutFence, staffIdentityTransaction, type StaffOidcPurpose } from "@/lib/staff-oidc-store";
-import { assertStaffStepUp, StaffIdentityError } from "@/lib/staff-session-policy";
+import { assertStaffStepUp, StaffIdentityError, staffOidcCookiePolicy } from "@/lib/staff-session-policy";
 import { getCentralAppUrl } from "@/lib/central-url";
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { applyFixedWindowRateLimit, getClientIpFromHeaders, AUTH_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_WINDOW_MS, RateLimitUnavailableError } from "@/lib/rate-limit";
 import { safeReturnTo } from "@/lib/return-to";
-
-const secureStaffCookie = new URL(getCentralAppUrl()).protocol === "https:";
 
 declare module "next-auth" {
   interface Session {
@@ -46,12 +44,7 @@ const nextAuth = NextAuth({
     strategy: "jwt",
     maxAge: IDENTITY_SESSION_MAX_AGE_SECONDS
   },
-  cookies: {
-    sessionToken: {
-      name: secureStaffCookie ? "__Host-vfurst-staff" : "vfurst-staff",
-      options: { httpOnly: true, secure: secureStaffCookie, sameSite: "lax", path: "/" }
-    }
-  },
+  cookies: staffOidcCookiePolicy(getCentralAppUrl()),
   // Staff sign in only through the studio authentik over OIDC (spec §6.1).
   providers: [
     Authentik({

@@ -12,7 +12,11 @@ describe("portal token telemetry exclusion", () => {
     "/set%2dpassword?token=fake",
     "https://portal.example.invalid/set-password?token=fake",
     "/set-password?returnTo=%2Flogin",
-    "/set-password%"
+    "/set-password%",
+    "/invitations/private-invitation",
+    "/login?returnTo=%2Finvitations%2Fprivate-invitation",
+    "/staff/verify?returnTo=%2Finvitations%2Fprivate-invitation",
+    "/api/auth/callback/authentik?code=private-code&state=private-state"
   ])("excludes %s", (href) => {
     expect(isPortalTokenPage(href, base)).toBe(true);
   });
