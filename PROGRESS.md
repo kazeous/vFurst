@@ -34,6 +34,22 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-18 — Staging fix: event slug from name, dd/mm/yyyy dates
+
+- **Executor:** Claude, inline (TDD), at the user's request; the first 1B.5 follow-up. Branch `fix/event-form-slug-and-dates` from `origin/staging`, rebased onto `8f5efeb` (PRs #29/#30). Not pushed.
+- **What changed:**
+  - **Slug:** the organization's Create event card and the event wizard share `EventNameSlugFields` (`apps/web/src/components/forms/event-name-slug-fields.tsx`): the slug follows `slugify(name)` (`apps/web/src/lib/slug.ts`: lowercase ASCII, accents and Vietnamese đ transliterated, hyphen-joined, ≤ 64) until the organizer types one, and follows again once they clear it. The server's event schema is unchanged and still rejects a bad hand-typed slug.
+  - **Date entry:** every `<input type="date">` in `apps/web` is now `DateField` (`apps/web/src/components/ui/date-field.tsx`): a text input showing dd/mm/yyyy whatever the browser locale, plus a hidden input carrying ISO yyyy-mm-dd under the original name, so no server action changed. Parsing is `apps/web/src/lib/date-input.ts` (day first; `/`, `.` or `-`; impossible dates and two-digit years rejected through native validation with "Enter the date as dd/mm/yyyy."). Uncontrolled fields (`defaultValue`) restore their default on form reset like native inputs; the controlled hotel booking and volunteer fields (`value`/`onValueChange`) keep typed dates after a rejected submit.
+  - **Date display:** `formatDate`/`formatDateRange` format with `en-GB` (`14 Mar 2027`, `1 Aug 2027 – 3 Aug 2027`; with a time, 24-hour).
+  - **E2E:** new `tests/e2e/event-form-fields.spec.ts` (6 tests, run under an en-US browser locale); the hotel, public-flow-errors, and launch-critical-paths specs now type dd/mm/yyyy and assert the stored calendar day and that typed dates survive a rejected submit.
+- **Verification:**
+  - Test-first: the 35 new unit tests (`slug`, `date-input`, `i18n`) failed before the helpers existed; the new and edited E2E failed against the old forms (empty slug; native date inputs reject `04/03/2028` as "Malformed value"), then the four specs passed 24/24 in dev mode.
+  - Gates on the rebased branch `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached** — web 421, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **652**.
+  - Full production E2E (`E2E_PRODUCTION=1`, `--workers=1`, on the gate's fresh web build): the first run was 153/1, the visual test failing on `public-portal-desktop` only in the date line ("Aug 1, 2027 – Aug 4, 2027" → "1 Aug 2027 – 4 Aug 2027"). `--update-snapshots` rewrote only `public-portal-desktop` and `public-portal-mobile` (mobile pixel changes confined to the date line); the other eight baselines matched. Final full run **154 passed / 0 failed / 0 did not run (3.3 m)**.
+  - Another local session ran production E2E on port 3000 during this work; `run-e2e.mjs` reuses any reachable server, so every recorded run here started only after the port was free.
+- **Not covered:** about 30 displays still call `toLocaleDateString()`/`toLocaleString()` without a locale (account, dashboard hotel/registrations/raffle/transfers pages, hotel cutoff label, invitation expiry, …) and read month-first on an en-US server; `registration-transfer.ts` formats with `en-US`. Left for a follow-up.
+- **Next:** unchanged — merge this branch into `staging` with the user's go, then unit 2.1.
+
 ### 2026-10-18 — Phase 1B unit 1B.5: release and deployed smoke (Phase 1B complete)
 
 - **Release:** PR #28 merged `feat/identity-replatform` into `staging` (merge commit `96b99f3`). Before the merge the user set up authentik (provider, implicit-consent authorization flow, group, application), the DNS-only `*.vfurst.reyuugames.com` record with a Coolify-issued wildcard certificate (Let's Encrypt via a separate `letsencrypt-dns` Traefik resolver and a Cloudflare token), the five runtime-only staff identity keys, and deleted the staging `postgres_data` volume from the server terminal (Coolify cannot delete Compose volumes). `migrate` built the schema on the empty database.
