@@ -34,6 +34,22 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-18 — Staging fix: every date display reads day-first
+
+- **Executor:** Claude, inline (TDD), a side session of the slug/date fix below. Branch `claude/adoring-proskuriakova-d8ce27`, cut from `fix/event-form-slug-and-dates` (`a8b8c89`). Not pushed.
+- **What changed:**
+  - Every display that called `Date#toLocaleDateString()`/`toLocaleString()` without a locale now goes through `formatDate` (`apps/web/src/lib/i18n.ts`, `en-GB`): 30 calls in 24 files: the portal hotel cutoff label; account hotel, orders, order detail, raffles, registration detail, transfers, transfer detail; the staff invitation page; dashboard events, badges, hotel, raffle, registrations, registration detail, transfers, email settings, staff applications, store, store orders; organization members; platform email operations and payouts; and `BadgePrintControls`. Date-only values use `formatDate(value)` ("14 Mar 2026"); date-times use `{ dateStyle: "medium", timeStyle: "short" }` ("14 Mar 2026, 19:00").
+  - `formatTransferExpiry` (`apps/web/src/lib/registration-transfer.ts`), which feeds the registration-transfer email, formatted with `en-US`; it now uses `formatDate` and keeps its explicit UTC zone ("23 Jul 2026, 12:00 UTC").
+  - Time zones are unchanged: server-rendered dates still use the server's zone.
+  - `apps/web/src` has no date `toLocale*` calls left; the remaining `toLocaleString()` calls format numbers.
+- **Verification:**
+  - Test-first: the new `formatTransferExpiry` unit test failed with "Jul 23, 2026, 12:00 PM UTC". The new E2E assertions in `public-flow-errors.spec.ts` failed in dev mode against the old pages: the hotel cutoff showed "Cutoff 3/14/2024" and the account transfer list "Sent 3/14/2026, 7:00:00 PM · expires 10/25/2026, 10:51:15 PM". The hotel block's cutoff and the transfer's `createdAt` are now fixed dates after the 12th, at midday UTC.
+  - Gates `npx turbo run type-check lint test build --concurrency=1 --force` **29/29, 0 cached**: web 422, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **653**.
+  - Full production E2E (`E2E_PRODUCTION=1`, `--workers=1`, on the gate's web build): the first run was 154/1, the visual test failing on `registrations-desktop` because the Created column changed from "7/13/2026" to "13 Jul 2026". `--update-snapshots` on that test rewrote only `registrations-desktop` (changes limited to the table, whose columns shift to fit the longer date) and `registrations-mobile` (changes limited to the Created value). Final full run **155 passed / 0 failed / 0 did not run (3.4 m)**.
+  - Another session's production E2E held port 3000 during this work. A dev-mode run that reused its server was discarded, and every recorded run here started only after the port was free.
+- **Not covered:** `BadgePrintControls` is a client component, so its "Printed …" text is rendered on the server and then hydrated in the browser. The locale now matches on both sides, but a hydration text mismatch is still possible when the browser's time zone differs from the server's. The organization-invitation email still sends `expiresAt.toISOString()`. Hotel dates stored at midnight UTC would show the previous day on a server west of UTC.
+- **Next:** unchanged: merge this branch and `fix/event-form-slug-and-dates` into `staging` with the user's go, then unit 2.1.
+
 ### 2026-10-18 — Staging fix: event slug from name, dd/mm/yyyy dates
 
 - **Executor:** Claude, inline (TDD), at the user's request; the first 1B.5 follow-up. Branch `fix/event-form-slug-and-dates` from `origin/staging`, rebased onto `8f5efeb` (PRs #29/#30). Not pushed.
