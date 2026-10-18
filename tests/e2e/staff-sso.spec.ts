@@ -60,7 +60,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await prisma.organization.deleteMany({ where: { id: orgId } });
+  // orgId stays unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId } });
   await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } });
   await prisma.$disconnect();
 });

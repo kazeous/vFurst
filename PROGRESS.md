@@ -34,6 +34,26 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-18 — E2E cleanups skip ids that beforeAll never set
+
+- **Executor:** Claude, same session as the entry below, at the user's request; branch `test/e2e-cleanup-guards`, PR #34, merged into #33's branch. Test-only.
+- **Hazard:** Prisma treats a filter value of `undefined` as no filter, so when `beforeAll` failed before assigning an id, an `afterAll` like `deleteMany({ where: { id: orgId } })` would delete every row in the shared database. A read-only `count()` with the same filters matched every row (all 474 email deliveries, and the one SEPAY config). `{ in: [undefined] }` throws instead, aborting the rest of the hook.
+- **What changed:** `custom-email-delivery`, `raffle-contract`, `registration-transfer`, `staff-sso`, and `routing-checkout-safety` skip a cleanup whose id is unset (`if (id)`, as `portal-attendee` and `portal-canonical-host` already did). `routing-checkout-safety` also deletes the Stripe config only when its snapshot recorded none (it used to delete an existing config when `beforeAll` failed before the snapshot). `error-visibility`, `public-flow-errors`, `raffle-contract`, `registration-policy`, and `registration-transfer` filter their `in` lists. Every other `afterAll` filters by module-level slugs or emails, or was already guarded. `stripe-webhook-security` takes its snapshot as the first statement, so it was left as is.
+- **Verification:** fresh web build. Full production E2E: **147 passed / 1 failed**, then on rerun **148 passed / 0 failed / 0 did not run**. Gates **29/29** (28 cache hits; same 617 tests as below).
+- **Flake found (unchanged here):** `launch-critical-paths.spec.ts` › "embedded SePay QR fulfills…" can fail with "page.goto … interrupted by another navigation". **Show QR** returns `redirectTo` the same `&sepay=1` URL (`checkout-actions.ts:296`), and the test calls `page.goto` to that URL after polling the database, racing the app's own client navigation.
+- **Next session should:** fix that race by waiting for the app's navigation (for example `page.waitForURL`) instead of calling `goto`. Then continue with Phase 2 unit 2.1.
+
+### 2026-10-18 — Email operations E2E ignores dead letters it did not create
+
+- **Executor:** Claude, side session started from the portal-registration session; branch `test/e2e-scope-dead-letter-assertions` from `staging` (`8f5efeb`), PR #33. Test-only; no production code changed.
+- **What changed:** `tests/e2e/email-delivery-operations.spec.ts` gives its own dead letters a per-run `lastErrorMessage` and finds their rows on the platform-wide `/platform/operations/email` list by it (Single-use content, masked recipient, both Replay clicks). Its `beforeAll` also seeds an orphaned non-replayable `organization-invitation` dead letter (`orgId` null, `MISSING_DELIVERY_SCOPE`) and a neighbor organization's replayable `staff-message`, so every run proves the scoping. The organizer test is unchanged: that page is scoped to the run's event.
+- **Test-first:** with only the seeded rows added, the old spec failed strict mode on two "Single-use content" elements (the 2026-10-18 failure); with that assertion scoped, it failed strict mode on two Replay buttons; fully scoped, it passed 3/3 with both rows present. The spec's cleanup left no `email-ops-*` rows.
+- **Verification:** gates `npx turbo run type-check lint test build --concurrency=1` **29/29** (web tasks executed; 24 cache hits): web 386, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **617**. Fresh web build, full production E2E **148 passed / 0 failed / 0 did not run**.
+- **Notes:**
+  - Prisma: `deleteMany({ where: { id: undefined } })` matches every row, while an undefined condition inside `OR` matches none (checked read-only on the local database). This spec's organization cleanup now uses `OR`. The `afterAll` hooks of `custom-email-delivery`, `raffle-contract`, `registration-transfer`, `staff-sso` (organizations by an id that may be unset) and `routing-checkout-safety` (users) still use the bare form and would wipe shared tables if `beforeAll` failed before the id was set.
+  - While this ran, three other worktrees' E2E runs held port 3000 in turn, and `goofy-cannon-b1a889`'s worker was consuming the shared queue.
+- **Next session should:** continue with Phase 2 unit 2.1.
+
 ### 2026-10-18 — Staging fix: every date display reads day-first
 
 - **Executor:** Claude, inline (TDD), a side session of the slug/date fix below. Branch `claude/adoring-proskuriakova-d8ce27`, cut from `fix/event-form-slug-and-dates` (`a8b8c89`); fast-forwarded into that branch and shipped in PR #32.
