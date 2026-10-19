@@ -451,7 +451,9 @@ test("dashboard settings hub filters access and updates event settings", async (
   await page.getByRole("button", { name: "Save event settings" }).click({ noWaitAfter: true });
   const saveResponse = await saveResponsePromise;
   expect(saveResponse.status()).toBeLessThan(400);
-  await page.goto(`/dashboard/events/${eventId}/settings?saved=1`);
+  // The action itself redirects to the saved page; a second page.goto to the
+  // same URL would race that navigation.
+  await page.waitForURL((url) => url.pathname === `/dashboard/events/${eventId}/settings` && url.searchParams.get("saved") === "1");
   await expect(page.getByText("Event settings saved.")).toBeVisible();
 
   const updatedEvent = await prisma.event.findUniqueOrThrow({
@@ -646,7 +648,9 @@ test("embedded SePay QR fulfills through a signed webhook after the provider and
     () => prisma.paymentAttempt.count({ where: { orderId: order.id, provider: "SEPAY" } }),
     { timeout: 30_000 }
   ).toBe(1);
-  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
+  // The action itself navigates to the QR page (window.location.replace);
+  // a second page.goto to the same URL would race that navigation.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Complete bank transfer" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("img", { name: /SePay QR code/ })).toBeVisible();
   const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });

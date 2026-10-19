@@ -65,6 +65,23 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 - **Not changed:** `registration-policy` `submitRegistration` still sleeps `waitForTimeout(1_500)` on this branch; `95126f4` replaces it. Expect a PROGRESS.md conflict with that branch and `0c425bf` (all three add an entry here).
 - **Next:** unchanged — finish the corrective identity acceptance above, then Phase 2 unit 2.1.
 
+### 2026-10-19 — SePay QR navigation-race flake (out-of-phase test repair)
+
+- **Problem.** A full production run on 2026-10-18 (verifying `test/e2e-cleanup-guards`) went 147 passed / 1 failed, and the rerun went 148/0. The failing test was `launch-critical-paths` "embedded SePay QR fulfills…". Its `page.goto(".../checkout/<order>?token=…&sepay=1")` failed with "Navigation … is interrupted by another navigation to" the same URL. "Show QR" runs `startSePayPayment`, which returns `redirectTo` that URL, and `ActionStateForm` then calls `window.location.replace`. The test polled the database for the PaymentAttempt and then started its own `goto`. The attempt commits before the action response reaches the page. When the response arrived while that `goto` was still pending, the app's navigation aborted it.
+- **Fix (tests only):** instead of a second `goto`, the test now waits for the app's navigation with `page.waitForURL(<QR URL>, { waitUntil: "load" })`. The spec's registration and vendor tests already use this idiom. The DB poll stays because it still asserts exactly one SePay attempt. The settings-hub test had the same shape: after "Save event settings" it called `goto(".../settings?saved=1")`, which is exactly where the action's `redirect()` sends it. It now waits for that URL too. No assertion changed.
+- **Sweep:** I checked every spec click on an `ActionStateForm`/`useActionRedirect` action that is followed by a `goto`. The other cases already wait (`waitForURL`, `Promise.all`, `waitForEvent("load")`), end in an inline error, or only `revalidatePath` without navigating.
+- **Verification:**
+  - Baseline on the unchanged spec, running both tests with `--repeat-each=20`: 40/40 passed. The race does not show up when the tests run alone.
+  - Scratch probe (not committed): the page waits 1.5 s before handling the action response, and loads of the redirect URL are held for 3 s. Unchanged SePay test: 5/5 failed (`page.goto: net::ERR_ABORTED` at the QR URL). Fixed: 5/5 passed.
+  - The same probe on the settings test: unchanged 5/5 passed and fixed 5/5 passed. Next applies that `redirect()` as a soft navigation, which does not abort a pending `goto`. It races only when Next falls back to a hard navigation, which happens when it cannot render the target server-side (as before PR #30). So the settings change is hardening, not a reproduced flake.
+  - After the fix, both tests with `--repeat-each=20`: 40/40.
+  - `npm run build --workspace @vfurst/web`, then full production E2E on one worker: **148 passed / 0 failed**.
+  - `npx turbo run type-check lint test build --concurrency=1`: **29/29** tasks (web unit tests 386/386). 28 tasks replayed from the Turbo cache because no task input changed; no task covers `tests/e2e`. The changed spec type-checks under the base `strict` config in a scratch run.
+- **Not changed (follow-up candidates):**
+  - `launch-critical-paths` "admin CRUD…": "Provision organization" (`redirect()` to `/platform/organizations/<id>`) is followed by a later `goto` to the check-in page, with no wait for that redirect. This is the same exposure as the settings case: it can only race on a hard-navigation fallback.
+  - `registration-policy.spec.ts` `submitRegistration`: it clicks "Complete registration" (a `redirectTo` hard navigation) and then sleeps a fixed 1.5 s before the caller's DB read and `goto`.
+- **Next:** unchanged — Phase 2 unit 2.1.
+
 ### 2026-10-19 — Corrective staff SSO audit and Pawket policy alignment
 
 - **Authorization/scope:** user requested comparing the completed Reyuu Games Account conversion with `D:/GitHub/pawket`, fixing deficiencies and completing it to the same standard. When asked about the policy difference, the owner explicitly selected Pawket's session policy. This is one corrective identity unit; Phase 2 is untouched. Branch `codex/staff-sso-hardening`, starting at `c539166`. Pre-existing edits to the three local setup/phase documents are preserved and excluded from this unit's commit.
