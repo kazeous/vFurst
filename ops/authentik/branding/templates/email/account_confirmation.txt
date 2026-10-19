@@ -1,0 +1,1 @@
+{% extends "reyuugames/account_confirmation.txt" %}

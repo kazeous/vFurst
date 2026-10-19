@@ -78,8 +78,8 @@ entries:
       activate_user_on_success: false
       token_expiry: minutes=10
       subject: Verify your email for your reyuuGAMES Account
-      # Built-in authentik template; no custom studio template installation is required.
-      template: email/account_confirmation.html
+      # Install the persistent studio branding bundle on server and worker first.
+      template: reyuugames/account_confirmation.html
   - model: authentik_stages_consent.consentstage
     id: vfurst-consent
     identifiers: {name: vfurst-consent-v1}

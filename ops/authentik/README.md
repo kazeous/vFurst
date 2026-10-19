@@ -1,5 +1,10 @@
 # Staff SSO hardening (2026-10-19)
 
+The subsequent user-requested **shared Account branding correction** is in
+[`branding/README.md`](branding/README.md). Its persistent server/worker templates,
+static assets and browser-only error router supersede the older Pawket styling
+for authentik 2026.8.4. Install that bundle before importing these flow blueprints.
+
 The owner approved using Pawket's privileged-session policy for vFurst staff on
 2026-10-19. This is one corrective identity unit; Phase 2 is unchanged. Attendee,
 volunteer and vendor portal accounts keep their independent identity system.

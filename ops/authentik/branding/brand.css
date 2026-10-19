@@ -1,0 +1,6 @@
+/* 2026.8 renders BrandLinks in light DOM; older releases used shadow DOM.
+   Keep configured legal/support links. Only the final vendor credit is hidden. */
+ak-brand-links li:last-child,
+:host(ak-brand-links) li:last-child {
+  display: none;
+}
