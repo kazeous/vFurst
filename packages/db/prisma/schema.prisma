@@ -239,6 +239,7 @@ model PortalAccount {
   sessions                 PortalSession[]
   tokens                   PortalAccountToken[]
   registrations            Registration[]
+  attendeeProfiles         AttendeeProfile[]
   carts                    Cart[]
   orders                   Order[]
   hotelBookings            HotelBooking[]
@@ -252,6 +253,29 @@ model PortalAccount {
   @@unique([orgId, email])
   @@unique([orgId, id])
   @@map("portal_accounts")
+}
+
+model AttendeeProfile {
+  id              String         @id @default(uuid()) @db.Uuid
+  orgId           String         @db.Uuid
+  portalAccountId String         @db.Uuid
+  accountHolderOf String?        @unique @db.Uuid
+  fullName        String
+  badgeName       String?
+  dateOfBirth     DateTime?      @db.Date
+  email           String?
+  phone           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  org             Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  portalAccount   PortalAccount  @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+  registrations   Registration[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, portalAccountId, id])
+  @@index([orgId])
+  @@index([portalAccountId])
+  @@map("attendee_profiles")
 }
 
 model PortalSession {
@@ -278,7 +302,7 @@ model PortalAccountToken {
   tokenHash       String                    @unique @db.Char(64)
   expiresAt       DateTime
   consumedAt      DateTime?
-  createdAt       DateTime                   @default(now())
+  createdAt       DateTime                  @default(now())
   portalAccount   PortalAccount             @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
 
   @@index([portalAccountId, purpose])
@@ -314,6 +338,7 @@ model Organization {
   addOnDefinitions             AddOnDefinition[]
   apiKeys                      ApiKey[]
   attendeeNotes                AttendeeNote[]
+  attendeeProfiles             AttendeeProfile[]
   badgeTemplates               BadgeTemplate[]
   badges                       Badge[]
   cartItems                    CartItem[]
@@ -382,28 +407,28 @@ model Account {
 }
 
 model Session {
-  id                 String              @id @default(uuid()) @db.Uuid
-  sessionToken       String              @unique
-  userId             String              @db.Uuid
-  authVersion        Int                 @default(0)
-  expires            DateTime
-  revokedAt          DateTime?
+  id                     String    @id @default(uuid()) @db.Uuid
+  sessionToken           String    @unique
+  userId                 String    @db.Uuid
+  authVersion            Int       @default(0)
+  expires                DateTime
+  revokedAt              DateTime?
   /// OIDC `sid` from the studio identity provider; back-channel logout revokes by it.
-  oidcSid            String?
-  oidcIssuer         String?
-  oidcClientId       String?
-  oidcSubject        String?
-  idpValidUntil      DateTime?
-  idleExpiresAt      DateTime?
-  lastUsedAt         DateTime?
+  oidcSid                String?
+  oidcIssuer             String?
+  oidcClientId           String?
+  oidcSubject            String?
+  idpValidUntil          DateTime?
+  idleExpiresAt          DateTime?
+  lastUsedAt             DateTime?
   primaryAuthenticatedAt DateTime?
-  mfaVerifiedAt      DateTime?
-  mfaEnrolled        Boolean?
+  mfaVerifiedAt          DateTime?
+  mfaEnrolled            Boolean?
   /// ID token kept only as the logout `id_token_hint`; cleared on revocation.
-  idToken            String?             @db.Text
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  idToken                String?   @db.Text
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, revokedAt, expires])
@@ -413,16 +438,16 @@ model Session {
 
 /// Single-use browser-bound OIDC intent. Refresh/step-up keep the original actor and deadline.
 model StaffOidcTransaction {
-  id                String    @id @default(uuid()) @db.Uuid
-  tokenHash         String    @unique @db.Char(64)
-  purpose           String
-  userId            String?   @db.Uuid
-  sessionId         String?   @db.Uuid
-  authVersion       Int?
-  returnTo          String
-  expiresAt         DateTime
-  consumedAt        DateTime?
-  createdAt         DateTime  @default(now())
+  id          String    @id @default(uuid()) @db.Uuid
+  tokenHash   String    @unique @db.Char(64)
+  purpose     String
+  userId      String?   @db.Uuid
+  sessionId   String?   @db.Uuid
+  authVersion Int?
+  returnTo    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([expiresAt])
   @@map("staff_oidc_transactions")
@@ -430,13 +455,13 @@ model StaffOidcTransaction {
 
 /// Logout fences also reject callbacks already in flight when the logout arrived.
 model StaffOidcRevocation {
-  id                String   @id @default(uuid()) @db.Uuid
-  issuer            String
-  clientId          String
-  kind              String
-  valueHash         String   @db.Char(64)
-  revokedThrough    DateTime
-  expiresAt         DateTime
+  id             String   @id @default(uuid()) @db.Uuid
+  issuer         String
+  clientId       String
+  kind           String
+  valueHash      String   @db.Char(64)
+  revokedThrough DateTime
+  expiresAt      DateTime
 
   @@unique([issuer, clientId, kind, valueHash])
   @@index([expiresAt])
@@ -445,11 +470,11 @@ model StaffOidcRevocation {
 
 /// Replay receipts commit atomically with session revocation.
 model StaffOidcLogoutReceipt {
-  id                String   @id @default(uuid()) @db.Uuid
-  issuer            String
-  clientId          String
-  jtiHash           String   @db.Char(64)
-  expiresAt         DateTime
+  id        String   @id @default(uuid()) @db.Uuid
+  issuer    String
+  clientId  String
+  jtiHash   String   @db.Char(64)
+  expiresAt DateTime
 
   @@unique([issuer, clientId, jtiHash])
   @@index([expiresAt])
@@ -570,7 +595,7 @@ model Event {
   venue                        String?
   status                       EventStatus                   @default(DRAFT)
   currency                     CurrencyCode                  @default(USD)
-  settings                     Json                          @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":1}")
+  settings                     Json                          @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":4}")
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
   badgeTemplates               BadgeTemplate[]
@@ -708,6 +733,7 @@ model Registration {
   orgId             String                        @db.Uuid
   eventId           String                        @db.Uuid
   portalAccountId   String                        @db.Uuid
+  attendeeProfileId String                        @db.Uuid
   typeId            String                        @db.Uuid
   status            RegistrationStatus            @default(PENDING)
   approvalStatus    RegistrationApprovalStatus    @default(APPROVED)
@@ -727,6 +753,7 @@ model Registration {
   transferRequests  RegistrationTransferRequest[] @relation("RegistrationTransferSource")
   type              RegistrationType              @relation(fields: [typeId], references: [id])
   portalAccount     PortalAccount                 @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
+  attendeeProfile   AttendeeProfile               @relation(fields: [orgId, portalAccountId, attendeeProfileId], references: [orgId, portalAccountId, id], onDelete: NoAction)
 
   @@unique([eventId, badgeNumber])
   @@index([orgId])
@@ -736,6 +763,7 @@ model Registration {
   @@index([eventId, createdAt])
   @@index([eventId, checkedInAt])
   @@index([portalAccountId])
+  @@index([attendeeProfileId])
   @@index([typeId])
   @@index([typeId, status])
   @@map("registrations")
