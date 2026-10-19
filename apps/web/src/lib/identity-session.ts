@@ -69,6 +69,7 @@ export async function issueIdentitySession(input: {
   idpValidUntil: Date;
   assurance: StaffAssurance;
   now: Date;
+  lifetime?: { createdAt: Date; idleExpiresAt: Date };
 }, client: Prisma.TransactionClient = prisma) {
   return client.session.create({
     data: {
@@ -76,13 +77,14 @@ export async function issueIdentitySession(input: {
       userId: input.userId,
       authVersion: input.authVersion,
       expires: input.expires,
+      createdAt: input.lifetime?.createdAt ?? input.now,
       oidcSid: input.oidcSid,
       idToken: input.idToken,
       oidcIssuer: input.issuer,
       oidcClientId: input.clientId,
       oidcSubject: input.subject,
       idpValidUntil: input.idpValidUntil,
-      idleExpiresAt: new Date(Math.min(input.expires.getTime(), input.now.getTime() + STAFF_IDLE_MS)),
+      idleExpiresAt: input.lifetime?.idleExpiresAt ?? new Date(Math.min(input.expires.getTime(), input.now.getTime() + STAFF_IDLE_MS)),
       lastUsedAt: input.now,
       ...input.assurance
     },

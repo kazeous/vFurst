@@ -35,6 +35,10 @@ pinned to RS256, with state, nonce and PKCE; staff APIs and cookies are isolated
 from tenant hosts. Staff session cookies use `__Host-vfurst-staff` on HTTPS;
 state, nonce, PKCE, CSRF and callback cookies also use `__Host-` names, and
 staff routes canonicalize platform aliases before those cookies are issued.
+The browser-intent cookie uses `__Host-vfurst-oidc-flow` (plain `vfurst-oidc-flow`
+on HTTP loopback). Its name must never start with the session cookie's name:
+Auth.js joins every matching prefix as a JWT chunk, which otherwise corrupts
+session reads and clears an in-flight MFA intent in another tab.
 Sentry scrubs nested invitation/token return URLs and removes bearer headers,
 cookies and authentication POST payloads. Its browser Replay/telemetry exclusion
 also covers invitation links and login/verification pages carrying those links;
@@ -47,16 +51,25 @@ Added policy:
 - 30-minute idle and at most 12-hour absolute lifetime (the existing environment
   override may shorten the absolute cap). A lease or step-up preserves both
   deadlines; ordinary activity touches idle expiry at most once per minute.
+  A lease keeps its session ID; fresh step-up replaces it and leaves the old
+  row revoked. This accommodates the observed authentik old-sid logout during
+  fresh authentication without restoring the old JWT's authority.
 - Platform operations and owner/admin-only org/event/resource mutations and
   sensitive exports, including settings, membership, Stripe and refunds, need
   a verified email plus primary and second-factor evidence under 60 minutes old.
   Step-up uses `prompt=login` and `max_age=10` and rejects old `auth_time`, missing
-  MFA, account changes and revoked sessions.
+  MFA and account changes. An already-revoked origin is eligible only when a
+  verified old-sid revocation occurred during this intent, the new sid differs,
+  and fresh primary/MFA proof succeeds. Local logout, explicit session revocation,
+  new-sid/subject revocation and expired lifetimes still reject the callback.
 - Member-level event-day capabilities retain their existing membership checks
   and the 5-minute IdP lease; ordinary workspace pages do not force MFA step-up.
 - `/staff/sessions` lists only the current user's sessions, supports ending
   another session and logging out all vFurst sessions. Logout happens locally
   before the provider is contacted.
+  Logout atomically consumes the browser's pending flow even if IdP logout has
+  already invalidated its JWT. Completion records the issued binding on that
+  same flow, so logout also revokes the replacement if completion won the race.
 - Structured forms keep entries and open verification in another tab. The user
   explicitly submits again afterwards; no sensitive command is replayed.
 

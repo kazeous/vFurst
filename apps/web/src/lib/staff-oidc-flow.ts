@@ -4,15 +4,20 @@ import { prisma } from "@vfurst/db";
 import { getCentralAppUrl } from "@/lib/central-url";
 import { safeReturnTo } from "@/lib/return-to";
 import { hashStaffProtocolValue, readStaffOidcTransaction, type StaffOidcPurpose } from "@/lib/staff-oidc-store";
-import { STAFF_FLOW_MS, StaffIdentityError } from "@/lib/staff-session-policy";
+import { STAFF_FLOW_MS, StaffIdentityError, staffOidcFlowCookieName } from "@/lib/staff-session-policy";
 import { isPlatformHostname, normalizeHostname } from "@/lib/platform-hosts";
 
 export function staffFlowCookieName() {
-  return new URL(getCentralAppUrl()).protocol === "https:" ? "__Host-vfurst-staff-flow" : "vfurst-staff-flow";
+  return staffOidcFlowCookieName(getCentralAppUrl());
 }
 
 export async function currentStaffOidcTransaction() {
   return readStaffOidcTransaction((await cookies()).get(staffFlowCookieName())?.value);
+}
+
+export async function currentStaffOidcFlowHash() {
+  const token = (await cookies()).get(staffFlowCookieName())?.value;
+  return token && /^[A-Za-z0-9_-]{43}$/.test(token) ? hashStaffProtocolValue(token) : null;
 }
 
 export async function beginStaffOidcFlow(input: {

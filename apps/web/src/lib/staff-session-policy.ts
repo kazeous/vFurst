@@ -5,6 +5,11 @@ export const STAFF_PROOF_FRESH_MS = 60 * 60_000;
 export const STAFF_FLOW_MS = 10 * 60_000;
 export const STAFF_ASSURANCE_POLICY = "vfurst-v1";
 
+export function staffOidcFlowCookieName(baseUrl: string) {
+  // Auth.js treats every cookie starting with its session name as a JWT chunk.
+  return `${new URL(baseUrl).protocol === "https:" ? "__Host-" : ""}vfurst-oidc-flow`;
+}
+
 /** Every OIDC cookie is host-only; sibling portal hosts cannot shadow state/nonce/PKCE. */
 export function staffOidcCookiePolicy(baseUrl: string) {
   const secure = new URL(baseUrl).protocol === "https:";
