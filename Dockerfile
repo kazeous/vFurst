@@ -9,7 +9,7 @@ RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
-FROM base AS deps
+FROM base AS manifests
 WORKDIR /repo
 COPY package.json package-lock.json turbo.json ./
 COPY apps/web/package.json apps/web/package.json
@@ -19,7 +19,28 @@ COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/email/package.json packages/email/package.json
 COPY packages/tenant-context/package.json packages/tenant-context/package.json
+
+# Full install, dev tooling included, for the build stage only.
+FROM manifests AS deps
 RUN npm ci --no-audit --fund=false
+
+# Runtime installs for the worker and migrate images. Each is filtered to one
+# workspace, so lint, type-check and test tooling never reaches them.
+# --legacy-peer-deps stops npm pulling in @prisma/client's optional peers (the
+# Prisma CLI and TypeScript); `npm ls` fails the build if the flag ever drops a
+# required peer. @prisma/client's postinstall writes a placeholder client, which
+# is deleted because each runtime image copies the one the build stage generated.
+FROM manifests AS worker-deps
+RUN npm ci --omit=dev --legacy-peer-deps --workspace @vfurst/worker --no-audit --fund=false \
+ && npm ls --omit=dev --all --workspace @vfurst/worker > /dev/null \
+ && rm -rf node_modules/.prisma
+
+# Migrate runs `prisma db push`, so it keeps @vfurst/db's one devDependency,
+# the Prisma CLI, and nothing from the other workspaces.
+FROM manifests AS migrate-deps
+RUN npm ci --legacy-peer-deps --workspace @vfurst/db --no-audit --fund=false \
+ && npm ls --all --workspace @vfurst/db > /dev/null \
+ && rm -rf node_modules/.prisma
 
 FROM base AS build
 ARG SOURCE_COMMIT=unknown
@@ -92,9 +113,10 @@ COPY --from=build --chown=worker:nodejs /repo/apps/worker/dist ./apps/worker/dis
 COPY --from=build --chown=worker:nodejs /repo/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build --chown=worker:nodejs /repo/packages ./packages
 
-# Reuse the already-installed node_modules from the builder stage so the
-# runtime image only ships what `node apps/worker/dist/index.js` resolves.
-COPY --from=build --chown=worker:nodejs /repo/node_modules ./node_modules
+# Production dependencies of @vfurst/worker only, plus the generated Prisma
+# client and its query engine from the build stage.
+COPY --from=worker-deps --chown=worker:nodejs /repo/node_modules ./node_modules
+COPY --from=build --chown=worker:nodejs /repo/node_modules/.prisma ./node_modules/.prisma
 
 USER worker
 EXPOSE 3100
@@ -109,7 +131,8 @@ WORKDIR /app
 RUN groupadd --system --gid 1001 nodejs \
  && useradd  --system --uid 1001 --gid nodejs --create-home --shell /sbin/nologin migrate
 COPY --from=build --chown=migrate:nodejs /repo/package.json ./package.json
-COPY --from=build --chown=migrate:nodejs /repo/node_modules ./node_modules
+COPY --from=migrate-deps --chown=migrate:nodejs /repo/node_modules ./node_modules
+COPY --from=build --chown=migrate:nodejs /repo/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build --chown=migrate:nodejs /repo/packages/db ./packages/db
 USER migrate
 CMD ["npm", "run", "sync", "--workspace", "@vfurst/db"]
