@@ -6,7 +6,8 @@ volunteer and vendor portal accounts keep their independent identity system.
 
 ## Review outcome
 
-Read-only deployed-provider probe, **2026-10-19 (Asia/Saigon)**:
+Initial read-only deployed-provider probe, **2026-10-19 (Asia/Saigon), before the
+owner authorized the Chrome rollout**:
 
 - [vFurst discovery](https://account.reyuugames.com/application/o/vfurst/.well-known/openid-configuration)
   reports only `HS256`, with scopes `openid profile email`. `client_secret_post`,
@@ -15,8 +16,9 @@ Read-only deployed-provider probe, **2026-10-19 (Asia/Saigon)**:
   returns HTTP 200 with `{}`, containing no `keys` array. The old receiver uses
   `createRemoteJWKSet`, so this cannot verify its logout tokens. This is a concrete
   configuration defect, beyond the earlier unobserved Preview/deactivation smoke.
-- No credentials were requested or sent and no provider setting was changed.
-  The new signing-key and assurance settings below are required before rollout.
+- That initial probe sent no credentials and changed no provider setting.
+  The subsequent authorized configuration and live acceptance are recorded in
+  `rollout-2026-10-19.md`; its public discovery now advertises RS256 and assurance.
 
 The existing integration had a session-resurrection defect: rejecting a JWT
 removed its registry ID, Auth.js re-encoded it, and the legacy upgrade path could
@@ -65,13 +67,17 @@ Added policy:
    discovery issuer `https://account.reyuugames.com/application/o/vfurst/`, including
    its trailing slash; do not repoint existing accounts to a different issuer.
    This is additive schema synchronization; do not reset the database.
-2. Import `vfurst-flows-v1.yaml` into authentik 2025.10.3. It creates only dedicated
+2. Import `vfurst-flows-v1.yaml` into authentik (live server: **2026.8.4**). It creates only dedicated
    vFurst flows/stages/mappings. It does not edit the shared Brand, Pawket, default
-   flows, users, groups or application bindings. Configure SMTP on the dedicated
-   email stage or use the existing global SMTP configuration.
+   flows, users, groups or application bindings. The dedicated email stage uses
+   the existing global SMTP transport, matching the old vFurst verification stage;
+   no SMTP credentials are embedded. A new stage otherwise defaults to localhost:25.
 3. On the vFurst OAuth2 provider, select `vfurst-authentication-v1` as its
    authentication flow and `vfurst-authorization-v1` as its authorization flow.
-   Keep the existing invalidation flow and exact callback and post-logout URLs.
+   Select `vfurst-invalidation-v1` as its invalidation flow. Keep the exact callback
+   URL and add the strict post-logout redirect `https://vfurst.reyuugames.com/`.
+   Permit only the authorization-code grant; the app does not use implicit,
+   hybrid, refresh, client-credentials, password, device-code or token-exchange grants.
 4. Enable **Include claims in id_token**. Keep `openid` and the profile mapping
    that supplies `groups`. Replace the old attribute-backed `email` mapping
    with `vfurst-email-evidence-v1`, and add `vfurst-assurance-v1` (scope
@@ -94,12 +100,17 @@ Added policy:
    `https://vfurst.reyuugames.com/api/oidc/backchannel-logout` and the selected
    logout method is back-channel. Provider logout behavior determines whether
    the shared studio session is also ended. The standing vFurst contract ends
-   that session too: select its intended studio invalidation/SLO flow, without
+   that session too: select the dedicated `vfurst-invalidation-v1` flow, whose
+   User Logout stage ends the studio session, without
    editing Pawket or the shared defaults. Verify a vFurst logout really ends the
    studio session instead of immediately reusing it on the next sign-in.
    See [authentik logout documentation](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/frontchannel_and_backchannel_logout/).
-7. Verify an ordinary login, password + TOTP and password + WebAuthn step-up on
-   this provider **before** deploying. A provider preview is insufficient:
+7. Verify an ordinary real signed callback and email delivery before the staging
+   deployment. The old web release requests only three scopes and cannot inspect
+   the new assurance contract. After CI passes, use the controlled staging
+   deployment to verify password + TOTP and password + WebAuthn and real step-up
+   through the new callback. **Do not mark rollout accepted until these pass.**
+   A provider preview is insufficient:
    verify real signed ID-token claims, `auth_time`, the `amr` MFA marker, the
    `vfurst_assurance` version 1 / policy `vfurst-v1`, and verified email. Never
    paste tokens or credentials into logs or progress notes. Passwordless passkey
@@ -128,3 +139,11 @@ until a real provider request and subsequent staff-access denial are observed.
 If the provider cannot issue the assurance contract, keep the existing deployed
 web release until it can; the new release intentionally has no claim bypass.
 No real IdP change, push, merge or deployment is implied by local test success.
+
+The Chrome-authorized live rollout is recorded in `rollout-2026-10-19.md`.
+`vfurst-provider-live-v1.yaml` targets **provider 4 / vFurst on the existing
+studio host only**, after applying the flows blueprint. It applies the public
+settings without changing the client ID, secret, subject mode or memberships.
+Do not apply that host-specific file to another environment. The 2026.8.4 edit
+form rejected redirect URI changes with HTTP 400; the official blueprint engine
+applied the same strict URI contract successfully.

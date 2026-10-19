@@ -1,4 +1,4 @@
-# Target: authentik 2025.10.3. Install the dedicated flows before creating providers.
+# Target: authentik 2025.10+; live rollout uses 2026.8.4. Install flows before binding the provider.
 # No existing default flow, source, user, group or application is modified.
 version: 1
 metadata:
@@ -47,6 +47,20 @@ entries:
     identifiers: {target: !KeyOf vfurst-authentication, stage: !KeyOf vfurst-login, order: 100}
 
   - model: authentik_flows.flow
+    id: vfurst-invalidation
+    identifiers: {slug: vfurst-invalidation-v1}
+    attrs:
+      name: vFurst single logout
+      title: Signed out
+      designation: invalidation
+      authentication: none
+  - model: authentik_stages_user_logout.userlogoutstage
+    id: vfurst-logout
+    identifiers: {name: vfurst-user-logout-v1}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {target: !KeyOf vfurst-invalidation, stage: !KeyOf vfurst-logout, order: 10}
+
+  - model: authentik_flows.flow
     id: vfurst-authorization
     identifiers: {slug: vfurst-authorization-v1}
     attrs:
@@ -58,8 +72,9 @@ entries:
     id: vfurst-email
     identifiers: {name: vfurst-email-verification-v1}
     attrs:
-      # Configure SMTP on this stage or globally outside Git. Omit connection
-      # fields so reapplying this blueprint preserves the operator's SMTP setup.
+      # Use the studio's existing global SMTP transport, as the old vFurst
+      # verification stage does. Credentials remain outside this blueprint.
+      use_global_settings: true
       activate_user_on_success: false
       token_expiry: minutes=10
       subject: Verify your email for your reyuuGAMES Account
