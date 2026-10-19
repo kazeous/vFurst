@@ -168,11 +168,14 @@ test("disabled transfers are rejected by the server policy", async ({ page }) =>
   });
   await requestForm.getByLabel("Recipient email").fill(`blocked-recipient-${runId}@example.com`);
   await requestForm.getByRole("button", { name: "Send transfer email" }).click({ noWaitAfter: true });
-  await page.waitForTimeout(1_000);
+  // The action throws RegistrationPolicyError from a plain form, so the route
+  // error boundary replaces the page once the server has rejected it.
+  await expect(page.getByTestId("route-error")).toBeVisible({ timeout: 30_000 });
 
   const unchanged = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
   expect(unchanged.status).toBe("CONFIRMED");
   expect(await prisma.registration.count({ where: { eventId: approvalEventId } })).toBe(1);
+  expect(await prisma.registrationTransferRequest.count({ where: { eventId: approvalEventId } })).toBe(0);
   await page.goto(`/dashboard/events/${approvalEventId}/registrations/transfers`);
   await expect(page.getByRole("heading", { name: "Transfers disabled" })).toBeVisible();
 });
