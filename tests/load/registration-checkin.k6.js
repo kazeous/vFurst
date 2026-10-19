@@ -4,11 +4,10 @@ import { Trend } from "k6/metrics";
 
 const defaultBaseUrl = __ENV.VFURST_K6_RUNTIME === "docker" ? "http://host.docker.internal:3000" : "http://127.0.0.1:3000";
 const baseUrl = __ENV.VFURST_BASE_URL || defaultBaseUrl;
-const orgSlug = __ENV.VFURST_LOAD_ORG_SLUG || "demo";
 const eventId = __ENV.VFURST_LOAD_EVENT_ID || "00000000-0000-0000-0000-000000000000";
 const staffCookie = __ENV.VFURST_STAFF_COOKIE || "";
-const staffEmail = __ENV.VFURST_STAFF_EMAIL || "";
-const staffPassword = __ENV.VFURST_STAFF_PASSWORD || "";
+const portalHost = __ENV.VFURST_PORTAL_HOST || "";
+const portalSessionCookie = __ENV.VFURST_PORTAL_SESSION_COOKIE || "";
 const hostHeader = __ENV.VFURST_HOST_HEADER || (__ENV.VFURST_K6_RUNTIME === "docker" ? "localhost:3000" : "");
 const loadProfile = __ENV.VFURST_LOAD_PROFILE || "full";
 const registrationVus = Number(__ENV.VFURST_REGISTRATION_VUS || (loadProfile === "smoke" ? 2 : 500));
@@ -35,6 +34,7 @@ function stagesFor(target) {
 
 export const options = {
   discardResponseBodies: false,
+  summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
   scenarios: {
     registration: {
       executor: "ramping-vus",
@@ -58,12 +58,6 @@ export const options = {
   }
 };
 
-function cookieHeaderFromResponse(response) {
-  return Object.entries(response.cookies)
-    .flatMap(([name, values]) => values.map((cookie) => `${name}=${cookie.value}`))
-    .join("; ");
-}
-
 function headers(extra = {}) {
   return hostHeader ? { Host: hostHeader, ...extra } : extra;
 }
@@ -72,56 +66,49 @@ function bodyIncludes(response, text) {
   return typeof response.body === "string" && response.body.includes(text);
 }
 
-function loginStaff() {
-  if (staffCookie || !staffEmail || !staffPassword) {
-    return staffCookie;
+function portalAccountEmail(response) {
+  try {
+    return response.json("account.email");
+  } catch {
+    return null;
   }
-
-  const csrfResponse = http.get(`${baseUrl}/api/auth/csrf`, {
-    headers: headers(),
-    tags: { flow: "auth" }
-  });
-  const csrfToken = csrfResponse.json("csrfToken");
-
-  const loginResponse = http.post(
-    `${baseUrl}/api/auth/callback/credentials`,
-    {
-      csrfToken,
-      email: staffEmail,
-      password: staffPassword,
-      callbackUrl: `${baseUrl}/dashboard`,
-      json: "true"
-    },
-    {
-      headers: headers(),
-      redirects: 0,
-      tags: { flow: "auth" }
-    }
-  );
-
-  check(loginResponse, {
-    "staff login returned auth cookie": (result) => cookieHeaderFromResponse(result).includes("authjs.session-token")
-  });
-
-  return cookieHeaderFromResponse(loginResponse);
 }
 
 export function setup() {
+  if (!staffCookie) {
+    throw new Error("VFURST_STAFF_COOKIE is required");
+  }
+
+  if (!portalHost || !portalSessionCookie) {
+    throw new Error("VFURST_PORTAL_HOST and VFURST_PORTAL_SESSION_COOKIE are required");
+  }
+
   return {
-    cookieHeader: loginStaff()
+    cookieHeader: staffCookie
   };
 }
 
 export function registrationFlow() {
-  const response = http.get(`${baseUrl}/${orgSlug}/register`, {
-    headers: headers(),
-    tags: { flow: "registration", name: "public registration" }
+  const page = http.get(`${baseUrl}/register`, {
+    headers: { Host: portalHost },
+    tags: { flow: "registration", name: "portal registration" }
   });
-  registrationDuration.add(response.timings.duration);
+  registrationDuration.add(page.timings.duration);
 
-  check(response, {
+  check(page, {
     "registration page returned 200": (result) => result.status === 200,
     "registration page rendered form": (result) => bodyIncludes(result, "Registration")
+  });
+
+  const session = http.get(`${baseUrl}/api/portal/session`, {
+    headers: { Host: portalHost, Cookie: portalSessionCookie },
+    tags: { flow: "registration", name: "portal session" }
+  });
+  registrationDuration.add(session.timings.duration);
+
+  check(session, {
+    "portal session returned 200": (result) => result.status === 200,
+    "portal session resolved the account": (result) => Boolean(portalAccountEmail(result))
   });
 
   sleep(1);

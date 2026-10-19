@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { getCentralAppUrl } from "@/lib/central-url";
+import { formatDate } from "@/lib/i18n";
+import { getPortalUrl, type PortalUrlOrganization } from "@/lib/portal-url";
 
 export const REGISTRATION_TRANSFER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -24,16 +25,12 @@ export function getRegistrationTransferPath(requestId: string, rawToken: string)
   return `/account/transfers/${encodeURIComponent(requestId)}?token=${encodeURIComponent(rawToken)}`;
 }
 
-export function getRegistrationTransferLandingPath(requestId: string, rawToken: string) {
-  return `/transfer/${encodeURIComponent(requestId)}?token=${encodeURIComponent(rawToken)}`;
-}
-
-export function getRegistrationTransferUrl(requestId: string, rawToken: string) {
-  return getCentralAppUrl(getRegistrationTransferLandingPath(requestId, rawToken));
+export function getRegistrationTransferUrl(org: PortalUrlOrganization, requestId: string, rawToken: string): string {
+  return getPortalUrl(org, getRegistrationTransferPath(requestId, rawToken));
 }
 
 export function formatTransferExpiry(expiresAt: Date) {
-  return expiresAt.toLocaleString("en-US", {
+  return formatDate(expiresAt, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "UTC"

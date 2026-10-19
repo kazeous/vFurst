@@ -5,6 +5,7 @@ import {
   PaymentAttemptReservationError,
   reservePaymentAttempt
 } from "../../packages/db/src/payment-attempts";
+import { createPortalAccountFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -13,7 +14,7 @@ const orgSlug = `attempt-lock-${runId}`;
 
 let orgId: string;
 let eventId: string;
-let userId: string;
+let portalAccountId: string;
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(90_000);
@@ -23,7 +24,7 @@ async function createPendingOrder() {
     data: {
       orgId,
       eventId,
-      userId,
+      portalAccountId,
       total: 250_000,
       platformFee: 25_000,
       currency: "VND",
@@ -46,13 +47,6 @@ function reservation(orderId: string, provider: PaymentProvider) {
 }
 
 test.beforeAll(async () => {
-  const user = await prisma.user.create({
-    data: {
-      email: userEmail,
-      name: "Attempt Lock User"
-    }
-  });
-  userId = user.id;
   const org = await prisma.organization.create({
     data: {
       name: "Attempt Lock Organization",
@@ -77,11 +71,11 @@ test.beforeAll(async () => {
   });
   orgId = org.id;
   eventId = org.events[0]!.id;
+  portalAccountId = (await createPortalAccountFixture(prisma, { orgId: org.id, email: userEmail, name: "Payment Attendee" })).id;
 });
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { email: userEmail } });
   await prisma.$disconnect();
 });
 

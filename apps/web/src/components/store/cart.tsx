@@ -1,3 +1,4 @@
+import { ActionStateForm } from "@/components/action-state-form";
 import { clearCart, removeFromCart } from "@/actions/cart-actions";
 import { CartCheckoutForm, CartQuantityForm, CartVoucherForm } from "@/components/store/cart-forms";
 import { formatCurrency } from "@/lib/registration/pricing";
@@ -62,11 +63,11 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
           <h2>Cart</h2>
         </div>
         {cart.items.length > 0 ? (
-          <form action={clearCart}>
+          <ActionStateForm action={clearCart}>
             <input type="hidden" name="cartId" value={cart.id} />
             <input type="hidden" name="returnPath" value={returnPath} />
             <Button label="Clear" type="submit" size="sm" variant="ghost" />
-          </form>
+          </ActionStateForm>
         ) : null}
       </div>
 
@@ -89,11 +90,11 @@ export function StoreCart({ cart, currency, returnPath, successPath, cancelPath 
                 initialQuantity={item.quantity}
                 itemLabel={item.product?.name ?? "cart item"}
               />
-              <form action={removeFromCart}>
+              <ActionStateForm action={removeFromCart}>
                 <input type="hidden" name="cartItemId" value={item.id} />
                 <input type="hidden" name="returnPath" value={returnPath} />
                 <Button label="Remove" type="submit" size="sm" variant="destructive" />
-              </form>
+              </ActionStateForm>
             </div>
           );
         })}

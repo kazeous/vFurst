@@ -1,6 +1,21 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const db = vi.hoisted(() => {
+  const tx = {
+    orgInvitation: { findUnique: vi.fn(), updateMany: vi.fn() },
+    orgMember: { upsert: vi.fn() }
+  };
+  return { tx, prisma: { $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)) } };
+});
+
+vi.mock("@vfurst/db", () => ({
+  prisma: db.prisma,
+  Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }
+}));
+
 import {
+  acceptOrganizationInvitation,
   createOrganizationInvitationCredential,
   getOrganizationInvitationState,
   hashOrganizationInvitationToken,
@@ -43,5 +58,31 @@ describe("safe auth return paths", () => {
     expect(safeReturnTo("https://attacker.example")).toBe("/dashboard");
     expect(safeReturnTo("//attacker.example")).toBe("/dashboard");
     expect(safeReturnTo("/\\attacker.example")).toBe("/dashboard");
+  });
+});
+
+describe("organization invitation acceptance", () => {
+  it("does not create a membership for an unverified invitee", async () => {
+    db.tx.orgInvitation.findUnique.mockResolvedValue({
+      id: "invitation-1",
+      orgId: "org-1",
+      email: "recipient@example.com",
+      role: "ADMIN",
+      expiresAt: new Date(Date.now() + 60_000),
+      acceptedAt: null,
+      revokedAt: null,
+      org: { status: "ACTIVE" }
+    });
+
+    await expect(
+      acceptOrganizationInvitation({
+        token: "t".repeat(43),
+        userId: "user-1",
+        userEmail: "recipient@example.com",
+        userEmailVerified: false
+      })
+    ).rejects.toMatchObject({ code: "EMAIL_UNVERIFIED" });
+    expect(db.tx.orgInvitation.updateMany).not.toHaveBeenCalled();
+    expect(db.tx.orgMember.upsert).not.toHaveBeenCalled();
   });
 });

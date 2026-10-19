@@ -1,0 +1,25 @@
+# Live provider 4 on account.reyuugames.com only. Apply the flows blueprint first.
+# Existing identity and credentials are intentionally omitted from attrs.
+version: 1
+metadata:
+  name: vFurst - live provider contract v1
+entries:
+  - model: authentik_providers_oauth2.oauth2provider
+    identifiers: {pk: 4, name: vFurst}
+    attrs:
+      authentication_flow: !Find [authentik_flows.flow, [slug, vfurst-authentication-v1]]
+      authorization_flow: !Find [authentik_flows.flow, [slug, vfurst-authorization-v1]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, vfurst-invalidation-v1]]
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, pawket-oidc-signing-rsa2048-v1]]
+      include_claims_in_id_token: true
+      grant_types: [authorization_code]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [name, "authentik default OAuth Mapping: OpenID 'openid'"]]
+        - !Find [authentik_providers_oauth2.scopemapping, [name, "authentik default OAuth Mapping: OpenID 'profile'"]]
+        - !Find [authentik_providers_oauth2.scopemapping, [name, vfurst-email-evidence-v1]]
+        - !Find [authentik_providers_oauth2.scopemapping, [name, vfurst-assurance-v1]]
+      redirect_uris:
+        - {matching_mode: strict, url: 'https://vfurst.reyuugames.com/api/auth/callback/authentik', redirect_uri_type: authorization}
+        - {matching_mode: strict, url: 'https://vfurst.reyuugames.com/', redirect_uri_type: logout}
+      logout_uri: https://vfurst.reyuugames.com/api/oidc/backchannel-logout
+      logout_method: backchannel

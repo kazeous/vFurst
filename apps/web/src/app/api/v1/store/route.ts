@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const { page, pageSize, skip, take } = parsePagination(request);
   const where = {
     orgId: context.apiKey.orgId,
+    archivedAt: null,
     ...(eventId ? { eventId } : {}),
     ...(category ? { category } : {})
   };

@@ -1,0 +1,222 @@
+# Coolify deployment source; local development uses docker-compose.yml.
+# Validate with npm run compose:validate.
+# See docs/launch/staging-coolify-setup.md.
+# Coolify builds with build-time variables only, so the required form (:?) is
+# reserved for SOURCE_COMMIT and NEXT_PUBLIC_*; runtime values use the :- form
+# and the containers refuse to start without them.
+services:
+  postgres:
+    image: postgres:16-bookworm
+    command: postgres -c max_connections=100
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-bookworm
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  migrate:
+    image: vfurst-migrate:${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+    build:
+      context: .
+      target: migrate
+      args:
+        SOURCE_COMMIT: ${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-vFurst}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in Coolify}
+        NEXT_PUBLIC_MANAGER_URL: ${NEXT_PUBLIC_MANAGER_URL:?Set NEXT_PUBLIC_MANAGER_URL in Coolify}
+        NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:?Set NEXT_PUBLIC_CONSOLE_URL in Coolify}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in Coolify}
+        NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:?Set NEXT_PUBLIC_ROOT_DOMAIN in Coolify}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+        NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE:-0.02}
+        NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE:-1}
+    restart: "no"
+    exclude_from_hc: true
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: vfurst-worker:${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+    build:
+      context: .
+      target: worker
+      args:
+        SOURCE_COMMIT: ${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-vFurst}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in Coolify}
+        NEXT_PUBLIC_MANAGER_URL: ${NEXT_PUBLIC_MANAGER_URL:?Set NEXT_PUBLIC_MANAGER_URL in Coolify}
+        NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:?Set NEXT_PUBLIC_CONSOLE_URL in Coolify}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in Coolify}
+        NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:?Set NEXT_PUBLIC_ROOT_DOMAIN in Coolify}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+        NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE:-0.02}
+        NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE:-1}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    expose: ["3100"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+      VFURST_DB_CONNECTION_LIMIT: ${VFURST_DB_CONNECTION_LIMIT:-4}
+      VFURST_DB_POOL_TIMEOUT_SECONDS: ${VFURST_DB_POOL_TIMEOUT_SECONDS:-20}
+      REDIS_URL: redis://redis:6379
+      CONTROL_PLANE_INVALIDATION_CHANNEL: ${CONTROL_PLANE_INVALIDATION_CHANNEL:-vfurst:control-plane:invalidations}
+      EMAIL_DELIVERY_ENCRYPTION_KEY: ${EMAIL_DELIVERY_ENCRYPTION_KEY:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in Coolify}
+      SEPAY_ENV: ${SEPAY_ENV:-sandbox}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-}
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+      WORKER_HEALTH_PORT: "3100"
+      WORKER_STARTUP_TIMEOUT_MS: ${WORKER_STARTUP_TIMEOUT_MS:-30000}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+      start_interval: 2s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: vfurst-web:${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+    build:
+      context: .
+      target: web
+      args:
+        SOURCE_COMMIT: ${SOURCE_COMMIT:?Enable Include Source Commit in Build in Coolify}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-vFurst}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in Coolify}
+        NEXT_PUBLIC_MANAGER_URL: ${NEXT_PUBLIC_MANAGER_URL:?Set NEXT_PUBLIC_MANAGER_URL in Coolify}
+        NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:?Set NEXT_PUBLIC_CONSOLE_URL in Coolify}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in Coolify}
+        NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:?Set NEXT_PUBLIC_ROOT_DOMAIN in Coolify}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+        NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE:-0.02}
+        NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE:-1}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    expose: ["3000"]
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-vFurst}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Set NEXT_PUBLIC_APP_URL in Coolify}
+      NEXT_PUBLIC_MANAGER_URL: ${NEXT_PUBLIC_MANAGER_URL:?Set NEXT_PUBLIC_MANAGER_URL in Coolify}
+      NEXT_PUBLIC_CONSOLE_URL: ${NEXT_PUBLIC_CONSOLE_URL:?Set NEXT_PUBLIC_CONSOLE_URL in Coolify}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in Coolify}
+      NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:?Set NEXT_PUBLIC_ROOT_DOMAIN in Coolify}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}?schema=public
+      VFURST_DB_CONNECTION_LIMIT: ${VFURST_DB_CONNECTION_LIMIT:-4}
+      VFURST_DB_POOL_TIMEOUT_SECONDS: ${VFURST_DB_POOL_TIMEOUT_SECONDS:-20}
+      VFURST_DB_CONNECTION_BUDGET: ${VFURST_DB_CONNECTION_BUDGET:-80}
+      VFURST_WEB_REPLICAS: ${VFURST_WEB_REPLICAS:-1}
+      VFURST_WORKER_REPLICAS: ${VFURST_WORKER_REPLICAS:-1}
+      REDIS_URL: redis://redis:6379
+      VFURST_RATE_LIMIT_PREFIX: ${VFURST_RATE_LIMIT_PREFIX:-vfurst:rate-limit}
+      VFURST_API_RATE_LIMIT_PER_MINUTE: ${VFURST_API_RATE_LIMIT_PER_MINUTE:-100}
+      VFURST_AUTH_RATE_LIMIT_PER_MINUTE: ${VFURST_AUTH_RATE_LIMIT_PER_MINUTE:-30}
+      VFURST_PAYMENT_RATE_LIMIT_PER_MINUTE: ${VFURST_PAYMENT_RATE_LIMIT_PER_MINUTE:-60}
+      VFURST_STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE: ${VFURST_STRIPE_WEBHOOK_RATE_LIMIT_PER_MINUTE:-240}
+      VFURST_SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE: ${VFURST_SEPAY_WEBHOOK_RATE_LIMIT_PER_MINUTE:-240}
+      EMAIL_DELIVERY_ENCRYPTION_KEY: ${EMAIL_DELIVERY_ENCRYPTION_KEY:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SALES_CONTACT_EMAIL: ${SALES_CONTACT_EMAIL:-sales@vfurst.com}
+      AUTH_URL: ${AUTH_URL:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_TRUST_HOST: "true"
+      AUTH_AUTHENTIK_ISSUER: ${AUTH_AUTHENTIK_ISSUER:-}
+      AUTH_AUTHENTIK_ID: ${AUTH_AUTHENTIK_ID:-}
+      AUTH_AUTHENTIK_SECRET: ${AUTH_AUTHENTIK_SECRET:-}
+      VFURST_PLATFORM_ADMIN_GROUP: ${VFURST_PLATFORM_ADMIN_GROUP:-vfurst-platform-admins}
+      VFURST_STAFF_SESSION_MAX_AGE_SECONDS: ${VFURST_STAFF_SESSION_MAX_AGE_SECONDS:-43200}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SEPAY_ENV: ${SEPAY_ENV:-sandbox}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-}
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+      CHECKOUT_TOKEN_SECRET: ${CHECKOUT_TOKEN_SECRET:-}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE:-0.02}
+      NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE:-1}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+      start_interval: 2s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  redis_data:

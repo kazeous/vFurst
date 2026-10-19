@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -25,13 +26,8 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [owner, attendee] = await Promise.all([
-    prisma.user.create({ data: { email: ownerEmail, name: "Raffle Owner", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeEmail, name: "Raffle Attendee", passwordHash } })
-  ]);
+  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Raffle Owner", ...staffIdentityData() } });
   ownerId = owner.id;
-  attendeeId = attendee.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -57,6 +53,9 @@ test.beforeAll(async () => {
   orgId = org.id;
   eventId = org.events[0]!.id;
 
+  const attendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Raffle Attendee", password });
+  attendeeId = attendee.id;
+
   const [tier, product] = await Promise.all([
     prisma.registrationType.create({ data: { orgId, eventId, name: "Raffle Registration", price: 0 } }),
     prisma.storeProduct.create({
@@ -74,7 +73,7 @@ test.beforeAll(async () => {
   productId = product.id;
 
   await prisma.registration.create({
-    data: { orgId, eventId, userId: attendeeId, typeId: tierId, status: "CONFIRMED", approvalStatus: "APPROVED" }
+    data: { orgId, eventId, portalAccountId: attendeeId, typeId: tierId, status: "CONFIRMED", approvalStatus: "APPROVED" }
   });
   const [purchaseRaffle, confirmedRaffle] = await Promise.all([
     prisma.raffle.create({
@@ -135,20 +134,21 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await prisma.paymentProviderConfig.updateMany({ where: { provider: "SEPAY", updatedById: ownerId }, data: { updatedById: null } });
-  await prisma.organization.deleteMany({ where: { id: orgId } });
-  await prisma.user.deleteMany({ where: { id: { in: [ownerId, attendeeId] } } });
+  // Ids stay unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (ownerId) {
+    await prisma.paymentProviderConfig.updateMany({ where: { provider: "SEPAY", updatedById: ownerId }, data: { updatedById: null } });
+  }
+  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId } });
+  await prisma.user.deleteMany({ where: { id: { in: [ownerId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  if (email === attendeeEmail) {
+    await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
+  } else {
+    await loginAsStaffEmail(page, email);
+  }
 }
 
 test("paid product fulfillment creates one weighted PURCHASED entry and is idempotent on webhook replay", async ({ page }) => {
@@ -157,7 +157,7 @@ test("paid product fulfillment creates one weighted PURCHASED entry and is idemp
     data: {
       orgId,
       eventId,
-      userId: attendeeId,
+      portalAccountId: attendeeId,
       total: 30_000,
       platformFee: 0,
       currency: "VND",
@@ -206,13 +206,13 @@ test("paid product fulfillment creates one weighted PURCHASED entry and is idemp
     expect(response.status()).toBe(200);
   }
 
-  const entries = await prisma.raffleEntry.findMany({ where: { raffleId: purchaseRaffleId, userId: attendeeId } });
+  const entries = await prisma.raffleEntry.findMany({ where: { raffleId: purchaseRaffleId, portalAccountId: attendeeId } });
   expect(entries).toHaveLength(1);
   expect(entries[0]).toEqual(expect.objectContaining({ entryMethod: "PURCHASED", quantity: 4, orderItemId: order.items[0]!.id }));
   expect(await prisma.raffleEntry.count({ where: { purchaseKey: `${purchaseRaffleId}:${order.items[0]!.id}` } })).toBe(1);
 
   await login(page, attendeeEmail);
-  await page.goto("/account/raffles");
+  await page.goto(`${portalOrigin(orgSlug)}/account/raffles`);
   await expect(page.getByRole("heading", { name: "My raffle entries" })).toBeVisible();
   await expect(page.getByText("Purchased Tickets Raffle")).toBeVisible();
   await expect(page.getByText(/4 weighted entr/)).toBeVisible();
@@ -223,7 +223,7 @@ test("draw stores an immutable result and exposes only the signed-in attendee's 
   await page.goto(`/dashboard/events/${eventId}/raffle`);
   const raffle = page.locator("article", { hasText: "Confirmed Registration Raffle" });
   await raffle.getByRole("button", { name: "Auto-enter attendees" }).click({ noWaitAfter: true });
-  await expect.poll(() => prisma.raffleEntry.count({ where: { raffleId: confirmedRaffleId, userId: attendeeId } })).toBe(1);
+  await expect.poll(() => prisma.raffleEntry.count({ where: { raffleId: confirmedRaffleId, portalAccountId: attendeeId } })).toBe(1);
   await page.goto(`/dashboard/events/${eventId}/raffle`);
   const drawRaffle = page.locator("article", { hasText: "Confirmed Registration Raffle" });
   await drawRaffle.getByRole("button", { name: "Draw winner" }).click({ noWaitAfter: true });
@@ -243,7 +243,7 @@ test("draw stores an immutable result and exposes only the signed-in attendee's 
   expect((event.settings as { raffleHistory?: unknown }).raffleHistory).toBeUndefined();
 
   await login(page, attendeeEmail);
-  await page.goto("/account/raffles");
+  await page.goto(`${portalOrigin(orgSlug)}/account/raffles`);
   await expect(page.getByText("Confirmed Prize")).toBeVisible();
   await expect(page.getByText(/Notified|Notification pending/)).toBeVisible();
 });

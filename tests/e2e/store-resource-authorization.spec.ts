@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -29,20 +30,19 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
     prisma.user.create({
       data: {
         email: ownerAEmail,
         name: "Store Owner A",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: ownerBEmail,
         name: "Store Owner B",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -106,6 +106,8 @@ test.beforeAll(async () => {
     })
   ]);
 
+  const ownerAAttendee = await createPortalAccountFixture(prisma, { orgId: orgA.id, email: ownerAEmail, name: "Store Owner A", password });
+  const ownerBAttendee = await createPortalAccountFixture(prisma, { orgId: orgB.id, email: ownerBEmail, name: "Store Owner B", password });
   eventAId = orgA.events[0]!.id;
   eventBId = orgB.events[0]!.id;
 
@@ -138,7 +140,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgA.id,
         eventId: eventAId,
-        userId: ownerA.id,
+        portalAccountId: ownerAAttendee.id,
         total: 0,
         platformFee: 0,
         currency: "VND",
@@ -149,7 +151,7 @@ test.beforeAll(async () => {
       data: {
         orgId: orgB.id,
         eventId: eventBId,
-        userId: ownerB.id,
+        portalAccountId: ownerBAttendee.id,
         total: 0,
         platformFee: 0,
         currency: "USD",
@@ -165,7 +167,7 @@ test.beforeAll(async () => {
     data: {
       orgId: orgA.id,
       eventId: eventAId,
-      userId: ownerA.id,
+      portalAccountId: ownerAAttendee.id,
       items: {
         create: {
           orgId: orgA.id,
@@ -183,7 +185,7 @@ test.beforeAll(async () => {
     data: {
       orgId: orgA.id,
       eventId: eventBId,
-      userId: ownerA.id,
+      portalAccountId: ownerAAttendee.id,
       items: {
         create: {
           orgId: orgA.id,
@@ -219,37 +221,25 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ownerAEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      const isInterruptedNavigation =
-        error instanceof Error &&
-        (error.message.includes("ERR_ABORTED") || error.message.includes("interrupted by another navigation"));
-      if (!isInterruptedNavigation || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate((formElement, name) => {
     const form = formElement as HTMLFormElement;
@@ -271,7 +261,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -296,10 +286,12 @@ async function expectOriginalProducts() {
   ]);
   expect(productA.name).toBe(productAName);
   expect(productA.orgId).not.toBe(productB.orgId);
+  expect(productA.archivedAt).toBeNull();
   expect(productB.name).toBe(productBName);
+  expect(productB.archivedAt).toBeNull();
 }
 
-test("product CRUD derives tenant and currency from the stored event or product", async ({ page }) => {
+test("product catalog actions derive tenant and currency from the stored event or product", async ({ page }) => {
   await loginAsOwnerA(page);
   const storePath = `/dashboard/events/${eventAId}/store`;
   await page.goto(storePath);
@@ -324,12 +316,12 @@ test("product CRUD derives tenant and currency from the stored event or product"
   await expectOriginalProducts();
 
   await navigateAfterRejectedAction(page, storePath);
-  const deleteForm = page
+  const archiveForm = page
     .getByRole("heading", { name: productAName })
     .locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' vf-section ')][1]")
-    .getByRole("button", { name: "Delete", exact: true })
+    .getByRole("button", { name: "Archive", exact: true })
     .locator("xpath=ancestor::form");
-  await submitTamperedAction(page, storePath, deleteForm, "Delete", "productId", productBId);
+  await submitTamperedAction(page, storePath, archiveForm, "Archive", "productId", productBId);
   await expectOriginalProducts();
 
   await navigateAfterRejectedAction(page, storePath);
@@ -341,6 +333,17 @@ test("product CRUD derives tenant and currency from the stored event or product"
   const created = await prisma.storeProduct.findFirstOrThrow({ where: { eventId: eventAId, name: validCreateName } });
   expect(created.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
   expect(created.price).toBe(150_000);
+
+  await page.goto(storePath);
+  const createdSection = page
+    .getByRole("heading", { name: validCreateName })
+    .locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' vf-section ')][1]");
+  const archiveCreatedForm = createdSection.getByRole("button", { name: "Archive", exact: true }).locator("xpath=ancestor::form");
+  await submitAction(page, storePath, archiveCreatedForm, "Archive");
+
+  await expect.poll(async () => (await prisma.storeProduct.findUniqueOrThrow({ where: { id: created.id } })).archivedAt).not.toBeNull();
+  await page.goto(`${portalOrigin(orgASlug)}/store`);
+  await expect(page.getByRole("heading", { name: validCreateName })).toHaveCount(0);
 });
 
 test("full and partial refunds reject an order from another tenant", async ({ page }) => {
@@ -374,7 +377,8 @@ test("full and partial refunds reject an order from another tenant", async ({ pa
 
 test("checkout rejects a user-owned cart whose tenant does not match its event", async ({ page }) => {
   await loginAsOwnerA(page);
-  const storePath = `/${orgASlug}/store`;
+  await loginAsAttendee(page, { subdomain: orgASlug }, ownerAEmail, { password });
+  const storePath = `${portalOrigin(orgASlug)}/store`;
   await page.goto(storePath);
   const checkoutForm = page.getByRole("button", { name: "Checkout" }).locator("xpath=ancestor::form");
   await submitTamperedAction(page, storePath, checkoutForm, "Checkout", "cartId", poisonedCartId);
@@ -404,7 +408,7 @@ test("product upload action rejects unsupported and forged image files", async (
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.storeProduct.count({ where: { name: invalidTypeName } })).toBe(0);
 
-  await navigateAfterRejectedAction(page, storePath);
+  await page.goto(storePath);
   createForm = page.getByRole("button", { name: "Create product" }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Name").fill(invalidContentsName);
   await createForm.locator('input[name="price"]').fill("100000");

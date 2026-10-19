@@ -1,11 +1,11 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
+import type { ActionFormState } from "@/lib/action-form-state";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { requireSafeCheckoutReturnPath } from "@/lib/payments/checkout-return-path";
 import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
-import { getBaseUrl } from "@/lib/payments/stripe";
 import { reserveOrderInventory } from "@/lib/payments/reservations";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
@@ -14,7 +14,7 @@ import { getCartSummary, parseProductOptions } from "@/lib/store/pricing";
 import { prisma } from "@vfurst/db";
 import type { Prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 
@@ -28,21 +28,12 @@ function jsonInput(value: unknown): Prisma.InputJsonValue {
   return value == null ? {} : (value as Prisma.InputJsonValue);
 }
 
-async function requireUserId() {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  return session.user.id;
-}
-
-async function getOrCreateCart(userId: string, event: { id: string; orgId: string }) {
+async function getOrCreateCart(portalAccountId: string, event: { id: string; orgId: string }) {
   return prisma.cart.upsert({
     where: {
-      userId_eventId: {
-        userId,
+      orgId: event.orgId,
+      portalAccountId_eventId: {
+        portalAccountId,
         eventId: event.id
       }
     },
@@ -51,7 +42,7 @@ async function getOrCreateCart(userId: string, event: { id: string; orgId: strin
     },
     create: {
       orgId: event.orgId,
-      userId,
+      portalAccountId,
       eventId: event.id
     }
   });
@@ -87,6 +78,8 @@ export async function addToCart(_previousState: PublicFormState, formData: FormD
 }
 
 async function addToCartInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
   const parsed = z
     .object({
       productId: z.string().uuid(),
@@ -101,7 +94,7 @@ async function addToCartInner(formData: FormData): Promise<PublicFormState> {
     return { error: parsed.error.issues[0]?.message ?? "Invalid cart item." };
   }
 
-  const userId = await requireUserId();
+  const portalAccountId = context.account.id;
   const product = await prisma.storeProduct.findUnique({
     where: {
       id: parsed.data.productId
@@ -115,7 +108,12 @@ async function addToCartInner(formData: FormData): Promise<PublicFormState> {
     }
   });
 
-  if (!product || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
+  if (product) {
+    assertPortalResourceOrg(product.orgId, context.org);
+    assertPortalResourceOrg(product.event.orgId, context.org);
+  }
+
+  if (!product || product.archivedAt || product.event.status !== "PUBLISHED" || product.orgId !== product.event.orgId) {
     return { error: "This product is not available for purchase." };
   }
 
@@ -125,7 +123,8 @@ async function addToCartInner(formData: FormData): Promise<PublicFormState> {
     return { error: "Not enough inventory is available." };
   }
 
-  const cart = await getOrCreateCart(userId, product.event);
+  const cart = await getOrCreateCart(portalAccountId, product.event);
+  assertPortalResourceOrg(cart.orgId, context.org);
   const options = parseProductOptions(product.options);
 
   await prisma.cartItem.create({
@@ -143,25 +142,40 @@ async function addToCartInner(formData: FormData): Promise<PublicFormState> {
     }
   });
 
-  revalidatePath(`/${product.event.org.subdomain}/store`);
   revalidatePath(`/dashboard/events/${product.event.id}/store`);
-  return {};
+  return { redirectTo: "/store" };
 }
 
-export async function removeFromCart(formData: FormData) {
-  const userId = await requireUserId();
-  const cartItemId = z.string().uuid().parse(formData.get("cartItemId"));
+export async function removeFromCart(_previousState: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  try {
+    return await removeFromCartInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
+
+async function removeFromCartInner(formData: FormData): Promise<ActionFormState> {
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
+  const portalAccountId = context.account.id;
+  const parsedId = z.string().uuid().safeParse(formData.get("cartItemId"));
+  if (!parsedId.success) return { error: "Invalid cart item." };
+  const cartItemId = parsedId.data;
 
   await prisma.cartItem.deleteMany({
     where: {
       id: cartItemId,
       cart: {
-        userId
+        orgId: context.org.id,
+        portalAccountId
       }
     }
   });
 
-  revalidatePath(String(formData.get("returnPath") ?? "/"));
+  return { redirectTo: "/store" };
 }
 
 export async function updateQuantity(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
@@ -180,7 +194,9 @@ export async function updateQuantity(_previousState: PublicFormState, formData: 
 }
 
 async function updateQuantityInner(formData: FormData): Promise<PublicFormState> {
-  const userId = await requireUserId();
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
+  const portalAccountId = context.account.id;
   const parsed = z
     .object({
       cartItemId: z.string().uuid(),
@@ -195,19 +211,22 @@ async function updateQuantityInner(formData: FormData): Promise<PublicFormState>
     return { error: parsed.error.issues[0]?.message ?? "Invalid quantity." };
   }
 
-  const item = await prisma.cartItem.findFirstOrThrow({
+  const item = await prisma.cartItem.findFirst({
     where: {
       id: parsed.data.cartItemId,
       cart: {
-        userId
+        orgId: context.org.id,
+        portalAccountId
       }
     },
     include: {
       product: true,
       cart: {
         select: {
+          orgId: true,
           event: {
             select: {
+              orgId: true,
               org: {
                 select: { status: true }
               }
@@ -218,7 +237,15 @@ async function updateQuantityInner(formData: FormData): Promise<PublicFormState>
     }
   });
 
+  if (!item) return { error: "Cart item not found." };
+  assertPortalResourceOrg(item.orgId, context.org);
+  assertPortalResourceOrg(item.cart.orgId, context.org);
+  assertPortalResourceOrg(item.cart.event.orgId, context.org);
   assertOrganizationActive(item.cart.event.org.status);
+
+  if (item.product?.archivedAt) {
+    return { error: "This product is no longer available." };
+  }
 
   if (item.product && item.product.stock < parsed.data.quantity) {
     return { error: "Not enough inventory is available." };
@@ -233,20 +260,38 @@ async function updateQuantityInner(formData: FormData): Promise<PublicFormState>
     }
   });
 
-  revalidatePath(String(formData.get("returnPath") ?? "/"));
-  return {};
+  return { redirectTo: "/store" };
 }
 
-export async function clearCart(formData: FormData) {
-  const userId = await requireUserId();
-  const cartId = z.string().uuid().parse(formData.get("cartId"));
+export async function clearCart(_previousState: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  try {
+    return await clearCartInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
 
-  const cart = await prisma.cart.findFirstOrThrow({
+async function clearCartInner(formData: FormData): Promise<ActionFormState> {
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
+  const portalAccountId = context.account.id;
+  const parsedId = z.string().uuid().safeParse(formData.get("cartId"));
+  if (!parsedId.success) return { error: "Invalid cart." };
+  const cartId = parsedId.data;
+
+  const cart = await prisma.cart.findFirst({
     where: {
       id: cartId,
-      userId
+      orgId: context.org.id,
+      portalAccountId
     }
   });
+
+  if (!cart) return { error: "Cart not found." };
+  assertPortalResourceOrg(cart.orgId, context.org);
 
   await prisma.cart.update({
     where: {
@@ -260,21 +305,37 @@ export async function clearCart(formData: FormData) {
     }
   });
 
-  revalidatePath(String(formData.get("returnPath") ?? "/"));
+  return { redirectTo: "/store" };
 }
 
-export async function convertCartToOrder(formData: FormData) {
-  const userId = await requireUserId();
-  const cartId = z.string().uuid().parse(formData.get("cartId"));
+export async function convertCartToOrder(_previousState: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  try {
+    return await convertCartToOrderInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
+
+async function convertCartToOrderInner(formData: FormData): Promise<ActionFormState> {
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
+  const portalAccountId = context.account.id;
+  const parsedId = z.string().uuid().safeParse(formData.get("cartId"));
+  if (!parsedId.success) return { error: "Invalid cart." };
+  const cartId = parsedId.data;
   const returnPath = String(formData.get("returnPath") ?? "/store");
   const successPath = requireSafeCheckoutReturnPath(String(formData.get("successPath") ?? returnPath));
   const cancelPath = requireSafeCheckoutReturnPath(String(formData.get("cancelPath") ?? returnPath));
-  await assertActionRateLimit("payment:cart-checkout", `${userId}:${cartId}`);
+  await assertActionRateLimit("payment:cart-checkout", `${portalAccountId}:${cartId}`);
 
-  const cart = await prisma.cart.findFirstOrThrow({
+  const cart = await prisma.cart.findFirst({
     where: {
       id: cartId,
-      userId
+      orgId: context.org.id,
+      portalAccountId
     },
     include: {
       event: {
@@ -282,7 +343,6 @@ export async function convertCartToOrder(formData: FormData) {
           org: true
         }
       },
-      user: true,
       items: {
         include: {
           product: true
@@ -291,6 +351,11 @@ export async function convertCartToOrder(formData: FormData) {
       voucher: true
     }
   });
+
+  if (!cart) return { error: "Cart not found." };
+  assertPortalResourceOrg(cart.orgId, context.org);
+  assertPortalResourceOrg(cart.event.orgId, context.org);
+  if (cart.voucher) assertPortalResourceOrg(cart.voucher.orgId, context.org);
 
   if (cart.items.length === 0) {
     throw new PublicActionError("Your cart is empty.");
@@ -310,6 +375,16 @@ export async function convertCartToOrder(formData: FormData) {
       throw new Error("A product in this cart does not belong to the cart event.");
     }
 
+    if (item.product?.archivedAt) {
+      await prisma.cartItem.deleteMany({
+        where: {
+          id: item.id,
+          cartId: cart.id
+        }
+      });
+      throw new PublicActionError(`${item.product.name} is no longer available and was removed from your cart.`);
+    }
+
     if (item.product && item.product.stock < item.quantity) {
       throw new PublicActionError(`${item.product.name} does not have enough stock remaining.`);
     }
@@ -326,7 +401,7 @@ export async function convertCartToOrder(formData: FormData) {
   const order = await prisma.order.create({
     data: {
       orgId: cart.event.orgId,
-      userId,
+      portalAccountId,
       eventId: cart.eventId,
       cartId: cart.id,
       total: summary.total,
@@ -352,7 +427,7 @@ export async function convertCartToOrder(formData: FormData) {
 
   if (summary.total === 0) {
     await markOrderPaid(order.id);
-    redirect(`${successPath}?success=${order.id}`);
+    return { redirectTo: `${successPath}?success=${order.id}` };
   }
 
   try {
@@ -363,7 +438,7 @@ export async function convertCartToOrder(formData: FormData) {
   }
 
   const checkout = await prepareOrderCheckout(order.id, `${successPath}?success=${order.id}`, `${cancelPath}?cancelled=1`);
-  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
+  return { redirectTo: checkout.checkoutPath };
 }
 
 function getRegistrationId(metadata: unknown) {

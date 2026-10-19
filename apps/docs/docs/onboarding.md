@@ -5,7 +5,7 @@ title: Convention Onboarding Checklist
 
 Use this checklist when preparing a new convention.
 
-1. Create the organization and invite admins.
+1. Create the organization and invite admins. Admins sign in with their Reyuu Games account; attendees create their accounts on the event portal.
 2. Complete Stripe Connect onboarding.
 3. Configure SMTP or SES sender settings.
 4. Add a custom domain and publish CNAME/TXT DNS records.

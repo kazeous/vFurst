@@ -1,5 +1,7 @@
 import { createEvent, archiveEvent, deleteEvent, publishEvent } from "@/actions/event-actions";
 import { ActionStateForm } from "@/components/action-state-form";
+import { EventNameSlugFields } from "@/components/forms/event-name-slug-fields";
+import { DateField } from "@/components/ui/date-field";
 import { getConventionUrl } from "@/lib/subdomain";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -97,25 +99,18 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
           <h2>Create event</h2>
           <ActionStateForm action={createEvent} className="vf-form" errorTestId="create-event-error">
             <input type="hidden" name="orgId" value={org.id} />
-            <label>
-              Name
-              <input name="name" required placeholder="vFurstCon 2027" />
-            </label>
-            <label>
-              Slug
-              <input name="slug" required placeholder="vfurstcon-2027" />
-            </label>
+            <EventNameSlugFields nameLabel="Name" />
             <label>
               Venue
               <input name="venue" placeholder="Convention Center" />
             </label>
             <label>
               Start date
-              <input name="startDate" type="date" required />
+              <DateField name="startDate" required />
             </label>
             <label>
               End date
-              <input name="endDate" type="date" required />
+              <DateField name="endDate" required />
             </label>
             <Button label="Create event" type="submit" variant="primary" />
           </ActionStateForm>

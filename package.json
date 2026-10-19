@@ -7,57 +7,68 @@
     "apps/*",
     "packages/*"
   ],
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "@sentry/cli@2.58.6": true,
+    "esbuild@0.28.1": true,
+    "msgpackr-extract@3.0.4": true,
+    "prisma@6.19.3": true,
+    "sharp@0.35.5": true
+  },
   "scripts": {
     "env:sync": "node scripts/sync-app-env.mjs",
     "predev": "node scripts/sync-app-env.mjs",
     "dev": "turbo run dev --filter=@vfurst/web --filter=@vfurst/worker",
-    "predev:split": "node scripts/sync-app-env.mjs",
-    "dev:split": "node scripts/split/run-shells.mjs",
     "build": "turbo run build",
-    "build:split": "turbo run build --filter=@vfurst/platform-manager --filter=@vfurst/tenant-web",
     "type-check": "turbo run type-check",
     "lint": "turbo run lint",
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
+    "test:compose": "node --test scripts/validate-compose.test.mjs",
+    "compose:validate": "node scripts/validate-compose.mjs",
     "test:boot-config": "node scripts/smoke-web-boot.mjs",
-    "test:split-topology": "node --test scripts/split/topology.test.mjs",
-    "test:e2e:split": "node scripts/run-split-e2e.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:load": "node scripts/run-load-test.mjs",
     "test:load:launch": "node scripts/run-launch-load-proof.mjs",
     "test:load:smoke": "node scripts/run-load-test.mjs -e VFURST_LOAD_PROFILE=smoke",
+    "test:load-harness": "node --test scripts/lib/staff-oidc-login.test.mjs",
     "seed:load": "node scripts/seed-load-test.mjs",
     "fixtures:cleanup": "npm run cleanup:test-fixtures --workspace @vfurst/db",
     "fixtures:cleanup:dry-run": "node packages/db/scripts/cleanup-test-fixtures.mjs",
     "check:launch": "node scripts/check-launch-readiness.mjs",
-    "platform-admin": "node scripts/manage-platform-admin.mjs",
     "db:validate": "npm run validate --workspace @vfurst/db"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.57.0",
     "@types/node": "^24.10.1",
-    "eslint": "^9.39.1",
+    "eslint": "^10.8.0",
     "tsx": "^4.20.6",
     "turbo": "^2.6.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vitest": "^4.0.14"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.11.2",
+    "@auth/prisma-adapter": "^2.11.3",
     "@aws-sdk/client-s3": "^3.1079.0",
     "@aws-sdk/client-ses": "^3.1079.0",
     "@aws-sdk/s3-request-presigner": "^3.1079.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.2",
     "ioredis": "^5.11.1",
-    "next-auth": "^5.0.0-beta.31",
+    "next": "15.5.27",
+    "next-auth": "^5.0.0-beta.32",
     "stripe": "^22.3.0",
     "zod": "^4.4.3"
   },
   "overrides": {
-    "postcss": "8.5.16"
+    "postcss": "8.5.30",
+    "sharp": "0.35.5",
+    "brace-expansion@>=5.0.0 <=5.0.11": "5.0.12",
+    "fast-uri@>=3.0.0 <=3.1.7": "3.1.8",
+    "deepmerge-ts": "8.0.2"
   }
 }

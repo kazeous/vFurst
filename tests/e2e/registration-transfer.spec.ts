@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -13,9 +14,9 @@ const wrongEmail = `transfer-wrong-${runId}@example.com`;
 const orgSlug = `transfer-org-${runId}`;
 
 let ownerId: string;
-let sourceUserId: string;
-let recipientUserId: string;
-let wrongUserId: string;
+let sourceAccountId: string;
+let recipientAccountId: string;
+let wrongAccountId: string;
 let orgId: string;
 let eventId: string;
 let typeId: string;
@@ -27,17 +28,8 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [owner, source, recipient, wrong] = await Promise.all([
-    prisma.user.create({ data: { email: ownerEmail, name: "Transfer Owner", passwordHash } }),
-    prisma.user.create({ data: { email: sourceEmail, name: "Source Attendee", passwordHash } }),
-    prisma.user.create({ data: { email: recipientEmail, name: "Recipient Attendee", passwordHash } }),
-    prisma.user.create({ data: { email: wrongEmail, name: "Wrong Recipient", passwordHash } })
-  ]);
+  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Transfer Owner", ...staffIdentityData() } });
   ownerId = owner.id;
-  sourceUserId = source.id;
-  recipientUserId = recipient.id;
-  wrongUserId = wrong.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -63,6 +55,13 @@ test.beforeAll(async () => {
   orgId = org.id;
   eventId = org.events[0]!.id;
 
+  const source = await createPortalAccountFixture(prisma, { orgId: org.id, email: sourceEmail, name: "Source Attendee", password });
+  const recipient = await createPortalAccountFixture(prisma, { orgId: org.id, email: recipientEmail, name: "Recipient Attendee", password });
+  const wrong = await createPortalAccountFixture(prisma, { orgId: org.id, email: wrongEmail, name: "Wrong Recipient", password });
+  sourceAccountId = source.id;
+  recipientAccountId = recipient.id;
+  wrongAccountId = wrong.id;
+
   const type = await prisma.registrationType.create({
     data: { orgId, eventId, name: "Transfer Ticket", price: 5000 }
   });
@@ -78,19 +77,14 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await prisma.organization.deleteMany({ where: { id: orgId } });
-  await prisma.user.deleteMany({ where: { id: { in: [ownerId, sourceUserId, recipientUserId, wrongUserId] } } });
+  // Ids stay unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId } });
+  await prisma.user.deleteMany({ where: { id: { in: [ownerId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
 }
 
 async function createTransferRequest(input: { recipient: string; expiresAt?: Date; withArtifacts?: boolean }) {
@@ -100,7 +94,7 @@ async function createTransferRequest(input: { recipient: string; expiresAt?: Dat
     data: {
       orgId,
       eventId,
-      userId: sourceUserId,
+      portalAccountId: sourceAccountId,
       typeId,
       status: "CONFIRMED",
       approvalStatus: "APPROVED",
@@ -141,9 +135,11 @@ async function createTransferRequest(input: { recipient: string; expiresAt?: Dat
 test("recipient accepts once and ownership, add-ons, and invalidated badge move atomically", async ({ page }) => {
   const created = await createTransferRequest({ recipient: recipientEmail, withArtifacts: true });
   await login(page, recipientEmail);
-  await page.goto(`/transfer/${created.request.id}?token=${created.rawToken}`);
-  await expect(page.getByRole("heading", { name: "Registration Transfer Event" })).toBeVisible();
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
+  await expect(page.getByRole("heading", { name: "Registration Transfer Event", level: 2 })).toBeVisible();
+  const acceptedNavigation = page.waitForURL((url) => url.searchParams.get("notice") === "accepted", { waitUntil: "load" });
   await page.getByRole("button", { name: "Accept transfer" }).click({ noWaitAfter: true });
+  await acceptedNavigation;
 
   await expect.poll(async () => (await prisma.registrationTransferRequest.findUniqueOrThrow({ where: { id: created.request.id } })).status).toBe("ACCEPTED");
   const source = await prisma.registration.findUniqueOrThrow({ where: { id: created.source.id } });
@@ -153,7 +149,7 @@ test("recipient accepts once and ownership, add-ons, and invalidated badge move 
   });
   expect(source.status).toBe("TRANSFERRED");
   expect(source.badgeNumber).toBeNull();
-  expect(received.userId).toBe(recipientUserId);
+  expect(received.portalAccountId).toBe(recipientAccountId);
   expect(received.status).toBe("CONFIRMED");
   expect(received.badgeNumber).toBe(created.source.badgeNumber);
   expect(received.addOns).toHaveLength(1);
@@ -162,7 +158,7 @@ test("recipient accepts once and ownership, add-ons, and invalidated badge move 
   expect(received.badges[0]!.nfcTag).toBeNull();
   expect(received.badges[0]!.printedAt).toBeNull();
 
-  await page.goto(`/account/transfers/${created.request.id}?token=${created.rawToken}`);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
   await expect(page.getByRole("button", { name: "Accept transfer" })).toHaveCount(0);
   await expect(page.getByText("This invitation can no longer be used.")).toBeVisible();
   expect(await prisma.registration.count({ where: { transferredFromId: source.id } })).toBe(1);
@@ -171,23 +167,25 @@ test("recipient accepts once and ownership, add-ons, and invalidated badge move 
 test("an account with a different normalized email cannot inspect or consume the invitation", async ({ page }) => {
   const created = await createTransferRequest({ recipient: recipientEmail });
   await login(page, wrongEmail);
-  await page.goto(`/transfer/${created.request.id}?token=${created.rawToken}`);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
   await expect(page.getByText(/could not be found/i)).toBeVisible();
   const request = await prisma.registrationTransferRequest.findUniqueOrThrow({ where: { id: created.request.id } });
   expect(request.status).toBe("PENDING");
-  expect(request.recipientUserId).toBeNull();
+  expect(request.recipientAccountId).toBeNull();
   expect((await prisma.registration.findUniqueOrThrow({ where: { id: created.source.id } })).status).toBe("CONFIRMED");
 });
 
 test("recipient can decline without changing registration ownership", async ({ page }) => {
   const created = await createTransferRequest({ recipient: recipientEmail });
   await login(page, recipientEmail);
-  await page.goto(`/transfer/${created.request.id}?token=${created.rawToken}`);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
+  const declinedNavigation = page.waitForURL((url) => url.searchParams.get("notice") === "declined", { waitUntil: "load" });
   await page.getByRole("button", { name: "Decline transfer" }).click({ noWaitAfter: true });
+  await declinedNavigation;
 
   await expect.poll(async () => (await prisma.registrationTransferRequest.findUniqueOrThrow({ where: { id: created.request.id } })).status).toBe("DECLINED");
   const request = await prisma.registrationTransferRequest.findUniqueOrThrow({ where: { id: created.request.id } });
-  expect(request.recipientUserId).toBe(recipientUserId);
+  expect(request.recipientAccountId).toBe(recipientAccountId);
   expect(request.declinedAt).not.toBeNull();
   expect((await prisma.registration.findUniqueOrThrow({ where: { id: created.source.id } })).status).toBe("CONFIRMED");
   expect(await prisma.registration.count({ where: { transferredFromId: created.source.id } })).toBe(0);
@@ -196,7 +194,7 @@ test("recipient can decline without changing registration ownership", async ({ p
 test("expired invitations are persisted as expired and expose no decision controls", async ({ page }) => {
   const created = await createTransferRequest({ recipient: recipientEmail, expiresAt: new Date(Date.now() - 1000) });
   await login(page, recipientEmail);
-  await page.goto(`/transfer/${created.request.id}?token=${created.rawToken}`);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
 
   await expect(page.getByText("EXPIRED", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept transfer" })).toHaveCount(0);

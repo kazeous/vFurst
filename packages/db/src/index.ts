@@ -23,7 +23,6 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 globalForPrisma.prisma = prisma;
 
 export * from "@prisma/client";
-export * from "./authorization-codes.js";
 export * from "./connection-policy.js";
 export * from "./control-plane-outbox.js";
 export * from "./fee-report.js";

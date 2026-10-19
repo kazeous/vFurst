@@ -26,10 +26,8 @@ const server = http.createServer((request, response) => {
       port: target.port,
       method: request.method,
       path: request.url,
-      headers: {
-        ...request.headers,
-        host: target.host
-      }
+      // Keep the client's Host: the middleware routes portal tenants and the central host by it.
+      headers: request.headers
     },
     (proxyResponse) => {
       response.writeHead(proxyResponse.statusCode ?? 502, proxyResponse.headers);

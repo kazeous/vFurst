@@ -1,0 +1,295 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
+import { redirect } from "next/navigation";
+import type * as PortalAccountModule from "@/lib/portal-account";
+import type * as PortalRequestModule from "@/lib/portal-request";
+import type * as PortalSessionModule from "@/lib/portal-session";
+import type * as RateLimitModule from "@/lib/rate-limit";
+
+const mocks = vi.hoisted(() => ({
+  headers: vi.fn(),
+  cookies: vi.fn(),
+  redirect: vi.fn(),
+  unstable_rethrow: vi.fn(),
+  getRequestPortalOrg: vi.fn(),
+  authenticatePortalAccount: vi.fn(),
+  requestPortalAccountSetup: vi.fn(),
+  requestPortalPasswordReset: vi.fn(),
+  setPortalAccountPassword: vi.fn(),
+  startPortalSession: vi.fn(),
+  endPortalSession: vi.fn(),
+  revokePortalSession: vi.fn(),
+  assertAuthActionRateLimit: vi.fn(),
+  getClientIpFromHeaders: vi.fn(),
+  after: vi.fn()
+}));
+
+vi.mock("next/headers", () => ({ headers: mocks.headers, cookies: mocks.cookies }));
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect, unstable_rethrow: mocks.unstable_rethrow }));
+vi.mock("next/server", () => ({ after: mocks.after }));
+vi.mock("@/lib/portal-request", async (importOriginal) => ({
+  ...await importOriginal<typeof PortalRequestModule>(),
+  getRequestPortalOrg: mocks.getRequestPortalOrg
+}));
+vi.mock("@/lib/portal-session", async (importOriginal) => ({
+  ...await importOriginal<typeof PortalSessionModule>(),
+  revokePortalSession: mocks.revokePortalSession
+}));
+vi.mock("@/lib/portal-accounts", () => ({
+  authenticatePortalAccount: mocks.authenticatePortalAccount,
+  requestPortalAccountSetup: mocks.requestPortalAccountSetup,
+  requestPortalPasswordReset: mocks.requestPortalPasswordReset,
+  setPortalAccountPassword: mocks.setPortalAccountPassword
+}));
+vi.mock("@/lib/portal-account", () => ({
+  startPortalSession: mocks.startPortalSession,
+  endPortalSession: mocks.endPortalSession
+}));
+vi.mock("@/lib/rate-limit", async (importOriginal) => ({
+  ...await importOriginal<typeof RateLimitModule>(),
+  assertAuthActionRateLimit: mocks.assertAuthActionRateLimit,
+  getClientIpFromHeaders: mocks.getClientIpFromHeaders
+}));
+
+import { RateLimitExceededError, RateLimitUnavailableError } from "@/lib/rate-limit";
+import {
+  portalRequestPasswordReset,
+  portalSetPassword,
+  portalSignIn,
+  portalSignOut,
+  portalSignUp
+} from "./portal-auth-actions";
+
+const org = { id: "org-one", name: "Convention One" };
+const account = { id: "account-one", orgId: org.id, authVersion: 2, email: "user@example.com", name: "User" };
+const rateLimitMessage = "Too many attempts. Please wait a minute and try again.";
+const rateLimitResult = { limited: true, limit: 30, remaining: 0, resetAt: 60_000, degraded: false };
+
+function form(overrides: Record<string, string> = {}) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries({
+    email: " User@Example.COM ",
+    name: " User ",
+    password: "password123",
+    confirmPassword: "password123",
+    token: "setup-token",
+    returnTo: "/account",
+    ...overrides
+  })) data.set(key, value);
+  return data;
+}
+
+describe("portal auth actions", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.getRequestPortalOrg.mockResolvedValue(org);
+    mocks.headers.mockResolvedValue(new Headers({ "x-forwarded-for": "192.0.2.1" }));
+    mocks.getClientIpFromHeaders.mockReturnValue("192.0.2.1");
+    mocks.authenticatePortalAccount.mockResolvedValue(account);
+    mocks.setPortalAccountPassword.mockResolvedValue(account);
+    mocks.after.mockImplementation((task: () => unknown) => task());
+    mocks.redirect.mockImplementation((path: string) => {
+      throw Object.assign(new Error(`Redirect: ${path}`), { digest: "NEXT_REDIRECT" });
+    });
+    mocks.unstable_rethrow.mockImplementation((error: unknown) => {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+    });
+  });
+
+  it.each([
+    ["sign-in", portalSignIn],
+    ["sign-up", portalSignUp],
+    ["reset", portalRequestPasswordReset],
+    ["set-password", portalSetPassword]
+  ] as const)("returns the no-tenant error for %s before any account operation", async (_name, action) => {
+    mocks.getRequestPortalOrg.mockResolvedValue(null);
+    await expect(action({}, form())).resolves.toEqual({
+      error: "Open this page from the convention's portal address."
+    });
+    expect(mocks.assertAuthActionRateLimit).not.toHaveBeenCalled();
+    expect(mocks.authenticatePortalAccount).not.toHaveBeenCalled();
+    expect(mocks.requestPortalAccountSetup).not.toHaveBeenCalled();
+    expect(mocks.requestPortalPasswordReset).not.toHaveBeenCalled();
+    expect(mocks.setPortalAccountPassword).not.toHaveBeenCalled();
+    expect(mocks.startPortalSession).not.toHaveBeenCalled();
+  });
+
+  it.each([[org, "/login"], [null, "/"]] as const)(
+    "always signs out and returns a destination for organization %j",
+    async (requestOrg, path) => {
+      mocks.getRequestPortalOrg.mockResolvedValue(requestOrg);
+      await expect(portalSignOut({}, new FormData())).resolves.toEqual({ redirectTo: path });
+      expect(mocks.endPortalSession).toHaveBeenCalledExactlyOnceWith();
+      expect(vi.mocked(redirect)).not.toHaveBeenCalled();
+      expect(mocks.endPortalSession.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.getRequestPortalOrg.mock.invocationCallOrder[0]!
+      );
+    }
+  );
+
+  it("returns one incorrect-credentials error without starting a session", async () => {
+    mocks.authenticatePortalAccount.mockResolvedValue(null);
+    await expect(portalSignIn({}, form())).resolves.toEqual({ error: "Email or password is incorrect." });
+    expect(mocks.authenticatePortalAccount).toHaveBeenCalledExactlyOnceWith({
+      orgId: org.id, email: "user@example.com", password: "password123"
+    });
+    expect(mocks.startPortalSession).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it.each(["//evil.test", "/register"])("starts a session and returns a safe sign-in destination for %s", async (returnTo) => {
+    const target = returnTo === "//evil.test" ? "/" : returnTo;
+    await expect(portalSignIn({}, form({ returnTo }))).resolves.toEqual({ redirectTo: target });
+    expect(mocks.startPortalSession).toHaveBeenCalledExactlyOnceWith(account);
+    expect(vi.mocked(redirect)).not.toHaveBeenCalled();
+    expect(mocks.unstable_rethrow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["sign-up", portalSignUp, mocks.requestPortalAccountSetup],
+    ["reset", portalRequestPasswordReset, mocks.requestPortalPasswordReset]
+  ] as const)("returns the same sent state for %s regardless of account state", async (_name, action, request) => {
+    for (const email of ["unknown@example.com", "unclaimed@example.com", "claimed@example.com"]) {
+      await expect(action({}, form({ email }))).resolves.toEqual({ sent: true });
+      expect(request).toHaveBeenLastCalledWith({ org, email, returnTo: action === portalSignUp ? "/account" : "/" });
+    }
+  });
+
+  it.each([
+    ["portal-login", portalSignIn],
+    ["portal-signup", portalSignUp],
+    ["portal-reset", portalRequestPasswordReset]
+  ] as const)("checks both tenant-scoped rate keys for %s", async (namespace, action) => {
+    mocks.authenticatePortalAccount.mockResolvedValue(null);
+    await action({}, form());
+    expect(mocks.getClientIpFromHeaders).toHaveBeenCalledExactlyOnceWith(await mocks.headers.mock.results[0]!.value);
+    expect(mocks.assertAuthActionRateLimit.mock.calls).toEqual([
+      [namespace, `${org.id}:192.0.2.1`, rateLimitMessage],
+      [namespace, `${org.id}:user@example.com`, rateLimitMessage]
+    ]);
+  });
+
+  it.each([
+    ["sign-up", portalSignUp, mocks.requestPortalAccountSetup],
+    ["reset", portalRequestPasswordReset, mocks.requestPortalPasswordReset]
+  ] as const)("defers %s account work until after the response so timing does not reveal account state", async (_name, action, request) => {
+    const scheduled: Array<() => unknown> = [];
+    mocks.after.mockImplementation((task: () => unknown) => { scheduled.push(task); });
+    await expect(action({}, form())).resolves.toEqual({ sent: true });
+    expect(request).not.toHaveBeenCalled();
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0]!();
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("rate-limits password setting by tenant and client IP before any account work", async () => {
+    await portalSetPassword({}, form());
+    expect(mocks.assertAuthActionRateLimit.mock.calls).toEqual([
+      ["portal-set-password", `${org.id}:192.0.2.1`, rateLimitMessage]
+    ]);
+    expect(mocks.assertAuthActionRateLimit.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.setPortalAccountPassword.mock.invocationCallOrder[0]!);
+  });
+
+  it.each([portalSignIn, portalSignUp, portalRequestPasswordReset, portalSetPassword])("maps rate limits to inline form state", async (action) => {
+    mocks.assertAuthActionRateLimit.mockRejectedValue(new RateLimitExceededError(rateLimitResult, rateLimitMessage));
+    await expect(action({}, form())).resolves.toEqual({ error: rateLimitMessage });
+    expect(mocks.startPortalSession).not.toHaveBeenCalled();
+    expect(mocks.authenticatePortalAccount).not.toHaveBeenCalled();
+    expect(mocks.requestPortalAccountSetup).not.toHaveBeenCalled();
+    expect(mocks.requestPortalPasswordReset).not.toHaveBeenCalled();
+    expect(mocks.setPortalAccountPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([portalSignIn, portalSignUp, portalRequestPasswordReset])("does not continue when rate controls are unavailable", async (action) => {
+    const error = new RateLimitUnavailableError();
+    mocks.assertAuthActionRateLimit.mockRejectedValue(error);
+    await expect(action({}, form())).rejects.toBe(error);
+    expect(mocks.authenticatePortalAccount).not.toHaveBeenCalled();
+    expect(mocks.requestPortalAccountSetup).not.toHaveBeenCalled();
+    expect(mocks.requestPortalPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it.each([portalSignIn, portalSignUp, portalRequestPasswordReset])("validates email before account calls", async (action) => {
+    await expect(action({}, form({ email: "invalid" }))).resolves.toEqual({ error: "A valid email is required" });
+    expect(mocks.assertAuthActionRateLimit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [portalSignIn, { password: "short" }, "Password must be at least 8 characters"],
+    [portalSetPassword, { password: "short" }, "Password must be at least 8 characters"],
+    [portalSetPassword, { name: "   " }, "Name is required"],
+    [portalSetPassword, { confirmPassword: "different" }, "Passwords do not match."],
+    [portalSetPassword, { confirmPassword: "" }, "Passwords do not match."]
+  ] as const)("validates password and name fields inline", async (action, values, error) => {
+    await expect(action({}, form(values))).resolves.toEqual({ error });
+    expect(mocks.setPortalAccountPassword).not.toHaveBeenCalled();
+    expect(mocks.authenticatePortalAccount).not.toHaveBeenCalled();
+  });
+
+  it("returns the invalid-link error when password setting returns null", async () => {
+    mocks.setPortalAccountPassword.mockResolvedValue(null);
+    await expect(portalSetPassword({}, form())).resolves.toEqual({
+      error: "This link is invalid, expired, or has already been used."
+    });
+    expect(mocks.startPortalSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["//evil.test", "/register"])("sets the password with host-derived tenant and trimmed name, then returns a safe destination for %s", async (returnTo) => {
+    const target = returnTo === "//evil.test" ? "/" : returnTo;
+    await expect(portalSetPassword({}, form({ returnTo }))).resolves.toEqual({ redirectTo: target });
+    expect(mocks.setPortalAccountPassword).toHaveBeenCalledExactlyOnceWith({
+      orgId: org.id, token: "setup-token", name: "User", password: "password123"
+    });
+    expect(mocks.startPortalSession).toHaveBeenCalledExactlyOnceWith(account);
+    expect(vi.mocked(redirect)).not.toHaveBeenCalled();
+    expect(mocks.unstable_rethrow).not.toHaveBeenCalled();
+  });
+
+  it("rethrows framework control flow before expected-error mapping", async () => {
+    const interrupt = Object.assign(new RateLimitExceededError(rateLimitResult, rateLimitMessage), { digest: "NEXT_REDIRECT" });
+    mocks.authenticatePortalAccount.mockRejectedValue(interrupt);
+    await expect(portalSignIn({}, form())).rejects.toBe(interrupt);
+    expect(mocks.unstable_rethrow).toHaveBeenCalledExactlyOnceWith(interrupt);
+  });
+
+  it("preserves unexpected errors", async () => {
+    const error = new Error("Database offline");
+    mocks.setPortalAccountPassword.mockRejectedValue(error);
+    await expect(portalSetPassword({}, form())).rejects.toBe(error);
+    expect(mocks.unstable_rethrow).toHaveBeenCalledExactlyOnceWith(error);
+  });
+});
+
+describe("portal session cookie expiration", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it.each([
+    ["https", "__Host-vfurst-portal", true],
+    ["https", "__Host-vfurst-portal", false],
+    ["http", "vfurst-portal", true],
+    ["http", "vfurst-portal", false]
+  ] as const)("expires the %s cookie %s with matching attributes (existing token: %s)", async (protocol, cookieName, hasToken) => {
+    const responseHeaders = new Headers();
+    const cookieStore = new ResponseCookies(responseHeaders);
+    cookieStore.set("staff-session", "untouched");
+    if (hasToken) cookieStore.set(cookieName, "current-token");
+    mocks.headers.mockResolvedValue(new Headers({ "x-forwarded-proto": protocol }));
+    mocks.cookies.mockResolvedValue(cookieStore);
+    const { endPortalSession } = await vi.importActual<typeof PortalAccountModule>("@/lib/portal-account");
+
+    await endPortalSession();
+    await endPortalSession();
+
+    const expiration = responseHeaders.getSetCookie().find((value) => value.startsWith(`${cookieName}=`));
+    expect(expiration).toContain(`${cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+    if (protocol === "https") expect(expiration).toContain("; Secure");
+    else expect(expiration).not.toContain("; Secure");
+    expect(expiration).toContain("; HttpOnly");
+    expect(expiration).toContain("; SameSite=lax");
+    expect(expiration).not.toContain("Domain=");
+    expect(cookieStore.get(cookieName)?.value).toBe("");
+    expect(cookieStore.get("staff-session")?.value).toBe("untouched");
+    expect(mocks.revokePortalSession.mock.calls).toEqual(hasToken ? [["current-token"]] : []);
+  });
+});

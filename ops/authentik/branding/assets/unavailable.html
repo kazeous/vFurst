@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>reyuuGAMES Account</title>
+  <link rel="icon" href="/static/dist/assets/reyuugames/favicon-64.png">
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-content: center;
+      text-align: center; background: #0f172a; color: #f1f5f9;
+      font: 1rem/1.6 system-ui, sans-serif; padding: 0 1.5rem; }
+    img { width: min(360px, 80vw); height: auto; margin: 0 auto 2rem; }
+    h1 { font-size: 1.5rem; }
+  </style>
+</head>
+<body>
+  <img src="/static/dist/assets/reyuugames/reyuu-account-logo.png" alt="reyuuGAMES Account">
+  <h1>Account service is temporarily unavailable</h1>
+  <p>Please try again shortly. This page will refresh when the service is ready.</p>
+  <script>
+    async function checkStatus() {
+      try {
+        const response = await fetch(window.location.href, { method: 'HEAD' });
+        if (response.ok) { window.location.reload(); return; }
+      } catch { /* Keep waiting while the service starts. */ }
+      setTimeout(checkStatus, 2000);
+    }
+    checkStatus();
+  </script>
+</body>
+</html>

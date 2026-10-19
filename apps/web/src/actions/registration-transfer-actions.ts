@@ -3,7 +3,9 @@
 import { badgeQueue } from "@/lib/badge-queue";
 import { requireRegistrationAccess } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
-import { requirePublicAccount } from "@/lib/public-account";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
+import { publicActionErrorMessage } from "@/lib/public-action-error";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -23,7 +25,7 @@ import { randomBytes } from "node:crypto";
 import { RegistrationPolicyError } from "@/lib/registration-policy";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const transferRequestSchema = z.object({
@@ -37,10 +39,6 @@ const transferDecisionSchema = z.object({
   token: z.string().min(32).max(256)
 });
 
-function transferReturnPath(requestId: string, token: string) {
-  return getRegistrationTransferPath(requestId, token);
-}
-
 /** Expected decision outcomes redirect back to the decision page with a notice code instead of throwing. */
 class TransferDecisionError extends Error {
   constructor(public readonly notice: "invalid" | "used" | "ineligible") {
@@ -49,8 +47,8 @@ class TransferDecisionError extends Error {
   }
 }
 
-function redirectWithTransferNotice(requestId: string, token: string, notice: string): never {
-  redirect(`${getRegistrationTransferPath(requestId, token)}&notice=${notice}`);
+function redirectWithTransferNotice(requestId: string, token: string, notice: string): ActionFormState {
+  return { redirectTo: `${getRegistrationTransferPath(requestId, token)}&notice=${notice}` };
 }
 
 export async function createRegistrationTransferRequest(formData: FormData) {
@@ -66,10 +64,10 @@ export async function createRegistrationTransferRequest(formData: FormData) {
 
   const emailContext = await prisma.registration.findUniqueOrThrow({
     where: { id: authorizedRegistration.id },
-    include: { event: true, org: true, user: true }
+    include: { event: true, org: true, portalAccount: { select: { id: true, email: true, name: true } } }
   });
 
-  if (normalizeTransferEmail(emailContext.user.email) === recipientEmail) {
+  if (normalizeTransferEmail(emailContext.portalAccount.email) === recipientEmail) {
     throw new Error("Choose a different recipient email address.");
   }
 
@@ -77,7 +75,7 @@ export async function createRegistrationTransferRequest(formData: FormData) {
   const request = await runRegistrationPolicyTransaction(async (tx) => {
     const source = await tx.registration.findUnique({
       where: { id: authorizedRegistration.id },
-      include: { event: true, user: true }
+      include: { event: true, portalAccount: { select: { id: true, email: true, name: true } } }
     });
 
     if (
@@ -91,7 +89,7 @@ export async function createRegistrationTransferRequest(formData: FormData) {
 
     assertTransfersAllowed(source.event.settings);
 
-    if (normalizeTransferEmail(source.user.email) === recipientEmail) {
+    if (normalizeTransferEmail(source.portalAccount.email) === recipientEmail) {
       throw new Error("Choose a different recipient email address.");
     }
 
@@ -115,9 +113,10 @@ export async function createRegistrationTransferRequest(formData: FormData) {
 
   await sendOrgEmail(emailContext.org, recipientEmail, "registration-transfer", {
     eventName: emailContext.event.name,
-    sourceName: emailContext.user.name ?? emailContext.user.email,
+    organizationName: emailContext.org.name,
+    sourceName: emailContext.portalAccount.name ?? emailContext.portalAccount.email,
     recipientName: parsed.recipientName || null,
-    transferUrl: getRegistrationTransferUrl(request.id, token.rawToken),
+    transferUrl: getRegistrationTransferUrl(emailContext.org, request.id, token.rawToken),
     expiresAt: formatTransferExpiry(token.expiresAt)
   }, emailContext.event.id);
 
@@ -146,31 +145,36 @@ export async function cancelRegistrationTransferRequest(formData: FormData) {
   revalidatePath(`/dashboard/events/${request.eventId}/registrations/transfers`);
 }
 
-export async function acceptRegistrationTransfer(formData: FormData) {
-  const parsed = transferDecisionSchema.parse({
+export async function acceptRegistrationTransfer(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  const parsed = transferDecisionSchema.safeParse({
     requestId: formData.get("requestId"),
     token: formData.get("token")
   });
+  if (!parsed.success) return { error: "This transfer invitation is invalid." };
 
   try {
-    await acceptRegistrationTransferInner(parsed);
+    return await acceptRegistrationTransferInner(parsed.data);
   } catch (error) {
     unstable_rethrow(error);
 
     if (error instanceof TransferDecisionError) {
-      redirectWithTransferNotice(parsed.requestId, parsed.token, error.notice);
+      return redirectWithTransferNotice(parsed.data.requestId, parsed.data.token, error.notice);
     }
 
     if (error instanceof RegistrationPolicyError) {
-      redirectWithTransferNotice(parsed.requestId, parsed.token, "policy");
+      return redirectWithTransferNotice(parsed.data.requestId, parsed.data.token, "policy");
     }
 
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
     throw error;
   }
 }
 
-async function acceptRegistrationTransferInner(parsed: { requestId: string; token: string }) {
-  const account = await requirePublicAccount(transferReturnPath(parsed.requestId, parsed.token));
+async function acceptRegistrationTransferInner(parsed: { requestId: string; token: string }): Promise<ActionFormState> {
+  const context = await getPortalActionContext(getRegistrationTransferPath(parsed.requestId, parsed.token));
+  if (isPortalRedirect(context)) return context;
+  const { account } = context;
   const tokenHash = hashRegistrationTransferToken(parsed.token);
   const now = new Date();
 
@@ -180,10 +184,11 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
       include: {
         event: true,
         sourceRegistration: {
-          include: { addOns: true, badges: true, user: true }
+          include: { addOns: true, badges: true, portalAccount: { select: { id: true, email: true, name: true } } }
         }
       }
     });
+    if (request) assertPortalResourceOrg(request.orgId, context.org);
 
     if (
       !request ||
@@ -196,7 +201,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
 
     if (request.expiresAt <= now) {
       await tx.registrationTransferRequest.updateMany({
-        where: { id: request.id, status: "PENDING" },
+        where: { id: request.id, orgId: context.org.id, recipientEmail: normalizeTransferEmail(account.email), status: "PENDING" },
         data: { status: "EXPIRED" }
       });
       return { kind: "expired" as const };
@@ -206,7 +211,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     if (
       source.orgId !== request.orgId ||
       source.eventId !== request.eventId ||
-      source.userId === account.id ||
+      source.portalAccountId === account.id ||
       !registrationReservationStatuses.includes(source.status as (typeof registrationReservationStatuses)[number])
     ) {
       throw new TransferDecisionError("ineligible");
@@ -215,7 +220,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     assertTransfersAllowed(request.event.settings);
     await assertRegistrationCapacity(tx, {
       eventId: request.eventId,
-      userId: account.id,
+      portalAccountId: account.id,
       typeId: source.typeId,
       excludeRegistrationId: source.id,
       enforceUserLimit: true
@@ -225,6 +230,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
       where: {
         id: source.id,
         orgId: request.orgId,
+        portalAccountId: source.portalAccountId,
         eventId: request.eventId,
         status: { in: [...registrationReservationStatuses] }
       },
@@ -239,7 +245,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
       data: {
         orgId: request.orgId,
         eventId: request.eventId,
-        userId: account.id,
+        portalAccountId: account.id,
         typeId: source.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(request.event.settings, "TRANSFER"),
@@ -272,10 +278,10 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     }
 
     const consumed = await tx.registrationTransferRequest.updateMany({
-      where: { id: request.id, status: "PENDING", tokenHash },
+      where: { id: request.id, orgId: context.org.id, recipientEmail: normalizeTransferEmail(account.email), status: "PENDING", tokenHash },
       data: {
         status: "ACCEPTED",
-        recipientUserId: account.id,
+        recipientAccountId: account.id,
         acceptedAt: now
       }
     });
@@ -295,8 +301,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
   });
 
   if (result.kind === "expired") {
-    revalidatePath("/account/transfers");
-    redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
+    return redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
   }
 
   for (const badge of result.badgeJobs) {
@@ -312,42 +317,44 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     }
   }
 
-  revalidatePath("/account");
-  revalidatePath("/account/registrations");
-  revalidatePath(`/account/registrations/${result.registrationId}`);
-  revalidatePath("/account/transfers");
   revalidatePath(`/dashboard/events/${result.eventId}/registrations`);
   revalidatePath(`/dashboard/events/${result.eventId}/registrations/${result.sourceRegistrationId}`);
   revalidatePath(`/dashboard/events/${result.eventId}/registrations/transfers`);
-  redirectWithTransferNotice(parsed.requestId, parsed.token, "accepted");
+  return redirectWithTransferNotice(parsed.requestId, parsed.token, "accepted");
 }
 
-export async function declineRegistrationTransfer(formData: FormData) {
-  const parsed = transferDecisionSchema.parse({
+export async function declineRegistrationTransfer(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  const parsed = transferDecisionSchema.safeParse({
     requestId: formData.get("requestId"),
     token: formData.get("token")
   });
+  if (!parsed.success) return { error: "This transfer invitation is invalid." };
 
   try {
-    await declineRegistrationTransferInner(parsed);
+    return await declineRegistrationTransferInner(parsed.data);
   } catch (error) {
     unstable_rethrow(error);
 
     if (error instanceof TransferDecisionError) {
-      redirectWithTransferNotice(parsed.requestId, parsed.token, error.notice);
+      return redirectWithTransferNotice(parsed.data.requestId, parsed.data.token, error.notice);
     }
 
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
     throw error;
   }
 }
 
-async function declineRegistrationTransferInner(parsed: { requestId: string; token: string }) {
-  const account = await requirePublicAccount(transferReturnPath(parsed.requestId, parsed.token));
+async function declineRegistrationTransferInner(parsed: { requestId: string; token: string }): Promise<ActionFormState> {
+  const context = await getPortalActionContext(getRegistrationTransferPath(parsed.requestId, parsed.token));
+  if (isPortalRedirect(context)) return context;
+  const { account } = context;
   const tokenHash = hashRegistrationTransferToken(parsed.token);
   const now = new Date();
 
   const request = await runRegistrationPolicyTransaction(async (tx) => {
     const current = await tx.registrationTransferRequest.findUnique({ where: { id: parsed.requestId } });
+    if (current) assertPortalResourceOrg(current.orgId, context.org);
 
     if (
       !current ||
@@ -360,15 +367,15 @@ async function declineRegistrationTransferInner(parsed: { requestId: string; tok
 
     if (current.expiresAt <= now) {
       await tx.registrationTransferRequest.updateMany({
-        where: { id: current.id, status: "PENDING" },
+        where: { id: current.id, orgId: context.org.id, recipientEmail: normalizeTransferEmail(account.email), status: "PENDING" },
         data: { status: "EXPIRED" }
       });
       return { kind: "expired" as const, eventId: current.eventId };
     }
 
     const declined = await tx.registrationTransferRequest.updateMany({
-      where: { id: current.id, status: "PENDING", tokenHash },
-      data: { status: "DECLINED", recipientUserId: account.id, declinedAt: now }
+      where: { id: current.id, orgId: context.org.id, recipientEmail: normalizeTransferEmail(account.email), status: "PENDING", tokenHash },
+      data: { status: "DECLINED", recipientAccountId: account.id, declinedAt: now }
     });
 
     if (declined.count !== 1) {
@@ -379,12 +386,10 @@ async function declineRegistrationTransferInner(parsed: { requestId: string; tok
   });
 
   if (request.kind === "expired") {
-    revalidatePath("/account/transfers");
     revalidatePath(`/dashboard/events/${request.eventId}/registrations/transfers`);
-    redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
+    return redirectWithTransferNotice(parsed.requestId, parsed.token, "expired");
   }
 
-  revalidatePath("/account/transfers");
   revalidatePath(`/dashboard/events/${request.eventId}/registrations/transfers`);
-  redirectWithTransferNotice(parsed.requestId, parsed.token, "declined");
+  return redirectWithTransferNotice(parsed.requestId, parsed.token, "declined");
 }

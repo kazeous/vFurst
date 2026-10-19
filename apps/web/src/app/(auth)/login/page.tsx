@@ -1,47 +1,37 @@
-import { signIn } from "@/lib/auth";
+import { getStaffSession, signIn } from "@/lib/auth";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Divider } from "@/components/ui/separator";
-import { AuthError } from "next-auth";
-import Link from "next/link";
-import { redirect } from "next/navigation";
 import { safeReturnTo } from "@/lib/return-to";
-import { LoginForm } from "./login-form";
-import { Alert } from "@/components/ui/alert";
 
 const errorMessages: Record<string, string> = {
-  invalid_credentials: "The email or password was not accepted."
+  StudioAccountConflict:
+    "This Reyuu Games account uses an email that already belongs to another vFurst staff account. Contact a platform administrator.",
+  AccessDenied: "This Reyuu Games account could not be used to sign in.",
+  InvalidIdentity: "Your account response could not be verified. Sign in again.",
+  SessionRevoked: "Your session has ended. Sign in again.",
+  ActorChanged: "The account changed during verification. Sign in again with your original account.",
+  AssuranceRequired: "Verify your email and use a password or connected account with a passkey or authenticator code, then try again.",
+  ProviderUnavailable: "Reyuu Games Account is temporarily unavailable. Try again shortly."
 };
+const fallbackErrorMessage = "Sign-in did not complete. Try again.";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string; error?: string; returnTo?: string | string[] }> }) {
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string | string[]; returnTo?: string | string[] }>;
+}) {
   const query = await searchParams;
+  const currentSession = await getStaffSession();
   const returnTo = safeReturnTo(query.returnTo);
-  const errorMessage = query.error ? errorMessages[query.error] : undefined;
+  const errorCode = Array.isArray(query.error) ? query.error[0] : query.error;
+  const errorMessage = errorCode ? (errorMessages[errorCode] ?? fallbackErrorMessage) : undefined;
 
-  async function loginWithCredentials(formData: FormData) {
+  async function signInWithStudioAccount() {
     "use server";
 
-    try {
-      await signIn("credentials", {
-        email: formData.get("email"),
-        password: formData.get("password"),
-        redirectTo: returnTo
-      });
-    } catch (error) {
-      if (error instanceof AuthError) {
-        const params = new URLSearchParams({ error: "invalid_credentials", returnTo });
-        redirect(`/login?${params.toString()}`);
-      }
-      throw error;
-    }
-  }
-
-  async function loginWithGoogle() {
-    "use server";
-
-    await signIn("google", {
-      redirectTo: returnTo
-    });
+    await signIn("authentik", { redirectTo: returnTo,
+      ...(currentSession?.staffSecurity?.leaseRequired && !errorCode ? { purpose: "lease" as const } : {}) });
   }
 
   return (
@@ -49,23 +39,18 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="vf-stack">
         <div>
           <p className="vf-label">Welcome back</p>
-          <h1>Log in to vFurst</h1>
+          <h1>Sign in to vFurst</h1>
+          <p className="vf-muted">Staff and organizers sign in with their Reyuu Games account.</p>
+          {currentSession?.staffSecurity?.leaseRequired && !errorCode ? <p>Continue to check that your Reyuu Games session is still active.</p> : null}
         </div>
         {errorMessage ? (
           <Alert variant="error" data-testid="login-error">
             {errorMessage}
           </Alert>
         ) : null}
-        <LoginForm action={loginWithCredentials} />
-        {query.reset ? <Alert variant="success">Password updated. You can log in now.</Alert> : null}
-        <p className="vf-muted"><Link href={`/forgot-password?returnTo=${encodeURIComponent(returnTo)}`}>Forgot your password?</Link></p>
-        <Divider label="or" />
-        <form action={loginWithGoogle}>
-          <Button label="Continue with Google" type="submit" />
+        <form action={signInWithStudioAccount}>
+          <Button label="Sign in with your Reyuu Games account" type="submit" variant="primary" />
         </form>
-        <p className="vf-muted">
-          New to vFurst? <Link href={`/register?returnTo=${encodeURIComponent(returnTo)}`}>Create an account</Link>
-        </p>
       </div>
     </Card>
   );

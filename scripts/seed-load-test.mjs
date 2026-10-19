@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { randomUUID } from "node:crypto";
+import { hashOpaqueToken, hashPassword } from "@vfurst/auth/core";
+import { randomBytes, randomUUID } from "node:crypto";
 
 const prisma = new PrismaClient();
 
@@ -22,9 +22,11 @@ function readOption(name, fallback) {
 const runId = Date.now();
 const registrationCount = Number(process.env.VFURST_LOAD_SEED_REGISTRATIONS ?? readOption("--registrations", "1500"));
 const slug = process.env.VFURST_LOAD_ORG_SLUG ?? readOption("--slug", `load-${runId}`);
-const password = process.env.VFURST_STAFF_PASSWORD ?? "LoadPass123!";
 const adminEmail = process.env.VFURST_STAFF_EMAIL ?? `load-admin-${runId}@example.com`;
+const staffSub = `load-admin-${slug}`;
+const portalPort = process.env.VFURST_LOAD_SERVER_PORT ?? "3000";
 const attendeeDomain = `load-${runId}.example.com`;
+const portalSessionMaxAgeMs = 24 * 60 * 60 * 1_000;
 
 async function main() {
   if (!Number.isInteger(registrationCount) || registrationCount < 1) {
@@ -43,12 +45,30 @@ async function main() {
     },
     update: {
       name: "Load Test Admin",
-      passwordHash: await bcrypt.hash(password, 12)
+      emailVerified: new Date()
     },
     create: {
       email: adminEmail,
       name: "Load Test Admin",
-      passwordHash: await bcrypt.hash(password, 12)
+      emailVerified: new Date()
+    }
+  });
+
+  await prisma.account.upsert({
+    where: {
+      provider_providerAccountId: {
+        provider: "authentik",
+        providerAccountId: staffSub
+      }
+    },
+    update: {
+      userId: admin.id
+    },
+    create: {
+      userId: admin.id,
+      type: "oidc",
+      provider: "authentik",
+      providerAccountId: staffSub
     }
   });
 
@@ -116,25 +136,26 @@ async function main() {
     }
   });
 
-  const users = Array.from({ length: registrationCount }, (_, index) => ({
+  const portalAccounts = Array.from({ length: registrationCount }, (_, index) => ({
     id: randomUUID(),
+    orgId: org.id,
     email: `attendee-${index + 1}@${attendeeDomain}`,
     name: `Load Attendee ${index + 1}`
   }));
-  const registrations = users.map((user, index) => ({
+  const registrations = portalAccounts.map((account, index) => ({
     id: randomUUID(),
     orgId: org.id,
     eventId: event.id,
-    userId: user.id,
+    portalAccountId: account.id,
     typeId: registrationType.id,
     status: "CONFIRMED",
     badgeNumber: `LOAD-${String(index + 1).padStart(5, "0")}`
   }));
-  const orders = users.map((user) => ({
+  const orders = portalAccounts.map((account) => ({
     id: randomUUID(),
     orgId: org.id,
     eventId: event.id,
-    userId: user.id,
+    portalAccountId: account.id,
     total: 0,
     platformFee: 0,
     status: "PAID"
@@ -157,11 +178,26 @@ async function main() {
     barcodeData: `LOAD-${registration.id}`
   }));
 
-  await prisma.user.createMany({ data: users });
+  // The session holder has finished account setup, as every real portal session's owner has.
+  portalAccounts[0].passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
+  portalAccounts[0].emailVerifiedAt = new Date();
+
+  await prisma.portalAccount.createMany({ data: portalAccounts });
   await prisma.registration.createMany({ data: registrations });
   await prisma.order.createMany({ data: orders });
   await prisma.orderItem.createMany({ data: orderItems });
   await prisma.badge.createMany({ data: badges });
+
+  const portalSessionToken = randomBytes(32).toString("base64url");
+  await prisma.portalSession.create({
+    data: {
+      orgId: org.id,
+      portalAccountId: portalAccounts[0].id,
+      tokenHash: hashOpaqueToken(portalSessionToken),
+      authVersion: 0,
+      expiresAt: new Date(Date.now() + portalSessionMaxAgeMs)
+    }
+  });
 
   console.log(`Seeded ${registrationCount} confirmed registrations for ${org.name}.`);
   console.log("");
@@ -170,7 +206,12 @@ async function main() {
   console.log(`$env:VFURST_LOAD_ORG_SLUG="${org.subdomain}"`);
   console.log(`$env:VFURST_LOAD_EVENT_ID="${event.id}"`);
   console.log(`$env:VFURST_STAFF_EMAIL="${admin.email}"`);
-  console.log(`$env:VFURST_STAFF_PASSWORD="${password}"`);
+  console.log(`$env:VFURST_STAFF_SUB="${staffSub}"`);
+  console.log(`$env:VFURST_PORTAL_HOST="${org.subdomain}.localhost:${portalPort}"`);
+  console.log(`$env:VFURST_PORTAL_SESSION_COOKIE="vfurst-portal=${portalSessionToken}"`);
+  console.log("");
+  console.log("Sign the staff user in through the mock OIDC provider and set VFURST_STAFF_COOKIE,");
+  console.log("or let npm run test:load:launch do both.");
   console.log("");
   console.log("Run the smoke profile first:");
   console.log("npm run test:load:smoke");

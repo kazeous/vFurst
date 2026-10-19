@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   const eventId = url.searchParams.get("eventId");
   const { page, pageSize, skip, take } = parsePagination(request);
   const where = {
+    orgId: context.apiKey.orgId,
     registrations: {
       some: {
         orgId: context.apiKey.orgId,
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   };
 
   const [data, total] = await Promise.all([
-    prisma.user.findMany({
+    prisma.portalAccount.findMany({
       where,
       skip,
       take,
@@ -65,7 +66,7 @@ export async function GET(request: Request) {
         email: "asc"
       }
     }),
-    prisma.user.count({
+    prisma.portalAccount.count({
       where
     })
   ]);

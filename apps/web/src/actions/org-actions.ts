@@ -3,8 +3,7 @@
 import { normalizeCustomDomain } from "@/lib/custom-domain";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
-import { auth } from "@/lib/auth";
-import { requirePlatformAdmin } from "@/lib/dashboard-access";
+import { requireDashboardSession, requirePlatformAdmin } from "@/lib/dashboard-access";
 import { deliverOrganizationInvitation } from "@/lib/organization-invitation-email";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
 import {
@@ -15,6 +14,7 @@ import {
 import { isPlatformDomain } from "@/lib/platform-hosts";
 import { ExpectedActionError } from "@/lib/public-action-error";
 import { isReservedPlatformSubdomain } from "@/lib/tenant-host-policy";
+import { requireStaffAssurance } from "@/lib/staff-verification";
 import { Prisma, prisma, type EmailProviderType, type OrgRole } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -64,7 +64,7 @@ const customDomainSchema = z.object({
 });
 
 async function requireUser() {
-  const session = await auth();
+  const session = await requireDashboardSession();
 
   if (!session?.user?.id) {
     redirect("/login");
@@ -102,6 +102,7 @@ async function requireOrgRole(
   if (!options.allowInactive) {
     assertOrganizationActive(membership.org.status);
   }
+  await requireStaffAssurance();
 
   return {
     userId,

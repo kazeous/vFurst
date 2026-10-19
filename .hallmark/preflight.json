@@ -1,0 +1,8 @@
+{
+  "scannedAt": "2026-07-29",
+  "framework": "Next.js 15 App Router",
+  "fontStack": "Geist Sans with Geist Mono",
+  "palette": "Operational Calm CSS custom properties in apps/web/src/app/globals.css",
+  "motion": "motion-cut; no animation library, global reduced-motion fallback present",
+  "spacing": "existing 4/8px-derived application scale"
+}

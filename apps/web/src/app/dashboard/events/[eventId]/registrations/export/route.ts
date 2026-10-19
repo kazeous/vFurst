@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     },
     include: {
       type: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     },
     orderBy: {
       createdAt: "asc"
@@ -26,8 +26,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   const rows = [
     ["Name", "Email", "Type", "Status", "Approval", "Badge Number", "Created"],
     ...registrations.map((registration) => [
-      registration.user.name ?? "",
-      registration.user.email,
+      registration.portalAccount.name ?? "",
+      registration.portalAccount.email,
       registration.type.name,
       registration.status,
       registration.approvalStatus,

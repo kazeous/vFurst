@@ -1,5 +1,4 @@
 export type EmailTemplateName =
-  | "welcome"
   | "registration-confirmation"
   | "payment-receipt"
   | "hotel-booking-confirmation"
@@ -9,6 +8,9 @@ export type EmailTemplateName =
   | "staff-message"
   | "registration-transfer"
   | "organization-invitation"
+  | "portal-account-setup"
+  | "portal-password-reset"
+  | "portal-account-exists"
   | "password-reset";
 
 export type EmailMessage = {

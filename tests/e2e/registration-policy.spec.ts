@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -14,6 +15,7 @@ const capEventSlug = "cap-event";
 
 let ownerId: string;
 let attendeeId: string;
+let capAttendeeId: string;
 let approvalEventId: string;
 let approvalTierId: string;
 let capEventId: string;
@@ -24,13 +26,8 @@ test.setTimeout(150_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [owner, attendee] = await Promise.all([
-    prisma.user.create({ data: { email: ownerEmail, name: "Registration Policy Owner", passwordHash } }),
-    prisma.user.create({ data: { email: attendeeEmail, name: "Registration Policy Attendee", passwordHash } })
-  ]);
+  const owner = await prisma.user.create({ data: { email: ownerEmail, name: "Registration Policy Owner", ...staffIdentityData() } });
   ownerId = owner.id;
-  attendeeId = attendee.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -57,6 +54,9 @@ test.beforeAll(async () => {
   const approvalEvent = org.events[0]!;
   approvalEventId = approvalEvent.id;
 
+  const attendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Registration Policy Attendee", password });
+  attendeeId = attendee.id;
+
   const capOrg = await prisma.organization.create({
     data: {
       name: "Registration Capacity Organization",
@@ -79,6 +79,7 @@ test.beforeAll(async () => {
     include: { events: true }
   });
   capEventId = capOrg.events[0]!.id;
+  capAttendeeId = (await createPortalAccountFixture(prisma, { orgId: capOrg.id, email: attendeeEmail, name: "Registration Policy Attendee", password })).id;
 
   const [approvalTier, capTier] = await Promise.all([
     prisma.registrationType.create({ data: { orgId: org.id, eventId: approvalEvent.id, name: "Approval Ticket", price: 0 } }),
@@ -90,22 +91,20 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: { in: [orgSlug, capOrgSlug] } } });
-  await prisma.user.deleteMany({ where: { id: { in: [ownerId, attendeeId] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [ownerId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  if (email === attendeeEmail) {
+    await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
+  } else {
+    await loginAsStaffEmail(page, email);
+  }
 }
 
 async function prepareRegistration(page: Page, targetOrgSlug: string) {
-  await page.goto(`/${targetOrgSlug}/register`);
+  await page.goto(`${portalOrigin(targetOrgSlug)}/register`);
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Review" }).click();
@@ -113,17 +112,28 @@ async function prepareRegistration(page: Page, targetOrgSlug: string) {
   return page;
 }
 
-async function submitRegistration(page: Page) {
+/**
+ * Submits the review step and waits for its outcome. A successful submission
+ * returns redirectTo and the form leaves with window.location.replace; until
+ * that page has loaded, the caller's next page.goto would race it. A rejected
+ * submission stays on the form and shows the inline error.
+ */
+async function submitRegistration(page: Page): Promise<"registered" | "rejected"> {
   await page.getByRole("button", { name: "Complete registration" }).click({ noWaitAfter: true });
-  await page.waitForTimeout(1_500);
+  return Promise.race([
+    page
+      .waitForURL((url) => url.pathname === "/register" && url.searchParams.has("success"), { waitUntil: "load", timeout: 30_000 })
+      .then(() => "registered" as const),
+    page.getByTestId("registration-error").waitFor({ timeout: 30_000 }).then(() => "rejected" as const)
+  ]);
 }
 
 test("required approval remains separate from paid registration status", async ({ page }) => {
   await login(page, attendeeEmail);
   await prepareRegistration(page, orgSlug);
-  await submitRegistration(page);
+  expect(await submitRegistration(page)).toBe("registered");
 
-  const created = await prisma.registration.findFirstOrThrow({ where: { eventId: approvalEventId, userId: attendeeId } });
+  const created = await prisma.registration.findFirstOrThrow({ where: { eventId: approvalEventId, portalAccountId: attendeeId } });
   expect(created.status).toBe("CONFIRMED");
   expect(created.approvalStatus).toBe("PENDING");
 
@@ -143,18 +153,22 @@ test("the per-account cap survives concurrent submissions", async ({ browser }) 
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
 
   try {
-    await Promise.all(pages.map((page) => login(page, attendeeEmail)));
+    await Promise.all(pages.map((page) => loginAsAttendee(page, { subdomain: capOrgSlug }, attendeeEmail, { password })));
     await Promise.all(pages.map((page) => prepareRegistration(page, capOrgSlug)));
-    await Promise.all(pages.map((page) => submitRegistration(page).catch(() => undefined)));
+    // One submission takes the account's only slot and the other is rejected
+    // inline. Waiting for both also keeps afterAll from deleting the
+    // organizations while the losing action is still running.
+    const outcomes = await Promise.all(pages.map((page) => submitRegistration(page)));
+    expect(outcomes.sort()).toEqual(["registered", "rejected"]);
 
-    await expect.poll(async () => prisma.registration.count({ where: { eventId: capEventId, userId: attendeeId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } } })).toBe(1);
+    await expect.poll(async () => prisma.registration.count({ where: { eventId: capEventId, portalAccountId: capAttendeeId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } } })).toBe(1);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }
 });
 
 test("disabled transfers are rejected by the server policy", async ({ page }) => {
-  const registration = await prisma.registration.findFirstOrThrow({ where: { eventId: approvalEventId, userId: attendeeId } });
+  const registration = await prisma.registration.findFirstOrThrow({ where: { eventId: approvalEventId, portalAccountId: attendeeId } });
   await login(page, ownerEmail);
   await prisma.event.update({
     where: { id: approvalEventId },
@@ -169,11 +183,14 @@ test("disabled transfers are rejected by the server policy", async ({ page }) =>
   });
   await requestForm.getByLabel("Recipient email").fill(`blocked-recipient-${runId}@example.com`);
   await requestForm.getByRole("button", { name: "Send transfer email" }).click({ noWaitAfter: true });
-  await page.waitForTimeout(1_000);
+  // The action throws RegistrationPolicyError from a plain form, so the route
+  // error boundary replaces the page once the server has rejected it.
+  await expect(page.getByTestId("route-error")).toBeVisible({ timeout: 30_000 });
 
   const unchanged = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
   expect(unchanged.status).toBe("CONFIRMED");
   expect(await prisma.registration.count({ where: { eventId: approvalEventId } })).toBe(1);
+  expect(await prisma.registrationTransferRequest.count({ where: { eventId: approvalEventId } })).toBe(0);
   await page.goto(`/dashboard/events/${approvalEventId}/registrations/transfers`);
   await expect(page.getByRole("heading", { name: "Transfers disabled" })).toBeVisible();
 });

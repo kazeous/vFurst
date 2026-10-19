@@ -3,6 +3,7 @@ import {
   RATE_LIMIT_FAILURE_MODES,
   RateLimitUnavailableError,
   createFixedWindowRateLimiter,
+  getClientIpFromHeaders,
   rateLimitStorageKey,
   type RateLimitOptions
 } from "./rate-limit";
@@ -26,6 +27,11 @@ const request: RateLimitOptions = {
 };
 
 describe("shared fixed-window rate limiting", () => {
+  it("derives the client IP from headers", () => {
+    expect(getClientIpFromHeaders(new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }))).toBe("203.0.113.9");
+    expect(getClientIpFromHeaders(new Headers())).toBe("local");
+  });
+
   it("shares one quota across independent limiter instances", async () => {
     const counter = new SharedCounter();
     const firstInstance = createFixedWindowRateLimiter(counter, { prefix: "test" });

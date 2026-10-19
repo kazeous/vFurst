@@ -30,6 +30,32 @@ describe("email delivery payload encryption", () => {
     expect(decryptEmailDeliveryPayload(encrypted, encryptionKey)).toEqual(payload);
   });
 
+  it.each<EmailDeliveryPayload>([
+    {
+      to: "attendee@example.com",
+      template: "portal-account-setup",
+      data: { organizationName: "Fur & Fest", setupUrl: "https://furfest.test/set-password?token=setup-token" }
+    },
+    {
+      to: "attendee@example.com",
+      template: "portal-password-reset",
+      data: { organizationName: "Fur & Fest", resetUrl: "https://furfest.test/set-password?token=reset-token" }
+    },
+    {
+      to: "attendee@example.com",
+      template: "portal-account-exists",
+      data: {
+        organizationName: "Fur & Fest",
+        signInUrl: "https://furfest.test/login",
+        resetUrl: "https://furfest.test/forgot-password"
+      }
+    }
+  ])("round-trips a $template delivery with its account data", (portalPayload) => {
+    const encrypted = encryptEmailDeliveryPayload(portalPayload, encryptionKey);
+
+    expect(decryptEmailDeliveryPayload(encrypted, encryptionKey)).toEqual(portalPayload);
+  });
+
   it("uses a fresh IV for every encrypted delivery", () => {
     const first = encryptEmailDeliveryPayload(payload, encryptionKey);
     const second = encryptEmailDeliveryPayload(payload, encryptionKey);

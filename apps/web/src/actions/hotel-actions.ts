@@ -3,21 +3,21 @@
 import { requireEventAccess, requireHotelBlockAccess, requireHotelBookingAccess } from "@/lib/dashboard-access";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
-import { getConventionPortalRootForRequest } from "@/lib/convention";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
-import { HOTEL_PLATFORM_FEE_CENTS, getBaseUrl } from "@/lib/payments/stripe";
+import { HOTEL_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { ExpectedActionError, PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { getNightCount, parseMoney, parseRoomTypes, roomTypeSchema } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
-import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
+import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 
 function roomTypesFromForm(formData: FormData, currency: "USD" | "VND") {
   const names = formData.getAll("roomName");
@@ -145,6 +145,8 @@ export async function bookRoom(_previousState: PublicFormState, formData: FormDa
 }
 
 async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/hotel");
+  if (isPortalRedirect(context)) return context;
   const eventId = z.string().uuid().parse(formData.get("eventId"));
   const parsed = z
     .object({
@@ -190,15 +192,16 @@ async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
     throw new PublicActionError("Hotel block not found or unavailable.");
   }
 
+  assertPortalResourceOrg(block.orgId, context.org);
+  assertPortalResourceOrg(block.event.orgId, context.org);
+
   if (block.orgId !== block.event.orgId) {
     throw new Error("Hotel block tenant does not match its event.");
   }
 
   assertOrganizationActive(block.event.org.status);
-  const portalRoot = await getConventionPortalRootForRequest(block.event.org);
-  const guest = await requirePublicAccount(`/${block.event.org.subdomain}/hotel`);
-  assertPublicAccountEmail(guest, parsed.data.guestEmail);
-  const account = await syncPublicAccountName(guest, parsed.data.guestName);
+  assertPortalAccountEmail(context.account, parsed.data.guestEmail);
+  const account = await syncPortalAccountName(context.account, parsed.data.guestName);
   await assertActionRateLimit("payment:hotel-booking", `${parsed.data.blockId}:${account.id}`);
 
   if (block.cutoffDate < new Date()) {
@@ -227,7 +230,7 @@ async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
   const booking = await prisma.hotelBooking.create({
     data: {
       orgId: block.event.orgId,
-      userId: account.id,
+      portalAccountId: account.id,
       blockId: block.id,
       roomType: roomType.name,
       checkIn: parsed.data.checkIn,
@@ -239,7 +242,7 @@ async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
   const order = await prisma.order.create({
     data: {
       orgId: block.event.orgId,
-      userId: account.id,
+      portalAccountId: account.id,
       eventId: block.event.id,
       total,
       platformFee,
@@ -258,15 +261,15 @@ async function bookRoomInner(formData: FormData): Promise<PublicFormState> {
 
   if (total === 0) {
     await markOrderPaid(order.id);
-    redirect(`${portalRoot}/hotel?success=${booking.id}`);
+    return { redirectTo: `/hotel?success=${booking.id}` };
   }
 
   const checkout = await prepareOrderCheckout(
     order.id,
-    `/${block.event.org.subdomain}/hotel?success=${booking.id}`,
-    `/${block.event.org.subdomain}/hotel?cancelled=1`
+    `/hotel?success=${booking.id}`,
+    "/hotel?cancelled=1"
   );
-  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
+  return { redirectTo: checkout.checkoutPath };
 }
 
 export async function cancelBooking(formData: FormData) {

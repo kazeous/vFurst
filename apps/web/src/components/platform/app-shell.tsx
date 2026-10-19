@@ -1,16 +1,19 @@
+import { staffSignOut } from "@/actions/staff-auth-actions";
 import { Badge } from "@/components/ui/badge";
-import { Building2, CreditCard, Gauge, Globe2, LayoutDashboard, LogOut, MailWarning } from "lucide-react";
+import { Building2, CreditCard, Gauge, Globe2, LayoutDashboard, LogOut, MailWarning, UserCog } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function PlatformAppShell({
   children,
   userName,
-  userEmail
+  userEmail,
+  accountManagementUrl
 }: Readonly<{
   children: ReactNode;
   userName?: string | null;
   userEmail?: string | null;
+  accountManagementUrl: string;
 }>) {
   return (
     <div className="vf-app-shell" data-app-shell-ready="true">
@@ -48,12 +51,16 @@ export function PlatformAppShell({
           </div>
         </nav>
 
-        <div className="vf-app-sidebar-footer">
+        <div className="vf-app-sidebar-footer vf-app-sidebar-footer-stacked">
           <div className="vf-app-user-trigger">
             <span className="vf-user-avatar">{(userName ?? userEmail ?? "PA").slice(0, 2).toUpperCase()}</span>
             <span className="vf-app-user-copy"><strong>{userName ?? "Platform admin"}</strong><span>{userEmail}</span></span>
           </div>
-          <Link className="vf-nav-link" href="/api/auth/signout"><LogOut size={18} aria-hidden="true" /><span>Log out</span></Link>
+          <a className="vf-nav-link" href={accountManagementUrl}><UserCog size={18} aria-hidden="true" /><span>Manage your Reyuu Games account</span></a>
+          <Link className="vf-nav-link" href="/staff/sessions"><UserCog size={18} aria-hidden="true" /><span>Your vFurst sessions</span></Link>
+          <form action={staffSignOut}>
+            <button className="vf-nav-link" type="submit"><LogOut size={18} aria-hidden="true" /><span>Log out</span></button>
+          </form>
         </div>
       </aside>
 

@@ -1,7 +1,8 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac } from "node:crypto";
+import { createPortalAccountFixture, loginAsAttendee } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -18,16 +19,16 @@ let cartId: string;
 let unsafePersistedOrderId: string;
 let previousStripeConfig:
   | { enabled: boolean; settings: Prisma.JsonValue; updatedById: string | null }
-  | null;
+  | null
+  | undefined;
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { email: userEmail, name: "Routing Checkout Owner", passwordHash }
+    data: { email: userEmail, name: "Routing Checkout Owner", ...staffIdentityData() }
   });
   userId = user.id;
 
@@ -58,6 +59,7 @@ test.beforeAll(async () => {
     },
     include: { events: true }
   });
+  const userAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: userEmail, name: "Routing Checkout Owner", password });
   eventId = org.events[0]!.id;
 
   const product = await prisma.storeProduct.create({
@@ -73,7 +75,7 @@ test.beforeAll(async () => {
     data: {
       orgId: org.id,
       eventId,
-      userId: user.id,
+      portalAccountId: userAttendee.id,
       items: {
         create: {
           orgId: org.id,
@@ -102,14 +104,14 @@ test.beforeAll(async () => {
     data: {
       orgId: org.id,
       eventId,
-      userId: user.id,
+      portalAccountId: userAttendee.id,
       total: 2_500,
       platformFee: 25,
       currency: "USD",
       status: "PAID",
       checkoutTokenHash: createHmac("sha256", checkoutSecret).update(unsafePersistedToken).digest("hex"),
       checkoutSuccessPath: "/\\attacker.example",
-      checkoutCancelPath: `/${orgSlug}/store`,
+      checkoutCancelPath: `/store`,
       checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000)
     }
   });
@@ -126,44 +128,20 @@ test.afterAll(async () => {
         updatedById: previousStripeConfig.updatedById
       }
     });
-  } else {
+  } else if (previousStripeConfig === null) {
+    // Undefined means beforeAll failed before the snapshot, so the existing config is not ours to delete.
     await prisma.paymentProviderConfig.deleteMany({ where: { provider: "STRIPE" } });
   }
 
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { id: userId } });
+  // userId stays unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
+  if (userId) await prisma.user.deleteMany({ where: { id: userId } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(userEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, userEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
-}
-
-async function copySessionToTenant(context: BrowserContext) {
-  const sessionCookies = (await context.cookies("http://localhost:3000")).filter((cookie) =>
-    cookie.name.endsWith("session-token")
-  );
-  expect(sessionCookies.length).toBeGreaterThan(0);
-
-  await context.addCookies(
-    sessionCookies.map((cookie) => ({
-      name: cookie.name,
-      value: cookie.value,
-      url: tenantOrigin,
-      expires: cookie.expires,
-      httpOnly: cookie.httpOnly,
-      secure: cookie.secure,
-      sameSite: cookie.sameSite
-    }))
-  );
 }
 
 test("host probes reject malformed input and keep every reserved platform hostname on the platform", async ({ request }) => {
@@ -190,7 +168,10 @@ test("portal links use the central host and forged internal headers cannot chang
     "http://localhost:3000/privacy"
   );
 
+  await expect(page.getByRole("navigation", { name: "Convention portal navigation" }).getByRole("link", { name: "Tickets", exact: true })).toHaveAttribute("href", "/register");
+
   const response = await request.get(`/${orgSlug}`, {
+    maxRedirects: 0,
     headers: {
       host: "localhost:3000",
       "x-vfurst-org-host": `${orgSlug}.localhost`,
@@ -198,11 +179,9 @@ test("portal links use the central host and forged internal headers cannot chang
       "x-vfurst-domain-mode": "subdomain"
     }
   });
-  expect(response.status()).toBe(200);
+  expect(response.status()).toBe(308);
+  expect(response.headers().location).toBe(`${tenantOrigin}/`);
   expect(response.headers()["x-vfurst-org-host"]).toBeUndefined();
-  const html = await response.text();
-  expect(html).toContain(`href="/${orgSlug}/register"`);
-  expect(html).not.toContain('href="/register"');
 });
 
 test("dashboard Log out ends the session and returns to the marketing home", async ({ page }) => {
@@ -217,18 +196,16 @@ test("dashboard Log out ends the session and returns to the marketing home", asy
   await page.waitForURL((url) => url.pathname === "/login");
 });
 
-test("tenant-host store checkout stays central, rejects a forged return path, and returns to the portal", async ({
-  page,
-  context
+test("tenant-host store checkout stays on the portal, rejects a forged return path, and returns to the portal", async ({
+  page
 }) => {
-  await login(page);
-  await copySessionToTenant(context);
+  await loginAsAttendee(page, { subdomain: orgSlug }, userEmail, { password });
   const tenantStoreUrl = `${tenantOrigin}/store`;
   await page.goto(tenantStoreUrl);
 
   let checkoutForm = page.getByRole("button", { name: "Checkout" }).locator("xpath=ancestor::form");
-  await expect(checkoutForm.locator('input[name="successPath"]')).toHaveValue(`/${orgSlug}/store`);
-  await expect(checkoutForm.locator('input[name="cancelPath"]')).toHaveValue(`/${orgSlug}/store`);
+  await expect(checkoutForm.locator('input[name="successPath"]')).toHaveValue(`/store`);
+  await expect(checkoutForm.locator('input[name="cancelPath"]')).toHaveValue(`/store`);
 
   const rejectedResponse = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/store" && response.request().method() === "POST"
@@ -246,22 +223,22 @@ test("tenant-host store checkout stays central, rejects a forged return path, an
   await page.goto(tenantStoreUrl);
   checkoutForm = page.getByRole("button", { name: "Checkout" }).locator("xpath=ancestor::form");
   await Promise.all([
-    page.waitForURL((url) => url.hostname === "localhost" && url.pathname.startsWith("/checkout/")),
+    page.waitForURL((url) => url.origin === tenantOrigin && url.pathname.startsWith("/checkout/")),
     checkoutForm.getByRole("button", { name: "Checkout" }).click()
   ]);
   await expect(page.getByRole("heading", { name: "Choose how to pay" })).toBeVisible({ timeout: 30_000 });
 
   const order = await prisma.order.findFirstOrThrow({ where: { cartId }, orderBy: { createdAt: "desc" } });
-  expect(order.checkoutSuccessPath).toBe(`/${orgSlug}/store?success=${order.id}`);
-  expect(order.checkoutCancelPath).toBe(`/${orgSlug}/store?cancelled=1`);
-  expect(new URL(page.url()).hostname).toBe("localhost");
+  expect(order.checkoutSuccessPath).toBe(`/store?success=${order.id}`);
+  expect(order.checkoutCancelPath).toBe(`/store?cancelled=1`);
+  expect(new URL(page.url()).origin).toBe(tenantOrigin);
 
   await prisma.order.update({ where: { id: order.id }, data: { status: "PAID" } });
   await page.reload();
   await expect(page.getByRole("heading", { name: "You are all set" })).toBeVisible({ timeout: 30_000 });
   await Promise.all([
     page.waitForURL(
-      (url) => url.hostname === "localhost" && url.pathname === `/${orgSlug}/store` && url.searchParams.get("success") === order.id
+      (url) => url.origin === tenantOrigin && url.pathname === `/store` && url.searchParams.get("success") === order.id
     ),
     page.getByRole("link", { name: "Continue to confirmation" }).click()
   ]);
@@ -278,7 +255,7 @@ test("an unsafe return path already stored in the database is replaced on both r
     successPath: "/account/orders"
   });
 
-  await page.goto(`/checkout/${unsafePersistedOrderId}?token=${encodeURIComponent(unsafePersistedToken)}`);
+  await page.goto(`${tenantOrigin}/checkout/${unsafePersistedOrderId}?token=${encodeURIComponent(unsafePersistedToken)}`);
   await expect(page.getByRole("link", { name: "Continue to confirmation" })).toHaveAttribute(
     "href",
     "/account/orders"

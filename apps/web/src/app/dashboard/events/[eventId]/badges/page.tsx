@@ -3,6 +3,7 @@ import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/i18n";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
             }
           },
           type: true,
-          user: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "asc"
@@ -102,12 +103,12 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
 
             return (
               <div key={registration.id} className="vf-table-row vf-five-col">
-                <span>{registration.user.name ?? registration.user.email}</span>
+                <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
                 <span>{registration.type.name}</span>
                 <span>{badge?.barcodeData ?? "Not generated"}</span>
                 <span>
                   {badge?.printedAt
-                    ? `Printed ${badge.printedAt.toLocaleString()}`
+                    ? `Printed ${formatDate(badge.printedAt, { dateStyle: "medium", timeStyle: "short" })}`
                     : badge?.generatedAt
                       ? "Output ready"
                       : badge
@@ -118,7 +119,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
                   {badge ? (
                     <BadgePrintControls
                       badgeId={badge.id}
-                      label={registration.user.name ?? registration.user.email}
+                      label={registration.portalAccount.name ?? registration.portalAccount.email}
                       pdfUrl={badge.pdfUrl}
                       zplData={badge.zplData}
                       generatedAt={badge.generatedAt?.toISOString() ?? null}

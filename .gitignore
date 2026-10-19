@@ -36,3 +36,7 @@ Thumbs.db
 
 # Prisma
 packages/db/prisma/migrations/
+
+# Project docs and the progress log are kept locally, outside the repository
+/docs/
+/PROGRESS.md

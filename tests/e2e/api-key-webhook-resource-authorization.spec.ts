@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { Queue } from "bullmq";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 type TestWebhookJob = {
   createdAt?: string;
@@ -54,10 +54,9 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
-    prisma.user.create({ data: { email: ownerAEmail, name: "API Webhook Owner A", passwordHash } }),
-    prisma.user.create({ data: { email: ownerBEmail, name: "API Webhook Owner B", passwordHash } })
+    prisma.user.create({ data: { email: ownerAEmail, name: "API Webhook Owner A", ...staffIdentityData() } }),
+    prisma.user.create({ data: { email: ownerBEmail, name: "API Webhook Owner B", ...staffIdentityData() } })
   ]);
   const [orgA, orgB] = await Promise.all([
     prisma.organization.create({
@@ -162,30 +161,20 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ownerAEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      const interrupted =
-        error instanceof Error &&
-        (error.message.includes("ERR_ABORTED") || error.message.includes("interrupted by another navigation"));
-      if (!interrupted || attempt === 2) throw error;
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitTamperedAction(

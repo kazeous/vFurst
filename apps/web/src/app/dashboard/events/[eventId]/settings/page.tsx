@@ -2,6 +2,7 @@ import { updateEventSettings } from "@/actions/event-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
 import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { getCoreEventSettings } from "@/lib/event-settings";
 import { prisma } from "@vfurst/db";
@@ -78,11 +79,11 @@ export default async function EventSettingsPage({
           <div className="vf-form-grid">
             <label>
               Start date
-              <input name="startDate" type="date" defaultValue={dateInputValue(event.startDate)} required />
+              <DateField name="startDate" defaultValue={dateInputValue(event.startDate)} required />
             </label>
             <label>
               End date
-              <input name="endDate" type="date" defaultValue={dateInputValue(event.endDate)} required />
+              <DateField name="endDate" defaultValue={dateInputValue(event.endDate)} required />
             </label>
           </div>
 

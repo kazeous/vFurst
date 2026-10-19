@@ -9,7 +9,6 @@ const GCM_AUTH_TAG_BYTES = 16;
 const MAX_STORED_ERROR_LENGTH = 500;
 
 const emailTemplateNames = new Set<EmailTemplateName>([
-  "welcome",
   "registration-confirmation",
   "payment-receipt",
   "hotel-booking-confirmation",
@@ -19,6 +18,9 @@ const emailTemplateNames = new Set<EmailTemplateName>([
   "staff-message",
   "registration-transfer",
   "organization-invitation",
+  "portal-account-setup",
+  "portal-password-reset",
+  "portal-account-exists",
   "password-reset"
 ]);
 

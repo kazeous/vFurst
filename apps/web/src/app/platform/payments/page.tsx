@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
+import { formatDate } from "@/lib/i18n";
 import { getProviderStates, getSePaySettings, isSePayEnvironmentReady } from "@/lib/payments/platform";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
@@ -150,7 +152,7 @@ export default async function PlatformPaymentsPage({
                   />
                 </label>
                 <label>Bank transfer reference<input name="reference" required /></label>
-                <label>Paid date<input name="paidAt" type="date" defaultValue={today} required /></label>
+                <label>Paid date<DateField name="paidAt" defaultValue={today} required /></label>
               </div>
               <Button label="Record payout" type="submit" variant="primary" />
             </ActionStateForm>
@@ -171,7 +173,7 @@ export default async function PlatformPaymentsPage({
               <p className="vf-muted">{order.org.name} · order {order.id}</p>
               <div className="vf-form-grid">
                 <label>Refund transfer reference<input name="reference" required /></label>
-                <label>Processed date<input name="processedAt" type="date" defaultValue={today} required /></label>
+                <label>Processed date<DateField name="processedAt" defaultValue={today} required /></label>
               </div>
               <label>Reason<input name="reason" /></label>
               <Button label="Record full refund" type="submit" variant="destructive" />
@@ -208,7 +210,7 @@ export default async function PlatformPaymentsPage({
             {recentPayouts.map((payout) => (
               <div key={payout.id} className="vf-list-row">
                 <span>{payout.org.name} — {formatCurrency(payout.amount, payout.currency)}</span>
-                <small>{payout.reference} · {payout.paidAt.toLocaleDateString()}</small>
+                <small>{payout.reference} · {formatDate(payout.paidAt)}</small>
               </div>
             ))}
             {recentPayouts.length === 0 ? <p className="vf-empty">No payouts recorded.</p> : null}

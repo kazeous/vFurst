@@ -1,7 +1,8 @@
 "use client";
 
-import { updateQuantity } from "@/actions/cart-actions";
-import { createOrder } from "@/actions/store-actions";
+import { updateQuantity, convertCartToOrder } from "@/actions/cart-actions";
+import { ActionStateForm } from "@/components/action-state-form";
+import { useActionRedirect } from "@/components/use-action-redirect";
 import { applyVoucher } from "@/actions/voucher-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,9 @@ export function CartQuantityForm({
   initialQuantity: number;
   itemLabel: string;
 }) {
-  const [state, formAction, isPending] = useActionState(updateQuantity, initialPublicFormState);
+  const [state, formAction, pending] = useActionState(updateQuantity, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const isPending = pending || Boolean(state.redirectTo);
   const [quantity, setQuantity] = useState(String(initialQuantity));
 
   return (
@@ -46,7 +49,9 @@ export function CartQuantityForm({
 }
 
 export function CartVoucherForm({ cartId, returnPath, initialCode }: { cartId: string; returnPath: string; initialCode: string }) {
-  const [state, formAction, isPending] = useActionState(applyVoucher, initialPublicFormState);
+  const [state, formAction, pending] = useActionState(applyVoucher, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const isPending = pending || Boolean(state.redirectTo);
   const [code, setCode] = useState(initialCode);
 
   return (
@@ -80,25 +85,18 @@ export function CartCheckoutForm({
   cancelPath: string;
   isEmpty: boolean;
 }) {
-  const [state, formAction, isPending] = useActionState(createOrder, initialPublicFormState);
-
   return (
-    <form action={formAction} className="vf-stack">
+    <ActionStateForm action={convertCartToOrder} className="vf-stack" errorTestId="cart-checkout-error">
       <input type="hidden" name="cartId" value={cartId} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="successPath" value={successPath} />
       <input type="hidden" name="cancelPath" value={cancelPath} />
-      {state.error ? (
-        <Alert variant="error" data-testid="cart-checkout-error">
-          {state.error}
-        </Alert>
-      ) : null}
       <Button
-        label={isPending ? "Preparing checkout..." : "Checkout"}
+        label="Checkout"
         type="submit"
         variant="primary"
-        isDisabled={isEmpty || isPending}
+        isDisabled={isEmpty}
       />
-    </form>
+    </ActionStateForm>
   );
 }

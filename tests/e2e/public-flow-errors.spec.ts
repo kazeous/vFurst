@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -13,6 +14,7 @@ const transferToken = `public-flow-transfer-token-${runId}-0123456789abcdef`;
 
 let attendeeId: string;
 let fillerId: string;
+let requesterId: string;
 let orgId: string;
 let eventId: string;
 let raceTierId: string;
@@ -24,13 +26,8 @@ test.setTimeout(180_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
-  const [attendee, filler] = await Promise.all([
-    prisma.user.create({ data: { email: attendeeEmail, name: "Public Flow Attendee", passwordHash } }),
-    prisma.user.create({ data: { email: fillerEmail, name: "Public Flow Filler", passwordHash } })
-  ]);
-  attendeeId = attendee.id;
-  fillerId = filler.id;
+  const filler = await prisma.user.create({ data: { email: fillerEmail, name: "Public Flow Filler", ...staffIdentityData() } });
+  requesterId = filler.id;
 
   const org = await prisma.organization.create({
     data: {
@@ -54,6 +51,8 @@ test.beforeAll(async () => {
   });
   orgId = org.id;
   eventId = org.events[0]!.id;
+  attendeeId = (await createPortalAccountFixture(prisma, { orgId, email: attendeeEmail, name: "Public Flow Attendee", password })).id;
+  fillerId = (await createPortalAccountFixture(prisma, { orgId, email: fillerEmail, name: "Public Flow Filler", password })).id;
 
   const [raceTier, transferTier] = await Promise.all([
     prisma.registrationType.create({
@@ -73,7 +72,8 @@ test.beforeAll(async () => {
         orgId,
         eventId,
         hotelName: "Cutoff Hotel",
-        cutoffDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        // A day after the 12th reads differently day-first and month-first; midday UTC keeps the day in any server zone.
+        cutoffDate: new Date("2024-03-14T12:00:00Z"),
         roomTypes: [{ name: "Double", rate: 10_000, totalRooms: 5, bookedRooms: 0 }]
       }
     }),
@@ -88,17 +88,18 @@ test.beforeAll(async () => {
   ]);
 
   const sourceRegistration = await prisma.registration.create({
-    data: { orgId, eventId, userId: filler.id, typeId: transferTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, typeId: transferTierId, status: "CONFIRMED" }
   });
   const transferRequest = await prisma.registrationTransferRequest.create({
     data: {
       orgId,
       eventId,
       sourceRegistrationId: sourceRegistration.id,
-      requesterUserId: filler.id,
+      requesterUserId: requesterId,
       recipientEmail: attendeeEmail,
       status: "PENDING",
       tokenHash: createHash("sha256").update(transferToken).digest("hex"),
+      createdAt: new Date("2026-03-14T12:00:00Z"),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     }
   });
@@ -107,29 +108,22 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.organization.deleteMany({ where: { slug: orgSlug } });
-  await prisma.user.deleteMany({ where: { id: { in: [attendeeId, fillerId] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [requesterId].filter(Boolean) } } });
   await prisma.$disconnect();
 });
 
 async function login(page: Page) {
-  await page.goto("/login?returnTo=%2Faccount");
-  await page.getByLabel("Email").fill(attendeeEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.waitForURL((url) => url.pathname.startsWith("/account"));
+  await loginAsAttendee(page, { subdomain: orgSlug }, attendeeEmail, { password });
 }
 
 test("a tier that sells out mid-flow reports the capacity error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await page.locator(".vf-public-tier-list label").filter({ hasText: "Race Ticket" }).click();
 
   await prisma.registration.create({
-    data: { orgId, eventId, userId: fillerId, typeId: raceTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, typeId: raceTierId, status: "CONFIRMED" }
   });
 
   await page.getByRole("button", { name: "Continue" }).click();
@@ -142,7 +136,7 @@ test("a tier that sells out mid-flow reports the capacity error inline", async (
 
 test("raising a cart quantity above stock reports the inventory error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/store`);
+  await page.goto(`${portalOrigin(orgSlug)}/store`);
   await page.getByRole("button", { name: "Add to cart" }).click();
   await expect(page.getByRole("heading", { name: "Cart", exact: true })).toBeVisible();
 
@@ -157,31 +151,36 @@ test("raising a cart quantity above stock reports the inventory error inline", a
 
 test("booking past the hotel cutoff reports the cutoff error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/hotel`);
+  await page.goto(`${portalOrigin(orgSlug)}/hotel`);
   await expect(page.getByRole("heading", { name: "Cutoff Hotel" })).toBeVisible();
-  await page.locator('input[name="checkIn"]').fill("2028-06-01");
-  await page.locator('input[name="checkOut"]').fill("2028-06-03");
+  await expect(page.getByText("Cutoff 14 Mar 2024", { exact: true })).toBeVisible();
+  await page.getByLabel("Check-in").fill("01/06/2028");
+  await page.getByLabel("Check-out").fill("03/06/2028");
   await page.getByRole("button", { name: "Continue to checkout" }).click();
 
   await expect(page.getByTestId("hotel-booking-error")).toContainText("past its booking cutoff");
+  await expect(page.getByLabel("Check-in")).toHaveValue("01/06/2028");
+  await expect(page.getByLabel("Check-out")).toHaveValue("03/06/2028");
   await expect(page.getByTestId("route-error")).toHaveCount(0);
 });
 
 test("a required volunteer field left blank reports the field error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/volunteer`);
+  await page.goto(`${portalOrigin(orgSlug)}/volunteer`);
   await expect(page.getByRole("heading", { name: "Volunteer application" })).toBeVisible();
   await page.getByLabel("Experience summary").fill(" ");
+  await page.getByLabel("Date", { exact: true }).first().fill("02/06/2028");
   await page.getByRole("button", { name: "Submit application" }).click();
 
   await expect(page.getByTestId("volunteer-error")).toContainText("Experience summary is required.");
+  await expect(page.getByLabel("Date", { exact: true }).first()).toHaveValue("02/06/2028");
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit application" })).toBeEnabled();
 });
 
 test("a too-short vendor product description reports the validation error inline", async ({ page }) => {
   await login(page);
-  await page.goto(`/${orgSlug}/vendor-apply`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
   await expect(page.getByRole("heading", { name: "Apply for dealer space" })).toBeVisible();
   await page.getByLabel("Business name").fill("Public Flow Business");
   await page.getByLabel("Product description").fill("short");
@@ -192,6 +191,16 @@ test("a too-short vendor product description reports the validation error inline
   await expect(page.getByLabel("Business name")).toHaveValue("Public Flow Business");
 });
 
+test("the account transfer list reads its dates day-first", async ({ page }) => {
+  await login(page);
+  await page.goto(`${portalOrigin(orgSlug)}/account/transfers`);
+  await expect(page.getByRole("heading", { name: "Transfer invitations" })).toBeVisible();
+
+  // en-GB writes "Sept" for September, hence three or four letters.
+  const dateTime = String.raw`\d{1,2} [A-Z][a-z]{2,3} \d{4}, \d{2}:\d{2}`;
+  await expect(page.getByText(new RegExp(String.raw`^Sent 14 Mar 2026, \d{2}:\d{2} · expires ${dateTime}$`))).toBeVisible();
+});
+
 test("a double-submitted transfer decision shows the refreshed request state, not an error page", async ({ browser }) => {
   const context = await browser.newContext();
   const pageA = await context.newPage();
@@ -199,7 +208,7 @@ test("a double-submitted transfer decision shows the refreshed request state, no
 
   try {
     await login(pageA);
-    const decisionUrl = `/account/transfers/${transferRequestId}?token=${encodeURIComponent(transferToken)}`;
+    const decisionUrl = `${portalOrigin(orgSlug)}/account/transfers/${transferRequestId}?token=${encodeURIComponent(transferToken)}`;
     await pageA.goto(decisionUrl);
     await pageB.goto(decisionUrl);
     await expect(pageA.getByRole("button", { name: "Accept transfer" })).toBeVisible();

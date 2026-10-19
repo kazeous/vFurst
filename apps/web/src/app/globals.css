@@ -2112,6 +2112,21 @@ label {
   transition: background 120ms ease, color 120ms ease, transform 120ms ease;
 }
 
+/* The platform footer stacks the user card above full-width account actions. */
+.vf-app-sidebar-footer-stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Form buttons (for example the platform "Log out") styled as navigation rows. */
+button.vf-nav-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
 .vf-nav-link svg {
   flex: 0 0 auto;
 }
@@ -2676,6 +2691,234 @@ textarea {
   textarea,
   .vf-ui-button-default-size {
     min-height: 44px;
+  }
+}
+
+/* Hallmark · component: access-denied screen · genre: modern-minimal · theme: Operational Calm
+ * motion: cut · contrast: warning icon plus explicit text · responsive: 320 / 375 / 414 / 768
+ */
+html,
+body {
+  overflow-x: clip;
+}
+
+.vf-access-denied {
+  --vf-access-space-xs: 0.5rem;
+  --vf-access-space-sm: 0.75rem;
+  --vf-access-space-md: 1rem;
+  --vf-access-space-lg: 1.5rem;
+  --vf-access-space-xl: 2.5rem;
+  --vf-access-space-2xl: 4rem;
+  --vf-access-shell-width: 70rem;
+  --vf-access-icon-size: clamp(5.5rem, 14vw, 8rem);
+  --vf-access-warning-surface: color-mix(in srgb, var(--warning) 11%, var(--color-background-surface));
+  --vf-access-warning-border: color-mix(in srgb, var(--warning) 32%, var(--color-border-default));
+  --vf-access-detail-surface: color-mix(in srgb, var(--color-background-wash) 72%, var(--color-background-surface));
+  min-height: 100dvh;
+  padding: max(var(--vf-access-space-md), env(safe-area-inset-top)) max(var(--vf-access-space-md), env(safe-area-inset-right)) max(var(--vf-access-space-md), env(safe-area-inset-bottom)) max(var(--vf-access-space-md), env(safe-area-inset-left));
+  background: var(--color-background-body);
+}
+
+.vf-access-denied-shell {
+  width: min(100%, var(--vf-access-shell-width));
+  margin-inline: auto;
+  display: grid;
+  gap: var(--vf-access-space-xl);
+}
+
+.vf-access-denied-header {
+  min-height: 3rem;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--vf-access-space-md);
+}
+
+.vf-access-denied-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vf-access-space-sm);
+  color: var(--color-text-primary);
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.vf-access-denied-brand > span {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--color-accent-primary);
+  color: var(--primary-foreground);
+  font-size: 0.75rem;
+}
+
+.vf-access-denied-context {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.vf-access-denied-frame {
+  display: grid;
+  overflow: clip;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-panel);
+  background: var(--color-background-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.vf-access-denied-summary,
+.vf-access-denied-next {
+  min-width: 0;
+  padding: var(--vf-access-space-xl);
+}
+
+.vf-access-denied-summary {
+  display: grid;
+  align-content: start;
+  gap: var(--vf-access-space-xl);
+}
+
+.vf-access-denied-icon {
+  width: var(--vf-access-icon-size);
+  height: var(--vf-access-icon-size);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--vf-access-warning-border);
+  border-radius: 50%;
+  background: var(--vf-access-warning-surface);
+  color: var(--color-warning);
+}
+
+.vf-access-denied-icon svg {
+  width: 52%;
+  height: 52%;
+  stroke-width: 1.5;
+}
+
+.vf-access-denied-copy {
+  display: grid;
+  gap: var(--vf-access-space-md);
+}
+
+.vf-access-denied-copy h1,
+.vf-access-denied-copy p,
+.vf-access-denied-next h2,
+.vf-access-denied-next p {
+  margin: 0;
+}
+
+.vf-access-denied-copy h1 {
+  min-width: 0;
+  max-width: 13ch;
+  font-size: clamp(2.35rem, 7vw, 4.75rem);
+  font-weight: 720;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+
+.vf-access-denied-copy > p:first-of-type {
+  max-width: 58ch;
+  color: var(--color-text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
+.vf-access-denied-identity {
+  max-width: 100%;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.vf-access-denied-identity strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-geist-mono), monospace;
+  font-weight: 550;
+}
+
+.vf-access-denied-next {
+  display: grid;
+  align-content: center;
+  gap: var(--vf-access-space-xl);
+  border-top: 1px solid var(--color-border-default);
+  background: var(--vf-access-detail-surface);
+}
+
+.vf-access-denied-next > div:first-child {
+  display: grid;
+  gap: var(--vf-access-space-sm);
+}
+
+.vf-access-denied-next h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.vf-access-denied-next p {
+  max-width: 48ch;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.vf-access-denied-actions {
+  display: grid;
+  gap: var(--vf-access-space-sm);
+}
+
+.vf-access-denied-actions .vf-ui-button {
+  width: 100%;
+  min-height: 2.75rem;
+  white-space: nowrap;
+}
+
+.vf-access-denied-note {
+  padding-top: var(--vf-access-space-lg);
+  border-top: 1px solid var(--color-border-default);
+  font-size: 0.875rem;
+}
+
+@media (min-width: 48rem) {
+  .vf-access-denied {
+    padding: var(--vf-access-space-xl);
+  }
+
+  .vf-access-denied-header {
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row;
+  }
+
+  .vf-access-denied-shell {
+    gap: var(--vf-access-space-2xl);
+  }
+
+  .vf-access-denied-frame {
+    grid-template-columns: minmax(0, 1.24fr) minmax(20rem, 0.76fr);
+  }
+
+  .vf-access-denied-summary,
+  .vf-access-denied-next {
+    padding: var(--vf-access-space-2xl);
+  }
+
+  .vf-access-denied-next {
+    border-top: 0;
+    border-inline-start: 1px solid var(--color-border-default);
+  }
+
+  .vf-access-denied-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .vf-access-denied-actions .vf-ui-button {
+    width: auto;
   }
 }
 

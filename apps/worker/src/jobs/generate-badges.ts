@@ -68,9 +68,9 @@ function parseLayout(value: unknown): BadgeLayout {
 function resolveField(field: string | undefined, badge: Awaited<ReturnType<typeof loadBadges>>[number]) {
   switch (field) {
     case "attendee.name":
-      return badge.registration.user.name ?? badge.registration.user.email;
+      return badge.registration.portalAccount.name ?? badge.registration.portalAccount.email;
     case "attendee.email":
-      return badge.registration.user.email;
+      return badge.registration.portalAccount.email;
     case "registration.type":
       return badge.registration.type.name;
     case "registration.badgeNumber":
@@ -224,8 +224,8 @@ async function loadBadgeImage(element: BadgeElement, orgId: string): Promise<Ras
         Key: key
       })
     );
-  } catch {
-    throw new Error(`Badge image asset ${key} could not be loaded.`);
+  } catch (error) {
+    throw new Error(`Badge image asset ${key} could not be loaded.`, { cause: error });
   }
 
   if (typeof object.ContentLength === "number" && object.ContentLength > MAX_IMAGE_BYTES) {
@@ -255,7 +255,7 @@ async function loadBadgeImage(element: BadgeElement, orgId: string): Promise<Ras
     if (error instanceof Error && error.message.startsWith("Badge image")) {
       throw error;
     }
-    throw new Error(`Badge image asset ${key} is corrupt or unsupported.`);
+    throw new Error(`Badge image asset ${key} is corrupt or unsupported.`, { cause: error });
   }
 }
 
@@ -386,7 +386,7 @@ async function loadBadges(data: GenerateBadgesJob) {
         include: {
           event: true,
           type: true,
-          user: true
+          portalAccount: { select: { email: true, name: true } }
         }
       },
       template: true

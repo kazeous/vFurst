@@ -3,6 +3,8 @@
 import { submitVolunteerApplication } from "@/actions/staff-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
+import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
 
@@ -28,6 +30,8 @@ export function VolunteerForm({
   applicantEmail: string;
 }) {
   const [state, formAction, isPending] = useActionState(submitVolunteerApplication, initialPublicFormState);
+  useActionRedirect(state.redirectTo);
+  const busy = isPending || Boolean(state.redirectTo);
   const [applicantName, setApplicantName] = useState(defaultApplicantName);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [fieldChecks, setFieldChecks] = useState<Record<string, boolean>>({});
@@ -168,12 +172,7 @@ export function VolunteerForm({
           <div key={index} className="vf-subform-row">
             <label>
               Date
-              <input
-                name="availabilityDate"
-                type="date"
-                value={row.date}
-                onChange={(event) => setAvailabilityRow(index, { date: event.target.value })}
-              />
+              <DateField name="availabilityDate" value={row.date} onValueChange={(date) => setAvailabilityRow(index, { date })} />
             </label>
             <label>
               Slots
@@ -187,7 +186,7 @@ export function VolunteerForm({
           </div>
         ))}
       </section>
-      <Button label={isPending ? "Submitting..." : "Submit application"} type="submit" variant="primary" isDisabled={isPending} />
+      <Button label={busy ? "Submitting..." : "Submit application"} type="submit" variant="primary" isDisabled={busy} />
     </form>
   );
 }

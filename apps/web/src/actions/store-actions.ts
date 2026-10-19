@@ -1,6 +1,7 @@
 "use server";
 
-import { convertCartToOrder } from "@/actions/cart-actions";
+import { requireStaffAssurance } from "@/lib/staff-verification";
+
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requireOrderAccess, requireStoreProductAccess } from "@/lib/dashboard-access";
@@ -15,11 +16,9 @@ import {
   validateProductImageUrl
 } from "@/lib/store/product-image-policy";
 import { productOptionSchema, productSurchargeSchema } from "@/lib/store/pricing";
-import { ExpectedActionError, publicActionErrorMessage } from "@/lib/public-action-error";
-import type { PublicFormState } from "@/lib/public-form-state";
+import { ExpectedActionError } from "@/lib/public-action-error";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function surchargesFromForm(formData: FormData, currency: "USD" | "VND") {
@@ -183,36 +182,50 @@ async function updateProductInner(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
-export async function deleteProduct(formData: FormData) {
+export async function archiveProduct(formData: FormData) {
   const productId = z.string().uuid().parse(formData.get("productId"));
   const { storeProduct, event } = await requireStoreProductAccess(productId);
 
-  await prisma.storeProduct.delete({
+  await prisma.$transaction(async (tx) => {
+    await tx.storeProduct.update({
+      where: {
+        id: storeProduct.id
+      },
+      data: {
+        archivedAt: new Date()
+      }
+    });
+
+    // A cart is not a purchase commitment. Provider-backed orders are retained
+    // so their payment amount and paid-order history cannot be rewritten.
+    await tx.cartItem.deleteMany({
+      where: {
+        storeProductId: storeProduct.id
+      }
+    });
+  });
+
+  revalidatePath(`/dashboard/events/${event.id}/store`);
+}
+
+export async function restoreProduct(formData: FormData) {
+  const productId = z.string().uuid().parse(formData.get("productId"));
+  const { storeProduct, event } = await requireStoreProductAccess(productId);
+
+  await prisma.storeProduct.update({
     where: {
       id: storeProduct.id
+    },
+    data: {
+      archivedAt: null
     }
   });
 
   revalidatePath(`/dashboard/events/${event.id}/store`);
 }
 
-export async function createOrder(_previousState: PublicFormState, formData: FormData): Promise<PublicFormState> {
-  try {
-    await convertCartToOrder(formData);
-    return {};
-  } catch (error) {
-    unstable_rethrow(error);
-    const message = publicActionErrorMessage(error);
-
-    if (message) {
-      return { error: message };
-    }
-
-    throw error;
-  }
-}
-
 export async function refundOrder(formData: FormData) {
+  await requireStaffAssurance();
   const orderId = z.string().uuid().parse(formData.get("orderId"));
   const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
 
@@ -237,6 +250,7 @@ export async function refundOrder(formData: FormData) {
 }
 
 export async function partialRefund(formData: FormData) {
+  await requireStaffAssurance();
   const orderId = z.string().uuid().parse(formData.get("orderId"));
   const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
   await assertActionRateLimit("payment:store-partial-refund", `${event.orgId}:${order.id}`);

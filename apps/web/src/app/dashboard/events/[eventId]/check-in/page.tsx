@@ -23,7 +23,7 @@ function buildRegistrationSearch(eventId: string, query: string): Prisma.Registr
       }
     },
     {
-      user: {
+      portalAccount: {
         is: {
           email: {
             contains: query,
@@ -33,7 +33,7 @@ function buildRegistrationSearch(eventId: string, query: string): Prisma.Registr
       }
     },
     {
-      user: {
+      portalAccount: {
         is: {
           name: {
             contains: query,
@@ -122,7 +122,7 @@ const getCheckInData = unstable_cache(
               name: true
             }
           },
-          user: {
+          portalAccount: {
             select: {
               email: true,
               name: true
@@ -178,8 +178,8 @@ export default async function CheckInPage({
         totalCount={checkInData.totalRegistrations}
         rows={checkInData.registrations.map((registration) => ({
           id: registration.id,
-          attendee: registration.user.name ?? registration.user.email,
-          email: registration.user.email,
+          attendee: registration.portalAccount.name ?? registration.portalAccount.email,
+          email: registration.portalAccount.email,
           type: registration.type.name,
           status: registration.status,
           approvalStatus: registration.approvalStatus,

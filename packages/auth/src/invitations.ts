@@ -17,6 +17,7 @@ export type OrganizationInvitationErrorCode =
   | "ALREADY_ACCEPTED"
   | "ALREADY_MEMBER"
   | "EMAIL_MISMATCH"
+  | "EMAIL_UNVERIFIED"
   | "EXPIRED"
   | "INVALID"
   | "REVOKED"
@@ -85,7 +86,7 @@ export function organizationAcceptsInvitations(status: InvitationOrganizationSta
 
 export function assertOrganizationInvitationCanBeAccepted(
   invitation: OrganizationInvitationAcceptanceInput,
-  userEmail: string,
+  user: { email: string; emailVerified: boolean },
   now = new Date()
 ) {
   const state = getOrganizationInvitationState(invitation, now);
@@ -99,7 +100,14 @@ export function assertOrganizationInvitationCanBeAccepted(
   if (state === "EXPIRED") {
     throw new OrganizationInvitationError("EXPIRED", "This invitation has expired.");
   }
-  if (normalizeInvitationEmail(invitation.email) !== normalizeInvitationEmail(userEmail)) {
+  // The email match is trustworthy only when the identity provider verified it (spec §6.7).
+  if (!user.emailVerified) {
+    throw new OrganizationInvitationError(
+      "EMAIL_UNVERIFIED",
+      "Verify your Reyuu Games account email before accepting this invitation."
+    );
+  }
+  if (normalizeInvitationEmail(invitation.email) !== normalizeInvitationEmail(user.email)) {
     throw new OrganizationInvitationError("EMAIL_MISMATCH", "Sign in with the email address that received this invitation.");
   }
   if (!organizationAcceptsInvitations(invitation.organizationStatus)) {

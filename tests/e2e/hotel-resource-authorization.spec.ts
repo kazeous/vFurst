@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -32,20 +33,19 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
     prisma.user.create({
       data: {
         email: ownerAEmail,
         name: "Hotel Owner A",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: ownerBEmail,
         name: "Hotel Owner B",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -138,16 +138,16 @@ test.beforeAll(async () => {
   blockBId = blockB.id;
 
   const [guestA, guestB, validGuest] = await Promise.all([
-    prisma.user.create({ data: { email: guestAEmail, name: "Hotel Guest A", passwordHash } }),
-    prisma.user.create({ data: { email: guestBEmail, name: "Hotel Guest B", passwordHash } }),
-    prisma.user.create({ data: { email: validGuestEmail, name: "Valid Hotel Guest", passwordHash } })
+    createPortalAccountFixture(prisma, { orgId: orgA.id, email: guestAEmail, name: "Hotel Guest A", password }),
+    createPortalAccountFixture(prisma, { orgId: orgB.id, email: guestBEmail, name: "Hotel Guest B", password }),
+    createPortalAccountFixture(prisma, { orgId: orgA.id, email: validGuestEmail, name: "Valid Hotel Guest", password })
   ]);
 
   const [bookingA, bookingB] = await Promise.all([
     prisma.hotelBooking.create({
       data: {
         orgId: orgA.id,
-        userId: guestA.id,
+        portalAccountId: guestA.id,
         blockId: blockA.id,
         roomType: "Double",
         checkIn: new Date("2028-04-10T00:00:00Z"),
@@ -158,7 +158,7 @@ test.beforeAll(async () => {
     prisma.hotelBooking.create({
       data: {
         orgId: orgB.id,
-        userId: guestB.id,
+        portalAccountId: guestB.id,
         blockId: blockB.id,
         roomType: "Double",
         checkIn: new Date("2028-05-10T00:00:00Z"),
@@ -191,47 +191,29 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ownerAEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
 async function loginAs(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  await loginAsAttendee(page, { subdomain: orgASlug }, email, { password });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      const isInterruptedNavigation =
-        error instanceof Error &&
-        (error.message.includes("ERR_ABORTED") || error.message.includes("interrupted by another navigation"));
-      if (!isInterruptedNavigation || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate((formElement, name) => {
     const form = formElement as HTMLFormElement;
@@ -253,7 +235,7 @@ async function submitTamperedAction(
   fieldValue: string
 ) {
   const responsePromise = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === pathname && response.request().method() === "POST"
+    (response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"
   );
   await form.evaluate(
     (formElement, tamper) => {
@@ -294,21 +276,21 @@ async function expectOriginalHotelResources() {
 
 test("public hotel success lookup is tenant-scoped and booking binds block to event", async ({ page }) => {
   await loginAs(page, guestAEmail);
-  await page.goto(`/${orgASlug}/hotel?success=${bookingBId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel?success=${bookingBId}`);
   await expect(page.getByRole("heading", { name: "Hotel booking confirmed" })).toHaveCount(0);
   await expect(page.getByText("Hotel Guest B")).toHaveCount(0);
 
-  await page.goto(`/${orgASlug}/hotel?success=${bookingAId}`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel?success=${bookingAId}`);
   await expect(page.getByRole("heading", { name: "Hotel booking confirmed" })).toBeVisible();
   await expect(page.getByText("Hotel Guest A")).toBeVisible();
 
-  await page.goto(`/${orgASlug}/hotel`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel`);
   const publicForm = page.getByRole("heading", { name: blockAName }).locator("xpath=ancestor::form");
-  await publicForm.getByLabel("Check-in").fill("2028-04-10");
-  await publicForm.getByLabel("Check-out").fill("2028-04-11");
+  await publicForm.getByLabel("Check-in").fill("10/04/2028");
+  await publicForm.getByLabel("Check-out").fill("11/04/2028");
   await publicForm.getByLabel("Guest name").fill("Rejected Guest");
-  await submitTamperedAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout", "blockId", blockBId);
-  expect(await prisma.hotelBooking.count({ where: { user: { email: tamperedGuestEmail } } })).toBe(0);
+  await submitTamperedAction(page, `${portalOrigin(orgASlug)}/hotel`, publicForm, "Continue to checkout", "blockId", blockBId);
+  expect(await prisma.hotelBooking.count({ where: { portalAccount: { email: tamperedGuestEmail } } })).toBe(0);
 });
 
 test("hotel block and booking mutations derive access from stored resources", async ({ page }) => {
@@ -319,7 +301,7 @@ test("hotel block and booking mutations derive access from stored resources", as
   const createForm = page.getByRole("button", { name: "Create block" }).locator("xpath=ancestor::form");
   await expect(createForm.locator('input[name="orgId"]')).toHaveCount(0);
   await createForm.getByLabel("Hotel name").fill(rejectedBlockName);
-  await createForm.locator('input[name="cutoffDate"]').fill("2028-06-01");
+  await createForm.getByLabel("Cutoff date").fill("01/06/2028");
   await createForm.locator('input[name="roomName"]').first().fill("Double");
   await createForm.locator('input[name="roomRate"]').first().fill("100000");
   await createForm.locator('input[name="roomTotal"]').first().fill("2");
@@ -344,13 +326,14 @@ test("hotel block and booking mutations derive access from stored resources", as
   await navigateAfterRejectedAction(page, hotelPath);
   const validCreateForm = page.getByRole("button", { name: "Create block" }).locator("xpath=ancestor::form");
   await validCreateForm.getByLabel("Hotel name").fill(validBlockName);
-  await validCreateForm.locator('input[name="cutoffDate"]').fill("2028-06-01");
+  await validCreateForm.getByLabel("Cutoff date").fill("01/06/2028");
   await validCreateForm.locator('input[name="roomName"]').first().fill("Suite");
   await validCreateForm.locator('input[name="roomRate"]').first().fill("125000");
   await validCreateForm.locator('input[name="roomTotal"]').first().fill("2");
   await submitAction(page, hotelPath, validCreateForm, "Create block");
   const created = await prisma.hotelBlock.findFirstOrThrow({ where: { eventId: eventAId, hotelName: validBlockName } });
   expect(created.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
+  expect(created.cutoffDate.toISOString()).toBe("2028-06-01T00:00:00.000Z");
 });
 
 test("hotel-block validation renders inline and retains organizer input", async ({ page }) => {
@@ -359,7 +342,7 @@ test("hotel-block validation renders inline and retains organizer input", async 
   await page.goto(hotelPath);
   const createForm = page.getByRole("button", { name: "Create block" }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Hotel name").fill(`Inline Hotel ${runId}`);
-  await createForm.locator('input[name="cutoffDate"]').fill("2028-06-01");
+  await createForm.getByLabel("Cutoff date").fill("01/06/2028");
   await createForm.locator('input[name="roomName"]').first().evaluate((input) => input.removeAttribute("required"));
   await createForm.locator('input[name="roomRate"]').first().evaluate((input) => input.removeAttribute("required"));
   await createForm.locator('input[name="roomTotal"]').first().evaluate((input) => input.removeAttribute("required"));
@@ -367,6 +350,7 @@ test("hotel-block validation renders inline and retains organizer input", async 
 
   await expect(page.getByTestId("create-hotel-block-error")).toContainText("Create at least one room type.");
   await expect(createForm.getByLabel("Hotel name")).toHaveValue(`Inline Hotel ${runId}`);
+  await expect(createForm.getByLabel("Cutoff date")).toHaveValue("01/06/2028");
   await expect(createForm.getByRole("button", { name: "Create block" })).toBeEnabled();
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.hotelBlock.count({ where: { hotelName: `Inline Hotel ${runId}` } })).toBe(0);
@@ -374,16 +358,17 @@ test("hotel-block validation renders inline and retains organizer input", async 
 
 test("public VND hotel booking creates an event-scoped order", async ({ page }) => {
   await loginAs(page, validGuestEmail);
-  await page.goto(`/${orgASlug}/hotel`);
+  await page.goto(`${portalOrigin(orgASlug)}/hotel`);
   const publicForm = page.getByRole("heading", { name: blockAName }).locator("xpath=ancestor::form");
-  await publicForm.getByLabel("Check-in").fill("2028-04-10");
-  await publicForm.getByLabel("Check-out").fill("2028-04-11");
+  await publicForm.getByLabel("Check-in").fill("10/04/2028");
+  await publicForm.getByLabel("Check-out").fill("11/04/2028");
   await publicForm.getByLabel("Guest name").fill("Valid Hotel Guest");
-  await submitAction(page, `/${orgASlug}/hotel`, publicForm, "Continue to checkout");
+  await submitAction(page, `${portalOrigin(orgASlug)}/hotel`, publicForm, "Continue to checkout");
 
-  const booking = await prisma.hotelBooking.findFirstOrThrow({ where: { user: { email: validGuestEmail } } });
+  const booking = await prisma.hotelBooking.findFirstOrThrow({ where: { portalAccount: { email: validGuestEmail } } });
   const orderItem = await prisma.orderItem.findFirstOrThrow({ where: { refId: booking.id, itemType: "HOTEL" }, include: { order: true } });
   expect(booking.orgId).toBe((await prisma.event.findUniqueOrThrow({ where: { id: eventAId } })).orgId);
+  expect([booking.checkIn.toISOString(), booking.checkOut.toISOString()]).toEqual(["2028-04-10T00:00:00.000Z", "2028-04-11T00:00:00.000Z"]);
   expect(orderItem.order.eventId).toBe(eventAId);
   expect(orderItem.order.currency).toBe("VND");
   expect(orderItem.order.total).toBe(0);

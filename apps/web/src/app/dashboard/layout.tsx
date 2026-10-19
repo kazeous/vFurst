@@ -1,7 +1,9 @@
 import { DashboardAppShell } from "@/components/dashboard/app-shell";
-import { auth, signOut } from "@/lib/auth";
+import { staffSignOut } from "@/actions/staff-auth-actions";
+import { auth } from "@/lib/auth";
+import { getStaffAccountManagementUrl } from "@/lib/staff-oidc";
 import { prisma } from "@vfurst/db";
-import { notFound, redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 export default async function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -38,11 +40,11 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
 
   const memberships = allMemberships.filter((membership) => ["OWNER", "ADMIN"].includes(membership.role));
 
-  if (allMemberships.length === 0) {
+  if (memberships.length === 0) {
     if (session.user.platformRole === "PLATFORM_ADMIN") {
       redirect("/platform");
     }
-    notFound();
+    forbidden();
   }
 
   const organizations = memberships.map((membership) => ({
@@ -62,18 +64,14 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
     }))
   );
 
-  async function logout() {
-    "use server";
-    await signOut({ redirectTo: "/" });
-  }
-
   return (
     <DashboardAppShell
       userName={session.user.name}
       userEmail={session.user.email}
       isPlatformAdmin={session.user.platformRole === "PLATFORM_ADMIN"}
       workspace={{ organizations, events }}
-      logoutAction={logout}
+      logoutAction={staffSignOut}
+      accountManagementUrl={getStaffAccountManagementUrl()}
     >
       {children}
     </DashboardAppShell>

@@ -1,15 +1,13 @@
 import { payVendorBooth } from "@/actions/vendor-actions";
 import { VendorApplyForm } from "./vendor-apply-form";
-import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
-import { auth } from "@/lib/auth";
+import { getPortalPageContext } from "@/lib/portal-context";
+import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getVendorConfig } from "@/lib/vendor/config";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionStateForm } from "@/components/action-state-form";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +34,8 @@ export default async function PublicVendorApplyPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string; cancelled?: string }>;
 }) {
-  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
-  const org = await getConventionOrg(orgSlug);
-
-  if (!org) {
-    notFound();
-  }
-  const portalRoot = await getConventionPortalRootForRequest(org);
-  const centralPath = getCentralPortalPath(org.subdomain, "/vendor-apply");
+  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const { org, account } = await getPortalPageContext(orgSlug);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -54,14 +46,14 @@ export default async function PublicVendorApplyPage({
       startDate: "asc"
     }
   });
-  const successApplication = query.success && session?.user?.id
+  const successApplication = query.success && account
     ? event
       ? await prisma.vendorApplication.findFirst({
         where: {
           id: query.success,
           orgId: org.id,
           eventId: event.id,
-          userId: session.user.id
+          portalAccountId: account.id
         },
         include: {
           event: true
@@ -79,9 +71,9 @@ export default async function PublicVendorApplyPage({
           <h1>Vendor application</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`${portalRoot}/register`} />
-          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
-          <Button label="Account" href={getCentralAppUrl("/account")} />
+          <Button label="Register" href="/register" />
+          <Button label="Volunteer" href="/volunteer" />
+          <Button label="Account" href="/account" />
         </div>
       </header>
 
@@ -121,12 +113,12 @@ export default async function PublicVendorApplyPage({
           <h2>No published event</h2>
           <p className="vf-muted">Vendor applications will open after the organizer publishes an event.</p>
         </section>
-      ) : !session?.user?.id ? (
+      ) : !account ? (
         <section className="vf-section">
           <p className="vf-label">Public account required</p>
           <h2>Sign in before applying</h2>
-          <p className="vf-muted">Your application, booth assignment, and payment status will be saved to your central vFurst account.</p>
-          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(centralPath)} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(centralPath)} /></div>
+          <p className="vf-muted">Your application, booth assignment, and payment status will be saved to your account for this convention.</p>
+          <div className="vf-actions"><Button label="Log in" href={portalLoginPath("/vendor-apply")} variant="primary" /><Button label="Create account" href={portalSignupPath("/vendor-apply")} /></div>
         </section>
       ) : (
         <VendorApplyForm
@@ -141,8 +133,8 @@ export default async function PublicVendorApplyPage({
             id: amenity.id,
             label: `${amenity.name} (${formatCurrency(amenity.price, event.currency)})`
           }))}
-          defaultContactName={session.user.name ?? ""}
-          contactEmail={session.user.email ?? ""}
+          defaultContactName={account.name ?? ""}
+          contactEmail={account.email ?? ""}
         />
       )}
     </main>

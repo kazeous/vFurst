@@ -1,6 +1,7 @@
 "use server";
 
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { getConventionOrg } from "@/lib/convention";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requireVendorApplicationAccess } from "@/lib/dashboard-access";
@@ -8,7 +9,6 @@ import { sendOrgEmail } from "@/lib/email";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable } from "@/lib/payments/platform";
-import { getBaseUrl } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
 import { parseMoney } from "@/lib/registration/pricing";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
@@ -23,9 +23,9 @@ import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action
 import { ExpectedActionError } from "@/lib/expected-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
-import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
+import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 function settingsObject(settings: unknown): Record<string, unknown> {
@@ -176,6 +176,8 @@ export async function submitApplication(_previousState: PublicFormState, formDat
 }
 
 async function submitApplicationInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/vendor-apply");
+  if (isPortalRedirect(context)) return context;
   const parsed = z
     .object({
       orgSlug: z.string().trim().min(1),
@@ -209,6 +211,7 @@ async function submitApplicationInner(formData: FormData): Promise<PublicFormSta
   if (!org) {
     throw new PublicActionError("Organization not found.");
   }
+  assertPortalResourceOrg(org.id, context.org);
 
   const event = await prisma.event.findFirstOrThrow({
     where: {
@@ -222,6 +225,7 @@ async function submitApplicationInner(formData: FormData): Promise<PublicFormSta
       org: true
     }
   });
+  assertPortalResourceOrg(event.orgId, context.org);
   const config = getVendorConfig(event.settings);
   const selectedTable = config.tableTypes.find((table) => table.id === parsed.data.tableType);
 
@@ -233,15 +237,14 @@ async function submitApplicationInner(formData: FormData): Promise<PublicFormSta
   const selectedAmenities = config.amenities.filter((amenity) => amenityIds.includes(amenity.id));
   const boothPrice = (selectedTable?.price ?? 0) + selectedAmenities.reduce((sum, amenity) => sum + amenity.price, 0);
   const files = await filesFromForm(event.orgId, event.id, formData);
-  const vendor = await requirePublicAccount(`/${event.org.subdomain}/vendor-apply`);
-  assertPublicAccountEmail(vendor, parsed.data.contactEmail);
-  const account = await syncPublicAccountName(vendor, parsed.data.contactName);
+  assertPortalAccountEmail(context.account, parsed.data.contactEmail);
+  const account = await syncPortalAccountName(context.account, parsed.data.contactName);
 
   const application = await prisma.vendorApplication.create({
     data: {
       orgId: event.orgId,
       eventId: event.id,
-      userId: account.id,
+      portalAccountId: account.id,
       contactName: account.name ?? parsed.data.contactName,
       contactEmail: account.email,
       businessName: parsed.data.businessName,
@@ -259,8 +262,7 @@ async function submitApplicationInner(formData: FormData): Promise<PublicFormSta
     }
   });
 
-  const portalRoot = await getConventionPortalRootForRequest(event.org);
-  redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
+  return { redirectTo: `/vendor-apply?success=${application.id}` };
 }
 
 export async function approveVendor(formData: FormData) {
@@ -279,11 +281,11 @@ export async function approveVendor(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
     eventName: application.event.name,
     businessName: application.businessName,
     status: "APPROVED",
@@ -334,7 +336,7 @@ export async function bulkReviewVendors(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -356,7 +358,7 @@ export async function bulkReviewVendors(formData: FormData) {
   });
 
   for (const application of applications) {
-    await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+    await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
       eventName: application.event.name,
       businessName: application.businessName,
       status,
@@ -382,11 +384,11 @@ async function updateVendorStatus(formData: FormData, status: "REJECTED" | "WAIT
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "vendor-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "vendor-application-decision", {
     eventName: application.event.name,
     businessName: application.businessName,
     status,
@@ -492,10 +494,16 @@ export async function payVendorBooth(
   _previousState: ActionFormState,
   formData: FormData
 ): Promise<ActionFormState> {
-  return runActionWithState(() => payVendorBoothInner(formData));
+  let result: ActionFormState = {};
+  const state = await runActionWithState(async () => {
+    result = await payVendorBoothInner(formData);
+  });
+  return state.error ? state : result;
 }
 
-async function payVendorBoothInner(formData: FormData) {
+async function payVendorBoothInner(formData: FormData): Promise<ActionFormState> {
+  const context = await getPortalActionContext("/vendor-apply");
+  if (isPortalRedirect(context)) return context;
   const applicationId = z.string().uuid().parse(formData.get("applicationId"));
   const orgSlug = z.string().trim().min(1).parse(formData.get("orgSlug"));
   await assertActionRateLimit("payment:vendor-booth", applicationId);
@@ -505,14 +513,13 @@ async function payVendorBoothInner(formData: FormData) {
   if (!org) {
     throw new ExpectedActionError("Organization not found.");
   }
+  assertPortalResourceOrg(org.id, context.org);
 
-  const account = await requirePublicAccount(`/${org.subdomain}/vendor-apply`);
-
-  const application = await prisma.vendorApplication.findFirstOrThrow({
+  const application = await prisma.vendorApplication.findFirst({
     where: {
       id: applicationId,
       orgId: org.id,
-      userId: account.id,
+      portalAccountId: context.account.id,
       event: {
         status: "PUBLISHED"
       }
@@ -523,10 +530,13 @@ async function payVendorBoothInner(formData: FormData) {
           org: true
         }
       },
-      org: true,
-      user: true
+      org: true
     }
   });
+
+  if (!application || application.portalAccountId !== context.account.id) notFound();
+  assertPortalResourceOrg(application.orgId, context.org);
+  assertPortalResourceOrg(application.event.orgId, context.org);
 
   if (application.status !== "APPROVED") {
     throw new ExpectedActionError("This vendor application is not approved for payment yet.");
@@ -536,10 +546,8 @@ async function payVendorBoothInner(formData: FormData) {
     throw new ExpectedActionError("A booth must be assigned before payment.");
   }
 
-  const portalRoot = await getConventionPortalRootForRequest(application.event.org);
-
   if (application.boothPaidAt) {
-    redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
+    return { redirectTo: `/vendor-apply?success=${application.id}` };
   }
 
   const total = application.boothPrice;
@@ -554,7 +562,7 @@ async function payVendorBoothInner(formData: FormData) {
       })
     : null;
 
-  if (order && (order.orgId !== application.orgId || order.eventId !== application.eventId || order.userId !== application.userId)) {
+  if (order && (order.orgId !== application.orgId || order.eventId !== application.eventId || order.portalAccountId !== application.portalAccountId)) {
     throw new Error("The vendor payment order does not belong to this application.");
   }
   const payableOrder =
@@ -562,7 +570,7 @@ async function payVendorBoothInner(formData: FormData) {
     (await prisma.order.create({
       data: {
         orgId: application.orgId,
-        userId: application.userId,
+        portalAccountId: application.portalAccountId,
         eventId: application.eventId,
         total,
         platformFee: vendorPlatformFee(total),
@@ -596,13 +604,13 @@ async function payVendorBoothInner(formData: FormData) {
 
   if (total === 0) {
     await markOrderPaid(payableOrder.id);
-    redirect(`${portalRoot}/vendor-apply?success=${application.id}`);
+    return { redirectTo: `/vendor-apply?success=${application.id}` };
   }
 
   const checkout = await prepareOrderCheckout(
     payableOrder.id,
-    `/${application.event.org.subdomain}/vendor-apply?success=${application.id}`,
-    `/${application.event.org.subdomain}/vendor-apply?cancelled=1`
+    `/vendor-apply?success=${application.id}`,
+    "/vendor-apply?cancelled=1"
   );
-  redirect(`${getBaseUrl()}${checkout.checkoutPath}`);
+  return { redirectTo: checkout.checkoutPath };
 }

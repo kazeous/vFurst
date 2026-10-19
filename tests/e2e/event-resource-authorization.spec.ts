@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -25,20 +25,19 @@ test.setTimeout(120_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [ownerA, ownerB] = await Promise.all([
     prisma.user.create({
       data: {
         email: ownerAEmail,
         name: "Resource Owner A",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: ownerBEmail,
         name: "Resource Owner B",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -166,29 +165,20 @@ test.afterAll(async () => {
 });
 
 async function loginAsOwnerA(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ownerAEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, ownerAEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      if (!(error instanceof Error) || !error.message.includes("ERR_ABORTED") || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitTamperedAction(
@@ -249,7 +239,7 @@ test("registration tier mutations cannot combine an owned page with foreign reso
   await loginAsOwnerA(page);
   const typesPath = `/dashboard/events/${eventAId}/registrations/types`;
 
-  await navigateAfterRejectedAction(page, typesPath);
+  await page.goto(typesPath);
   const createForm = page.getByRole("button", { name: "Create tier" }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Name").fill(attackTierName);
   await createForm.locator('input[name="price"]').fill("10.00");
@@ -274,7 +264,7 @@ test("add-on mutations cannot combine an owned page with foreign resource IDs", 
   await loginAsOwnerA(page);
   const typesPath = `/dashboard/events/${eventAId}/registrations/types`;
 
-  await navigateAfterRejectedAction(page, typesPath);
+  await page.goto(typesPath);
   const createForm = page.getByRole("button", { name: "Add", exact: true }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Name").fill(attackAddOnName);
   await createForm.locator('input[name="price"]').fill("5.00");

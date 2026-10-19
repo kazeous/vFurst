@@ -1,6 +1,7 @@
 "use server";
 
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { getConventionOrg } from "@/lib/convention";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import {
   requireDepartmentAccess,
   requireEventAccess,
@@ -12,9 +13,9 @@ import { sendOrgEmail } from "@/lib/email";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
-import { assertPublicAccountEmail, requirePublicAccount, syncPublicAccountName } from "@/lib/public-account";
+import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const formFieldSchema = z.object({
@@ -136,10 +137,11 @@ function shiftsConflict(left: ShiftSlot, right: ShiftSlot) {
   return left.startTime < right.endTime && right.startTime < left.endTime;
 }
 
-async function assertNoShiftConflict(userId: string, shift: ShiftSlot, ignoreAssignmentId?: string) {
+async function assertNoShiftConflict(orgId: string, portalAccountId: string, shift: ShiftSlot, ignoreAssignmentId?: string) {
   const assignments = await prisma.staffAssignment.findMany({
     where: {
-      userId,
+      orgId,
+      portalAccountId,
       id: ignoreAssignmentId
         ? {
             not: ignoreAssignmentId
@@ -179,11 +181,11 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
       department: true,
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
-  await assertNoShiftConflict(application.userId, shift);
+  await assertNoShiftConflict(application.orgId, application.portalAccountId, shift);
 
   const assignment = await prisma.$transaction(async (tx) => {
     await tx.volunteerApplication.update({
@@ -199,7 +201,7 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
     return tx.staffAssignment.create({
       data: {
         orgId: application.orgId,
-        userId: application.userId,
+        portalAccountId: application.portalAccountId,
         roleId: staffRole.id,
         volunteerApplicationId: application.id,
         shiftSlot: jsonInput(shift),
@@ -208,9 +210,9 @@ async function createAssignment(applicationId: string, roleId: string, shift: Sh
     });
   });
 
-  await sendOrgEmail(application.org, application.user.email, "volunteer-shift-assignment", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "volunteer-shift-assignment", {
     eventName: application.event.name,
-    volunteerName: application.user.name,
+    volunteerName: application.portalAccount.name,
     roleName: staffRole.roleName,
     shiftLabel: shiftLabel(shift)
   }, application.event.id);
@@ -353,6 +355,8 @@ export async function submitVolunteerApplication(
 }
 
 async function submitVolunteerApplicationInner(formData: FormData): Promise<PublicFormState> {
+  const context = await getPortalActionContext("/volunteer");
+  if (isPortalRedirect(context)) return context;
   const parsed = z
     .object({
       orgSlug: z.string().trim().min(1),
@@ -376,6 +380,7 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
   if (!org) {
     throw new PublicActionError("Organization not found.");
   }
+  assertPortalResourceOrg(org.id, context.org);
 
   const event = await prisma.event.findFirstOrThrow({
     where: {
@@ -393,6 +398,8 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
       eventId: event.id
     }
   });
+  assertPortalResourceOrg(event.orgId, context.org);
+  assertPortalResourceOrg(department.orgId, context.org);
   const schema = z.array(formFieldSchema).parse(department.formSchema);
   const responses: Record<string, string | boolean> = {};
 
@@ -418,22 +425,20 @@ async function submitVolunteerApplicationInner(formData: FormData): Promise<Publ
     .filter(Boolean)
     .join(" > ");
 
-  const volunteer = await requirePublicAccount(`/${org.subdomain}/volunteer`);
-  assertPublicAccountEmail(volunteer, parsed.data.applicantEmail);
-  const account = await syncPublicAccountName(volunteer, parsed.data.applicantName);
+  assertPortalAccountEmail(context.account, parsed.data.applicantEmail);
+  const account = await syncPortalAccountName(context.account, parsed.data.applicantName);
   const application = await prisma.volunteerApplication.create({
     data: {
       orgId: org.id,
       eventId: event.id,
       departmentId: department.id,
-      userId: account.id,
+      portalAccountId: account.id,
       formResponses: responses,
       availability: availabilityFromForm(formData)
     }
   });
 
-  const portalRoot = await getConventionPortalRootForRequest(org);
-  redirect(`${portalRoot}/volunteer?success=${application.id}`);
+  return { redirectTo: `/volunteer?success=${application.id}` };
 }
 
 export async function approveApplication(formData: FormData) {
@@ -452,9 +457,9 @@ export async function approveApplication(formData: FormData) {
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "volunteer-application-decision", {
     eventName: application.event.name,
-    applicantName: application.user.name,
+    applicantName: application.portalAccount.name,
     status: "APPROVED",
     reason: null
   }, application.event.id);
@@ -481,13 +486,13 @@ export async function rejectApplication(formData: FormData) {
     include: {
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
-  await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+  await sendOrgEmail(application.org, application.portalAccount.email, "volunteer-application-decision", {
     eventName: application.event.name,
-    applicantName: application.user.name,
+    applicantName: application.portalAccount.name,
     status: "REJECTED",
     reason
   }, application.event.id);
@@ -531,7 +536,7 @@ export async function bulkReviewApplications(formData: FormData) {
       departmentId: true,
       event: true,
       org: true,
-      user: true
+      portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
@@ -558,9 +563,9 @@ export async function bulkReviewApplications(formData: FormData) {
           reviewedById: reviewerId
         }
       });
-      await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+      await sendOrgEmail(application.org, application.portalAccount.email, "volunteer-application-decision", {
         eventName: application.event.name,
-        applicantName: application.user.name,
+        applicantName: application.portalAccount.name,
         status: "APPROVED",
         reason: null
       }, application.event.id);
@@ -581,9 +586,9 @@ export async function bulkReviewApplications(formData: FormData) {
       }
     });
     for (const application of applications) {
-      await sendOrgEmail(application.org, application.user.email, "volunteer-application-decision", {
+      await sendOrgEmail(application.org, application.portalAccount.email, "volunteer-application-decision", {
         eventName: application.event.name,
-        applicantName: application.user.name,
+        applicantName: application.portalAccount.name,
         status: "REJECTED",
         reason: null
       }, application.event.id);
@@ -643,7 +648,7 @@ export async function massEmailDepartment(formData: FormData) {
               }
             },
             include: {
-              user: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             }
           }
         }
@@ -655,9 +660,9 @@ export async function massEmailDepartment(formData: FormData) {
 
   for (const role of department.roles) {
     for (const assignment of role.assignments) {
-      recipients.set(assignment.userId, {
-        email: assignment.user.email,
-        name: assignment.user.name
+      recipients.set(assignment.portalAccountId, {
+        email: assignment.portalAccount.email,
+        name: assignment.portalAccount.name
       });
     }
   }

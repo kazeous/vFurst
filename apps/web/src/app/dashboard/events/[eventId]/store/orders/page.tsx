@@ -1,4 +1,5 @@
 import { partialRefund, refundOrder } from "@/actions/store-actions";
+import { formatDate } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
@@ -23,13 +24,13 @@ function badgeVariant(status: string) {
   return "neutral";
 }
 
-function itemName(item: { itemType: string; storeProduct?: { name: string } | null; registration?: { user: { email: string; name: string | null } } | null }) {
+function itemName(item: { itemType: string; storeProduct?: { name: string } | null; registration?: { portalAccount: { email: string; name: string | null } } | null }) {
   if (item.storeProduct) {
     return item.storeProduct.name;
   }
 
   if (item.registration) {
-    return item.registration.user.name ?? item.registration.user.email;
+    return item.registration.portalAccount.name ?? item.registration.portalAccount.email;
   }
 
   return item.itemType;
@@ -52,14 +53,14 @@ export default async function StoreOrdersPage({
       orders: {
         where: status === "ALL" ? undefined : { status: status as Exclude<(typeof statuses)[number], "ALL"> },
         include: {
-          user: true,
+          portalAccount: { select: { id: true, email: true, name: true } },
           voucher: true,
           items: {
             include: {
               storeProduct: true,
               registration: {
                 include: {
-                  user: true
+                  portalAccount: { select: { id: true, email: true, name: true } }
                 }
               }
             }
@@ -105,8 +106,8 @@ export default async function StoreOrdersPage({
           <div key={order.id} className="vf-section">
             <div className="vf-page-header">
               <div>
-                <p className="vf-label">{order.createdAt.toLocaleString()}</p>
-                <h2>{order.user.name ?? order.user.email}</h2>
+                <p className="vf-label">{formatDate(order.createdAt, { dateStyle: "medium", timeStyle: "short" })}</p>
+                <h2>{order.portalAccount.name ?? order.portalAccount.email}</h2>
                 <p className="vf-muted">
                   Total {formatCurrency(order.total, order.currency)} - platform fee {formatCurrency(order.platformFee, order.currency)}
                   {order.voucher ? ` - voucher ${order.voucher.code}` : ""}

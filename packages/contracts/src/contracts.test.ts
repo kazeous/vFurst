@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  authorizationCodeClaimsSchema,
-  authorizationStartSchema,
   controlPlaneEventSchema,
   provisionTenantCommandSchema,
   webhookEventEnvelopeSchema
@@ -16,70 +14,6 @@ const ids = {
 };
 
 describe("shared contracts", () => {
-  it("accepts a bounded tenant-web authorization request", () => {
-    expect(
-      authorizationStartSchema.parse({
-        audience: "tenant-web",
-        clientId: "tenant-web-production",
-        redirectUri: "https://console.vfurst.example/auth/callback",
-        state: "s".repeat(43),
-        codeChallenge: "c".repeat(43)
-      })
-    ).toMatchObject({ audience: "tenant-web" });
-  });
-
-  it("rejects non-HTTPS remote callback URLs", () => {
-    expect(() =>
-      authorizationStartSchema.parse({
-        audience: "tenant-web",
-        clientId: "tenant-web-production",
-        redirectUri: "http://attacker.example/callback",
-        state: "s".repeat(43),
-        codeChallenge: "c".repeat(43)
-      })
-    ).toThrow();
-  });
-
-  it("retains authVersion in authorization-code claims", () => {
-    const claims = authorizationCodeClaimsSchema.parse({
-      issuer: "platform-manager",
-      audience: "tenant-web",
-      clientId: "tenant-web-production",
-      codeId: ids.event,
-      userId: ids.user,
-      authVersion: 7,
-      redirectUri: "http://localhost:3001/auth/callback",
-      codeChallenge: "c".repeat(43),
-      issuedAt: 100,
-      expiresAt: 160
-    });
-
-    expect(claims.authVersion).toBe(7);
-    expect(claims.clientId).toBe("tenant-web-production");
-  });
-
-  it("allows HTTP callbacks only for loopback and localhost subdomains", () => {
-    expect(
-      authorizationStartSchema.parse({
-        audience: "tenant-web",
-        clientId: "tenant-web-local",
-        redirectUri: "http://console.localhost:3100/auth/callback",
-        state: "s".repeat(43),
-        codeChallenge: "c".repeat(43)
-      }).redirectUri
-    ).toBe("http://console.localhost:3100/auth/callback");
-
-    expect(() =>
-      authorizationStartSchema.parse({
-        audience: "tenant-web",
-        clientId: "tenant-web-local",
-        redirectUri: "http://localhost.attacker.example/auth/callback",
-        state: "s".repeat(43),
-        codeChallenge: "c".repeat(43)
-      })
-    ).toThrow();
-  });
-
   it("validates durable control-plane lifecycle events", () => {
     const event = controlPlaneEventSchema.parse({
       id: ids.event,

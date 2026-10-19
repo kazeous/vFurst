@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { createHmac, randomBytes } from "node:crypto";
+import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = Date.now();
@@ -16,6 +17,7 @@ const checkoutSecret = process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-
 const sepayWebhookSecret = process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret";
 
 let orgId: string;
+let adminAttendeeId: string;
 let eventId: string;
 let memberOnlyOrgId: string;
 let memberOnlyEventId: string;
@@ -31,24 +33,8 @@ test.beforeAll(async () => {
     data: {
       email: adminEmail,
       name: "Launch Admin",
-      passwordHash: await bcrypt.hash(password, 12),
+      ...staffIdentityData(),
       platformRole: "PLATFORM_ADMIN"
-    }
-  });
-
-  await prisma.user.create({
-    data: {
-      email: vendorEmail,
-      name: "Launch Vendor",
-      passwordHash: await bcrypt.hash(password, 12)
-    }
-  });
-
-  await prisma.user.create({
-    data: {
-      email: attendeeEmail,
-      name: "Launch Attendee",
-      passwordHash: await bcrypt.hash(password, 12)
     }
   });
 
@@ -67,6 +53,10 @@ test.beforeAll(async () => {
       }
     }
   });
+
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Launch Attendee", password });
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: vendorEmail, name: "Launch Vendor", password });
+  adminAttendeeId = (await createPortalAccountFixture(prisma, { orgId: org.id, email: adminEmail, name: "Launch Admin", password })).id;
 
   const event = await prisma.event.create({
     data: {
@@ -160,26 +150,13 @@ test.afterAll(async () => {
 });
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
-  await page.goto("/dashboard");
+  await loginAsStaffEmail(page, adminEmail);
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
 async function loginAsPublic(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith("/login") && response.request().method() === "POST"),
-    page.getByRole("button", { name: "Log in" }).click({ noWaitAfter: true })
-  ]);
+  await loginAsAttendee(page, { subdomain: orgSlug }, email, { password });
 }
 
 async function ensureConfirmedRegistration() {
@@ -187,24 +164,13 @@ async function ensureConfirmedRegistration() {
     return;
   }
 
-  const attendee = await prisma.user.upsert({
-    where: {
-      email: attendeeEmail
-    },
-    update: {
-      name: "Launch Attendee"
-    },
-    create: {
-      email: attendeeEmail,
-      name: "Launch Attendee"
-    }
-  });
+  const attendee = await prisma.portalAccount.findUniqueOrThrow({ where: { orgId_email: { orgId, email: attendeeEmail } } });
 
   const registration = await prisma.registration.create({
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       typeId: registrationTypeId,
       status: "CONFIRMED"
     }
@@ -214,7 +180,7 @@ async function ensureConfirmedRegistration() {
     data: {
       orgId,
       eventId,
-      userId: attendee.id,
+      portalAccountId: attendee.id,
       total: 0,
       platformFee: 0,
       status: "PAID",
@@ -252,7 +218,7 @@ test("marketing and legal launch pages render", async ({ page }) => {
 
 test("public registration completes and creates a paid zero-dollar order", async ({ page }) => {
   await loginAsPublic(page, attendeeEmail);
-  await page.goto(`/${orgSlug}/register`);
+  await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name").fill("Launch Attendee");
@@ -263,7 +229,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   await expect.poll(
     async () => {
       const result = await prisma.registration.findFirst({
-        where: { eventId, user: { email: attendeeEmail } },
+        where: { eventId, portalAccount: { email: attendeeEmail } },
         include: { orderItems: { include: { order: true } } }
       });
       return result?.status === "CONFIRMED" && result.orderItems.some((item) => item.order.status === "PAID");
@@ -274,7 +240,7 @@ test("public registration completes and creates a paid zero-dollar order", async
   const registration = await prisma.registration.findFirstOrThrow({
     where: {
       eventId,
-      user: {
+      portalAccount: {
         email: attendeeEmail
       }
     },
@@ -287,8 +253,31 @@ test("public registration completes and creates a paid zero-dollar order", async
     }
   });
 
-  await page.goto(`/${orgSlug}/register?success=${registration.id}`);
+  // The action itself navigates to the success page (window.location.replace);
+  // a second page.goto to the same URL would race that navigation.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/register?success=${registration.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Registration confirmed" })).toBeVisible({ timeout: 30_000 });
+
+  // A confirmed registration replaces the flow with a finished state instead
+  // of restarting at step 1.
+  const finished = page.getByRole("region", { name: "Registration confirmed" });
+  await expect(finished.getByRole("term")).toHaveText(["Attendee", "Event", "Ticket", "Approval"]);
+  await expect(finished.getByRole("definition")).toHaveText(["Launch Attendee", "Launch Test 2027", "Launch General", "Approved"]);
+  await expect(finished.getByRole("link", { name: "View my registrations" })).toHaveAttribute("href", "/account/registrations");
+  // Once no account check is pending, a flow rendered beside the finished
+  // state would already show its first step.
+  await expect(page.getByRole("heading", { name: "Checking your account" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toHaveCount(0);
+
+  await finished.getByRole("link", { name: "Register another ticket" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/register`);
+  await expect(page.getByRole("heading", { name: "Choose your ticket" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Registration confirmed" })).toHaveCount(0);
+
+  await page.goto(`${portalOrigin(orgSlug)}/register?success=${registration.id}`);
+  await page.getByRole("region", { name: "Registration confirmed" }).getByRole("link", { name: "View my registrations" }).click();
+  await expect(page).toHaveURL(`${portalOrigin(orgSlug)}/account/registrations`);
+  await expect(page.getByRole("heading", { name: "Launch Test 2027", level: 3, exact: true })).toBeVisible({ timeout: 30_000 });
 
   registrationId = registration.id;
   expect(registration.typeId).toBe(registrationTypeId);
@@ -303,7 +292,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 10_000,
       platformFee: 1_000,
       currency: "USD",
@@ -328,7 +317,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
     }
   });
 
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&returned=stripe`);
+  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&returned=stripe`);
   await expect(page.getByText("Stripe returned you to vFurst. We are confirming the payment before showing the next step.")).toBeVisible();
   await expect(page.getByText("Waiting for Stripe confirmation. This page checks automatically every three seconds.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue active payment" })).toHaveCount(0);
@@ -336,7 +325,7 @@ test("Stripe returns wait for webhook confirmation instead of offering a second 
 
 test("public vendor application submits for organizer review", async ({ page }) => {
   await loginAsPublic(page, vendorEmail);
-  await page.goto(`/${orgSlug}/vendor-apply`);
+  await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
   await page.getByLabel("Contact name").fill("Launch Vendor");
   await expect(page.getByLabel("Contact email")).toHaveValue(vendorEmail);
   await page.getByLabel("Business name").fill("Launch Vendor Studio");
@@ -355,7 +344,8 @@ test("public vendor application submits for organizer review", async ({ page }) 
     }
   });
 
-  await page.goto(`/${orgSlug}/vendor-apply?success=${application.id}`);
+  // The action itself navigates to the success page; waiting avoids racing it.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/vendor-apply?success=${application.id}`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Launch Vendor Studio" })).toBeVisible();
 
   expect(application.status).toBe("PENDING");
@@ -375,13 +365,14 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
   await wizard.locator('select[name="orgId"]').selectOption(orgId);
   await wizard.getByLabel("Event name").fill(`Invalid event ${runId}`);
   await wizard.getByLabel("Slug").fill(`invalid-event-${runId}`);
-  await wizard.getByLabel("Start date").fill("2028-08-02");
-  await wizard.getByLabel("End date").fill("2028-08-01");
+  await wizard.getByLabel("Start date").fill("02/08/2028");
+  await wizard.getByLabel("End date").fill("01/08/2028");
   await wizard.locator('input[name="tierName"]').first().fill("General");
   await wizard.locator('input[name="tierPrice"]').first().fill("0");
   await wizard.getByRole("button", { name: "Create event" }).click();
   await expect(page.getByTestId("event-wizard-error")).toContainText("End date must be after the start date.");
   await expect(wizard.getByLabel("Event name")).toHaveValue(`Invalid event ${runId}`);
+  await expect(wizard.getByLabel("Start date")).toHaveValue("02/08/2028");
   await expect(wizard.getByRole("button", { name: "Create event" })).toBeEnabled();
   await expect(page.getByTestId("route-error")).toHaveCount(0);
   expect(await prisma.event.count({ where: { slug: `invalid-event-${runId}` } })).toBe(0);
@@ -397,6 +388,9 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
     where: { slug: crudOrgSlug },
     include: { invitations: true, members: true }
   });
+  // The action redirects to the new organization's page; wait for that
+  // navigation so the page.goto below cannot race it.
+  await page.waitForURL((url) => url.pathname === `/platform/organizations/${createdOrg.id}`);
   expect(createdOrg.status).toBe("PROVISIONING");
   expect(createdOrg.members).toHaveLength(0);
   expect(createdOrg.invitations).toEqual([
@@ -460,7 +454,9 @@ test("dashboard settings hub filters access and updates event settings", async (
   await page.getByRole("button", { name: "Save event settings" }).click({ noWaitAfter: true });
   const saveResponse = await saveResponsePromise;
   expect(saveResponse.status()).toBeLessThan(400);
-  await page.goto(`/dashboard/events/${eventId}/settings?saved=1`);
+  // The action itself redirects to the saved page; a second page.goto to the
+  // same URL would race that navigation.
+  await page.waitForURL((url) => url.pathname === `/dashboard/events/${eventId}/settings` && url.searchParams.get("saved") === "1");
   await expect(page.getByText("Event settings saved.")).toBeVisible();
 
   const updatedEvent = await prisma.event.findUniqueOrThrow({
@@ -517,7 +513,7 @@ test("a SePay exception atomically replaces a newer provider lock with review", 
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 150000,
       platformFee: 25000,
       currency: "VND",
@@ -638,7 +634,7 @@ test("embedded SePay QR fulfills through a signed webhook after the provider and
     data: {
       orgId,
       eventId,
-      userId: admin.id,
+      portalAccountId: adminAttendeeId,
       total: 150000,
       platformFee: 25000,
       currency: "VND",
@@ -649,13 +645,15 @@ test("embedded SePay QR fulfills through a signed webhook after the provider and
     }
   });
 
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}`);
+  await page.goto(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}`);
   await page.getByRole("button", { name: "Show QR" }).click();
   await expect.poll(
     () => prisma.paymentAttempt.count({ where: { orderId: order.id, provider: "SEPAY" } }),
     { timeout: 30_000 }
   ).toBe(1);
-  await page.goto(`/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`);
+  // The action itself navigates to the QR page (window.location.replace);
+  // a second page.goto to the same URL would race that navigation.
+  await page.waitForURL(`${portalOrigin(orgSlug)}/checkout/${order.id}?token=${encodeURIComponent(token)}&sepay=1`, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Complete bank transfer" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("img", { name: /SePay QR code/ })).toBeVisible();
   const attempt = await prisma.paymentAttempt.findFirstOrThrow({ where: { orderId: order.id, provider: "SEPAY" } });

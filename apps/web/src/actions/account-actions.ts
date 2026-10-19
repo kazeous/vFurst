@@ -1,19 +1,33 @@
 "use server";
 
-import { requirePublicAccount } from "@/lib/public-account";
-import { prisma } from "@vfurst/db";
-import { revalidatePath } from "next/cache";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { syncPortalAccountName } from "@/lib/portal-account";
+import { getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
+import { publicActionErrorMessage } from "@/lib/public-action-error";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
-export async function updatePublicProfile(formData: FormData) {
-  const user = await requirePublicAccount("/account/profile");
-  const name = z.string().trim().min(1).max(120).parse(formData.get("name"));
+export async function updatePortalProfile(
+  _state: ActionFormState,
+  formData: FormData
+): Promise<ActionFormState> {
+  try {
+    return await updatePortalProfileInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { name }
-  });
+async function updatePortalProfileInner(formData: FormData): Promise<ActionFormState> {
+  const context = await getPortalActionContext("/account/profile");
+  if (isPortalRedirect(context)) return context;
 
-  revalidatePath("/account");
-  revalidatePath("/account/profile");
+  const name = z.string().trim().min(1).safeParse(formData.get("name"));
+  if (!name.success) return { error: "Enter your name." };
+
+  await syncPortalAccountName(context.account, name.data);
+  return { success: "Profile saved." };
 }

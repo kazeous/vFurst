@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
@@ -22,13 +22,12 @@ test.setTimeout(90_000);
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-  const passwordHash = await bcrypt.hash(password, 12);
   const [platformAdmin, owner, member, foreignOwner, publicUser] = await Promise.all([
     prisma.user.create({
       data: {
         email: platformAdminEmail,
         name: "Containment Platform Admin",
-        passwordHash,
+        ...staffIdentityData(),
         platformRole: "PLATFORM_ADMIN"
       }
     }),
@@ -36,28 +35,28 @@ test.beforeAll(async () => {
       data: {
         email: ownerEmail,
         name: "Containment Owner",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: memberEmail,
         name: "Containment Member",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: foreignOwnerEmail,
         name: "Containment Foreign Owner",
-        passwordHash
+        ...staffIdentityData()
       }
     }),
     prisma.user.create({
       data: {
         email: publicEmail,
         name: "Containment Public User",
-        passwordHash
+        ...staffIdentityData()
       }
     })
   ]);
@@ -139,17 +138,13 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function loginAs(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/, { timeout: 30_000 });
+async function loginAs(page: Page, email: string, expectPath = "/dashboard") {
+  await loginAsStaffEmail(page, email, { expectPath });
 }
 
 test("platform admin enters the control plane but not tenant organizer routes without membership", async ({ page }) => {
-  await loginAs(page, platformAdminEmail);
-  await page.goto("/platform");
+  await loginAs(page, platformAdminEmail, "/platform");
+  await expect(page).toHaveURL(/\/platform$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Platform overview" })).toBeVisible({ timeout: 30_000 });
 
   const navigation = page.getByRole("navigation", { name: "Platform navigation" });
@@ -176,7 +171,7 @@ test("platform admin enters the control plane but not tenant organizer routes wi
 
 test("organization owner sees only their tenant and cannot reach provisioning", async ({ page }) => {
   await loginAs(page, ownerEmail);
-  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 
   const navigation = page.getByRole("navigation", { name: "Dashboard navigation" });
@@ -207,26 +202,29 @@ test("organization owner sees only their tenant and cannot reach provisioning", 
 
 test("member role cannot enter owner-admin organization or event-management routes", async ({ page }) => {
   await loginAs(page, memberEmail);
-  await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
+  const response = await page.goto("/dashboard");
 
-  await expect(page.getByRole("link", { name: "Create event" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "New organization" })).toHaveCount(0);
-  await expect(page.getByText("No organizer access")).toBeVisible();
-  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
-  expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(404);
-  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
-
-  await page.goto("/dashboard/events");
-  await expect(page.getByText("Containment Event A")).toHaveCount(0);
-  await expect(page.getByText("Containment Event B")).toHaveCount(0);
+  expect(response?.status()).toBe(403);
+  await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
+  await expect(page.getByText(memberEmail)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Return to vFurst" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Open my account" })).toHaveCount(0);
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
+  expect((await page.request.get(`/dashboard/events/${eventAId}`)).status()).toBe(403);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);
 });
 
 test("public account receives no tenant inventory or organizer actions", async ({ page }) => {
   await loginAs(page, publicEmail);
-  expect((await page.request.get("/dashboard")).status()).toBe(404);
+  const response = await page.goto("/dashboard");
+
+  expect(response?.status()).toBe(403);
+  await expect(page.getByTestId("dashboard-access-denied")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organizer access required" })).toBeVisible();
+  await expect(page.getByText(publicEmail)).toBeVisible();
   expect((await page.request.get("/platform")).status()).toBe(404);
-  expect((await page.request.get("/dashboard/organizations")).status()).toBe(404);
-  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(404);
-  expect((await page.request.get("/dashboard/events/new")).status()).toBe(404);
+  expect((await page.request.get("/dashboard/organizations")).status()).toBe(403);
+  expect((await page.request.get(`/dashboard/organizations/${orgAId}`)).status()).toBe(403);
+  expect((await page.request.get("/dashboard/events/new")).status()).toBe(403);
 });

@@ -1,7 +1,9 @@
 import { acceptOrganizationInvitation } from "@/actions/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { auth } from "@/lib/auth";
+import { auth, signIn } from "@/lib/auth";
+import { formatDate } from "@/lib/i18n";
+import { prisma } from "@vfurst/db";
 import {
   getOrganizationInvitationByToken,
   getOrganizationInvitationState,
@@ -11,6 +13,7 @@ import {
 const errorMessages: Record<string, string> = {
   ALREADY_ACCEPTED: "This invitation has already been accepted.",
   EMAIL_MISMATCH: "Sign in with the email address that received this invitation.",
+  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Continue with Reyuu Games Account to verify it and return to this invitation.",
   EXPIRED: "This invitation has expired.",
   INVALID: "This invitation is invalid.",
   REVOKED: "This invitation has been revoked.",
@@ -44,9 +47,21 @@ export default async function OrganizationInvitationPage({
   }
 
   const state = getOrganizationInvitationState(invitation);
-  const signedInEmail = session?.user?.email ? normalizeInvitationEmail(session.user.email) : null;
+  const signedInUser = session?.user?.id
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { email: true, emailVerified: true } })
+    : null;
+  const signedInEmail = signedInUser?.email ? normalizeInvitationEmail(signedInUser.email) : null;
   const matchesRecipient = signedInEmail === normalizeInvitationEmail(invitation.email);
-  const canAccept = state === "PENDING" && matchesRecipient && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
+  const emailVerified = Boolean(signedInUser?.emailVerified);
+  const canAccept =
+    state === "PENDING" && matchesRecipient && emailVerified && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
+
+  async function signInAgain() {
+    "use server";
+
+    // A new sign-in re-reads the email_verified claim before returning to this invitation.
+    await signIn("authentik", { redirectTo: returnTo });
+  }
 
   return (
     <Card className="vf-auth-card" maxWidth={520}>
@@ -61,9 +76,11 @@ export default async function OrganizationInvitationPage({
           <dt>Role</dt>
           <dd>{invitation.role}</dd>
           <dt>Expires</dt>
-          <dd>{invitation.expiresAt.toLocaleString()}</dd>
+          <dd>{formatDate(invitation.expiresAt, { dateStyle: "medium", timeStyle: "short" })}</dd>
         </dl>
-        {errorCode && errorMessages[errorCode] ? <div className="vf-banner vf-banner-warning">{errorMessages[errorCode]}</div> : null}
+        {errorCode && errorMessages[errorCode] && !(errorCode === "EMAIL_UNVERIFIED" && session?.user && !emailVerified) ? (
+          <div className="vf-banner vf-banner-warning">{errorMessages[errorCode]}</div>
+        ) : null}
         {state === "ACCEPTED" ? (
           <div className="vf-stack">
             <div className="vf-banner vf-banner-success">This invitation has already been accepted.</div>
@@ -77,13 +94,22 @@ export default async function OrganizationInvitationPage({
           <div className="vf-banner vf-banner-warning">This organization is not currently accepting invitations.</div>
         ) : !session?.user ? (
           <div className="vf-stack">
-            <p>Log in or create the public account for <strong>{invitation.email}</strong> before accepting.</p>
-            <Button href={`/login?returnTo=${encodeURIComponent(returnTo)}`} label="Log in" variant="primary" />
-            <Button href={`/register?returnTo=${encodeURIComponent(returnTo)}`} label="Create account" />
+            <p>Sign in with the Reyuu Games account for <strong>{invitation.email}</strong> before accepting.</p>
+            <Button href={`/login?returnTo=${encodeURIComponent(returnTo)}`} label="Sign in with your Reyuu Games account" variant="primary" />
           </div>
         ) : !matchesRecipient ? (
           <div className="vf-banner vf-banner-warning">
             You are signed in as {session.user.email}. Sign in with {invitation.email} to accept this invitation.
+          </div>
+        ) : !emailVerified ? (
+          <div className="vf-stack" data-testid="invitation-email-unverified">
+            <div className="vf-banner vf-banner-warning">
+              <p>{errorMessages.EMAIL_UNVERIFIED}</p>
+              <p>If you cannot verify it yourself, ask a Reyuu Games administrator.</p>
+            </div>
+            <form action={signInAgain}>
+              <Button label="Verify your email and sign in again" type="submit" variant="primary" />
+            </form>
           </div>
         ) : canAccept ? (
           <form action={acceptOrganizationInvitation}>

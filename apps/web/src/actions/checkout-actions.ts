@@ -1,10 +1,15 @@
 "use server";
 
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
+import type { ActionFormState } from "@/lib/action-form-state";
+import { assertPortalResourceOrg } from "@/lib/portal-context";
+import { getRequestPortalOrg } from "@/lib/portal-request";
+import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import { requireCheckoutOrder } from "@/lib/payments/checkout";
+import { getPortalCheckoutUrls } from "@/lib/payments/checkout-urls";
 import { getEligiblePaymentProviders } from "@/lib/payments/platform";
 import { createSePayPaymentCode } from "@/lib/payments/sepay";
-import { getBaseUrl, getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
+import { getConnectedStripeAccount, getStripe } from "@/lib/payments/stripe";
 import { resolveStripeCheckoutSession } from "@/lib/payments/stripe-checkout-session";
 import { markOrderPaidWithProvider } from "@/lib/fulfillment";
 import {
@@ -15,7 +20,7 @@ import {
   type PaymentAttempt
 } from "@vfurst/db";
 import { randomUUID } from "node:crypto";
-import { redirect } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 const STRIPE_EXPIRY_SAFETY_MS = 10_000;
@@ -123,25 +128,31 @@ async function expireStripeAttempt(attempt: PaymentAttempt) {
   );
 }
 
-export async function startStripePayment(formData: FormData) {
+export async function startStripePayment(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  try {
+    return await startStripePaymentInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
+
+async function startStripePaymentInner(formData: FormData): Promise<ActionFormState> {
+  const org = await getRequestPortalOrg();
+  if (!org) notFound();
   const parsed = selection(formData);
   const order = await requireCheckoutOrder(parsed.orderId, parsed.token);
+  assertPortalResourceOrg(order.orgId, org);
   assertOrganizationActive(order.org.status);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
 
   if (order.status !== "PENDING" || !providers.includes("STRIPE")) {
-    throw new Error("Stripe is not available for this order.");
+    throw new PublicActionError("Stripe is not available for this order.");
   }
 
-  const [connectedAccountId, customer] = await Promise.all([
-    getConnectedStripeAccount(order.orgId),
-    order.userId
-      ? prisma.user.findUnique({
-          where: { id: order.userId },
-          select: { email: true }
-        })
-      : null
-  ]);
+  const connectedAccountId = await getConnectedStripeAccount(order.orgId);
   const reservation = await reservePaymentAttempt(prisma, {
     id: randomUUID(),
     orderId: order.id,
@@ -152,14 +163,14 @@ export async function startStripePayment(formData: FormData) {
   });
   const attempt = reservation.attempt;
   const stripe = getStripe();
-  const checkoutUrl = `${getBaseUrl()}/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}`;
+  const { checkoutUrl, successUrl, cancelUrl } = getPortalCheckoutUrls(order.org, order.id, parsed.token);
   const session = attempt.providerReference
     ? await stripe.checkout.sessions.retrieve(attempt.providerReference)
     : await stripe.checkout.sessions.create(
         {
           mode: "payment",
           client_reference_id: order.id,
-          customer_email: customer?.email,
+          customer_email: order.portalAccount.email,
           line_items: [
             {
               price_data: {
@@ -191,8 +202,8 @@ export async function startStripePayment(formData: FormData) {
             orgId: order.orgId
           },
           expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),
-          success_url: `${checkoutUrl}&returned=stripe`,
-          cancel_url: `${checkoutUrl}&cancelled=stripe`
+          success_url: successUrl,
+          cancel_url: cancelUrl
         },
         {
           idempotencyKey: `vfurst-payment-attempt-${attempt.id}`
@@ -207,19 +218,19 @@ export async function startStripePayment(formData: FormData) {
         paymentAttemptId: attempt.id,
         attemptProviderReference: session.id
       });
-      redirect(`${checkoutUrl}&returned=stripe`);
+      return { redirectTo: successUrl };
     }
 
     if (outcome.type === "expired") {
       await expireStripeAttempt(attempt);
-      redirect(`${checkoutUrl}&expired=stripe`);
+      return { redirectTo: `${checkoutUrl}&expired=stripe` };
     }
 
     if (outcome.type === "pending") {
-      redirect(`${checkoutUrl}&returned=stripe`);
+      return { redirectTo: successUrl };
     }
 
-    redirect(outcome.url);
+    return { redirectTo: outcome.url };
   }
 
   if (!session.url) {
@@ -229,7 +240,7 @@ export async function startStripePayment(formData: FormData) {
       console.error("Failed to expire a Stripe Checkout Session without a URL.", expiryError);
     }
     await expireStripeAttempt(attempt);
-    redirect(`${checkoutUrl}&expired=stripe`);
+    return { redirectTo: `${checkoutUrl}&expired=stripe` };
   }
 
   if (!attempt.providerReference) {
@@ -245,17 +256,31 @@ export async function startStripePayment(formData: FormData) {
     }
   }
 
-  redirect(session.url);
+  return { redirectTo: session.url };
 }
 
-export async function startSePayPayment(formData: FormData) {
+export async function startSePayPayment(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  try {
+    return await startSePayPaymentInner(formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    const message = publicActionErrorMessage(error);
+    if (message) return { error: message };
+    throw error;
+  }
+}
+
+async function startSePayPaymentInner(formData: FormData): Promise<ActionFormState> {
+  const org = await getRequestPortalOrg();
+  if (!org) notFound();
   const parsed = selection(formData);
   const order = await requireCheckoutOrder(parsed.orderId, parsed.token);
+  assertPortalResourceOrg(order.orgId, org);
   assertOrganizationActive(order.org.status);
   const providers = await getEligiblePaymentProviders(order.orgId, order.currency);
 
   if (order.status !== "PENDING" || order.currency !== "VND" || !providers.includes("SEPAY")) {
-    throw new Error("SePay is not available for this order.");
+    throw new PublicActionError("SePay is not available for this order.");
   }
 
   await reservePaymentAttempt(prisma, {
@@ -268,5 +293,5 @@ export async function startSePayPayment(formData: FormData) {
     expiresAt: new Date(Date.now() + PAYMENT_ATTEMPT_TTL_MS)
   });
 
-  redirect(`/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}&sepay=1`);
+  return { redirectTo: `/checkout/${order.id}?token=${encodeURIComponent(parsed.token)}&sepay=1` };
 }

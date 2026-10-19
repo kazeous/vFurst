@@ -103,7 +103,7 @@ type EligibilityCheck = {
   raffleId: string;
   orgId: string;
   eventId: string;
-  userId: string;
+  portalAccountId: string;
   entryMethod: RaffleEntryMethod;
   orderItemId?: string;
   skipEntryLimit?: boolean;
@@ -142,7 +142,7 @@ export async function assertRaffleEligibility(tx: Prisma.TransactionClient, inpu
       item.orgId !== input.orgId ||
       item.order.orgId !== input.orgId ||
       item.order.eventId !== input.eventId ||
-      item.order.userId !== input.userId ||
+      item.order.portalAccountId !== input.portalAccountId ||
       item.order.status !== "PAID"
     ) {
       throw new Error("This order item is not eligible for the raffle.");
@@ -156,7 +156,7 @@ export async function assertRaffleEligibility(tx: Prisma.TransactionClient, inpu
       where: {
         orgId: input.orgId,
         eventId: input.eventId,
-        userId: input.userId,
+        portalAccountId: input.portalAccountId,
         approvalStatus: "APPROVED",
         status: { in: eligibility.kind === "CHECKED_IN" ? ["CHECKED_IN"] : ["CONFIRMED", "CHECKED_IN"] },
         ...(eligibility.kind === "REGISTRATION_TIER" ? { typeId: eligibility.typeId } : {}),
@@ -173,7 +173,7 @@ export async function assertRaffleEligibility(tx: Prisma.TransactionClient, inpu
   }
 
   const current = await tx.raffleEntry.aggregate({
-    where: { raffleId: input.raffleId, userId: input.userId },
+    where: { raffleId: input.raffleId, portalAccountId: input.portalAccountId },
     _sum: { quantity: true }
   });
   const requestedQuantity = input.entryMethod === "PURCHASED" && input.orderItemId ? 1 : 1;
@@ -186,7 +186,7 @@ export async function assertRaffleEligibility(tx: Prisma.TransactionClient, inpu
 
 export async function assertDrawEligibility(
   tx: Prisma.TransactionClient,
-  input: { raffleId: string; orgId: string; eventId: string; userId: string; entryMethod: RaffleEntryMethod; orderItemId?: string }
+  input: { raffleId: string; orgId: string; eventId: string; portalAccountId: string; entryMethod: RaffleEntryMethod; orderItemId?: string }
 ) {
   try {
     await assertRaffleEligibility(tx, { ...input, skipEntryLimit: true });
@@ -209,7 +209,7 @@ export function weightedWinner<T extends { quantity: number }>(entries: T[]) {
 
 export async function fulfillPurchasedRaffleEntries(
   tx: Prisma.TransactionClient,
-  input: { orgId: string; eventId: string; userId: string; orderItemIds: string[] }
+  input: { orgId: string; eventId: string; portalAccountId: string; orderItemIds: string[] }
 ) {
   if (input.orderItemIds.length === 0) return 0;
 
@@ -223,7 +223,7 @@ export async function fulfillPurchasedRaffleEntries(
   let createdCount = 0;
 
   for (const item of items) {
-    if (item.itemType !== "PRODUCT" || !item.storeProductId || item.order.userId !== input.userId || item.order.eventId !== input.eventId) {
+    if (item.itemType !== "PRODUCT" || !item.storeProductId || item.order.portalAccountId !== input.portalAccountId || item.order.eventId !== input.eventId) {
       continue;
     }
 
@@ -236,7 +236,7 @@ export async function fulfillPurchasedRaffleEntries(
       if (existing) continue;
 
       const current = await tx.raffleEntry.aggregate({
-        where: { raffleId: raffle.id, userId: input.userId },
+        where: { raffleId: raffle.id, portalAccountId: input.portalAccountId },
         _sum: { quantity: true }
       });
       const remaining = raffle.maxEntriesPerUser - (current._sum.quantity ?? 0);
@@ -246,7 +246,7 @@ export async function fulfillPurchasedRaffleEntries(
         raffleId: raffle.id,
         orgId: input.orgId,
         eventId: input.eventId,
-        userId: input.userId,
+        portalAccountId: input.portalAccountId,
         entryMethod: "PURCHASED",
         orderItemId: item.id,
         skipEntryLimit: true
@@ -259,7 +259,7 @@ export async function fulfillPurchasedRaffleEntries(
         data: {
           orgId: input.orgId,
           raffleId: raffle.id,
-          userId: input.userId,
+          portalAccountId: input.portalAccountId,
           entryMethod: "PURCHASED",
           quantity,
           orderItemId: item.id,

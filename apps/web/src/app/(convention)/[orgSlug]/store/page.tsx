@@ -1,8 +1,7 @@
 import { AddToCartForm } from "@/components/store/add-to-cart-form";
 import { StoreCart } from "@/components/store/cart";
-import { auth } from "@/lib/auth";
-import { getCentralAppUrl, getCentralLoginUrl, getCentralPortalPath, getCentralRegistrationUrl } from "@/lib/central-url";
-import { getConventionOrg, getConventionPortalRootForRequest } from "@/lib/convention";
+import { portalLoginPath, portalSignupPath } from "@/lib/portal-paths";
+import { getPortalPageContext } from "@/lib/portal-context";
 import { markOrderPaid } from "@/lib/fulfillment";
 import { getStripe } from "@/lib/payments/stripe";
 import { formatCurrency } from "@/lib/registration/pricing";
@@ -11,7 +10,6 @@ import { prisma, type Prisma } from "@vfurst/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -51,11 +49,11 @@ function itemName(item: { itemType: string; storeProduct?: { name: string } | nu
   return item.storeProduct?.name ?? item.itemType.replaceAll("_", " ");
 }
 
-async function findReceiptOrder(orderId: string, userId: string, orgId: string, eventId: string) {
+async function findReceiptOrder(orderId: string, portalAccountId: string, orgId: string, eventId: string) {
   return prisma.order.findFirst({
     where: {
       id: orderId,
-      userId,
+      portalAccountId,
       orgId,
       eventId
     },
@@ -111,21 +109,21 @@ async function verifyStripeReturn(orderId: string, sessionId?: string) {
 async function resolveSuccessOrder({
   orderId,
   sessionId,
-  userId,
+  portalAccountId,
   orgId,
   eventId
 }: {
   orderId: string | undefined;
   sessionId: string | undefined;
-  userId: string | undefined;
+  portalAccountId: string | undefined;
   orgId: string;
   eventId: string;
 }) {
-  if (!orderId || !userId) {
+  if (!orderId || !portalAccountId) {
     return null;
   }
 
-  const order = await findReceiptOrder(orderId, userId, orgId, eventId);
+  const order = await findReceiptOrder(orderId, portalAccountId, orgId, eventId);
 
   if (!order) {
     return null;
@@ -139,7 +137,7 @@ async function resolveSuccessOrder({
         paymentAttemptId: payment.paymentAttemptId,
         attemptProviderReference: payment.sessionId
       });
-      return findReceiptOrder(order.id, userId, orgId, eventId);
+      return findReceiptOrder(order.id, portalAccountId, orgId, eventId);
     }
   }
 
@@ -207,13 +205,8 @@ export default async function PublicStorePage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<{ success?: string; cancelled?: string; session_id?: string }>;
 }) {
-  const [{ orgSlug }, query, session] = await Promise.all([params, searchParams, auth()]);
-  const org = await getConventionOrg(orgSlug);
-
-  if (!org) {
-    notFound();
-  }
-  const portalRoot = await getConventionPortalRootForRequest(org);
+  const [{ orgSlug }, query] = await Promise.all([params, searchParams]);
+  const { org, account } = await getPortalPageContext(orgSlug);
 
   const event = await prisma.event.findFirst({
     where: {
@@ -226,6 +219,7 @@ export default async function PublicStorePage({
     include: {
       storeProducts: {
         where: {
+          archivedAt: null,
           stock: {
             gt: 0
           }
@@ -234,14 +228,13 @@ export default async function PublicStorePage({
       }
     }
   });
-  const storePath = `${portalRoot}/store`;
-  const centralStorePath = getCentralPortalPath(org.subdomain, "/store");
+  const storePath = "/store";
   const successOrder =
     event && query.success
       ? await resolveSuccessOrder({
           orderId: query.success,
           sessionId: query.session_id,
-          userId: session?.user?.id,
+          portalAccountId: account?.id,
           orgId: org.id,
           eventId: event.id
         })
@@ -249,11 +242,12 @@ export default async function PublicStorePage({
   const showStore = !query.success;
 
   const cart =
-    showStore && event && session?.user?.id
+    showStore && event && account?.id
       ? await prisma.cart.findUnique({
           where: {
-            userId_eventId: {
-              userId: session.user.id,
+            orgId: org.id,
+            portalAccountId_eventId: {
+              portalAccountId: account.id,
               eventId: event.id
             }
           },
@@ -279,11 +273,11 @@ export default async function PublicStorePage({
           <h1>Store</h1>
         </div>
         <div className="vf-actions">
-          <Button label="Register" href={`${portalRoot}/register`} />
-          <Button label="Hotel" href={`${portalRoot}/hotel`} />
-          <Button label="Volunteer" href={`${portalRoot}/volunteer`} />
-          <Button label="Vendor apply" href={`${portalRoot}/vendor-apply`} />
-          <Button label="Account" href={getCentralAppUrl("/account")} />
+          <Button label="Register" href="/register" />
+          <Button label="Hotel" href="/hotel" />
+          <Button label="Volunteer" href="/volunteer" />
+          <Button label="Vendor apply" href="/vendor-apply" />
+          <Button label="Account" href="/account" />
         </div>
       </header>
 
@@ -308,12 +302,12 @@ export default async function PublicStorePage({
         </section>
       ) : null}
 
-      {showStore && !session?.user?.id ? (
+      {showStore && !account?.id ? (
         <section className="vf-section">
           <p className="vf-label">Public account required</p>
           <h2>Sign in before adding products to your cart</h2>
-          <p className="vf-muted">Your cart and receipts are saved to your central vFurst account and follow you across devices.</p>
-          <div className="vf-actions"><Button label="Log in" href={getCentralLoginUrl(getCentralPortalPath(org.subdomain, "/store"))} variant="primary" /><Button label="Create account" href={getCentralRegistrationUrl(getCentralPortalPath(org.subdomain, "/store"))} /></div>
+          <p className="vf-muted">Your cart and receipts are saved to your account on this portal and follow you across devices.</p>
+          <div className="vf-actions"><Button label="Log in" href={portalLoginPath("/store")} variant="primary" /><Button label="Create account" href={portalSignupPath("/store")} /></div>
         </section>
       ) : null}
 
@@ -350,7 +344,7 @@ export default async function PublicStorePage({
                     <strong>{formatCurrency(price, event.currency)}</strong>
                     {getSurchargeTotal(product.surcharges) > 0 ? <small className="vf-muted"> with surcharges</small> : null}
                   </p>
-                  {session?.user?.id ? <AddToCartForm productId={product.id} stock={product.stock} options={options} /> : null}
+                  {account?.id ? <AddToCartForm productId={product.id} stock={product.stock} options={options} /> : null}
                 </Card>
               );
             })}
@@ -361,13 +355,13 @@ export default async function PublicStorePage({
               </section>
             ) : null}
           </section>
-          {session?.user?.id ? (
+          {account?.id ? (
             <StoreCart
               cart={cart}
               currency={event.currency}
               returnPath={storePath}
-              successPath={centralStorePath}
-              cancelPath={centralStorePath}
+              successPath="/store"
+              cancelPath="/store"
             />
           ) : null}
         </div>

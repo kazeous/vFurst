@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess as requireStoredEventAccess } from "@/lib/dashboard-access";
@@ -9,19 +9,9 @@ import { ExpectedActionError, PublicActionError, publicActionErrorMessage } from
 import type { PublicFormState } from "@/lib/public-form-state";
 import { Prisma, prisma, type CurrencyCode } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
-
-async function requireUserId() {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  return session.user.id;
-}
 
 function normalizeCode(code: string) {
   return code.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
@@ -207,6 +197,8 @@ async function validateVoucher(event: { id: string; orgId: string }, code: strin
     }
   });
 
+  if (voucher) assertPortalResourceOrg(voucher.orgId, { id: event.orgId });
+
   if (!voucher || voucher.orgId !== event.orgId || voucher.eventId !== event.id) {
     throw new PublicActionError("Voucher code was not found.");
   }
@@ -238,7 +230,9 @@ export async function applyVoucher(_previousState: PublicFormState, formData: Fo
 }
 
 async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
-  const userId = await requireUserId();
+  const context = await getPortalActionContext("/store");
+  if (isPortalRedirect(context)) return context;
+  const portalAccountId = context.account.id;
   const parsed = z
     .object({
       cartId: z.string().uuid(),
@@ -256,7 +250,8 @@ async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
   const cart = await prisma.cart.findFirst({
     where: {
       id: parsed.data.cartId,
-      userId
+      orgId: context.org.id,
+      portalAccountId
     },
     include: {
       event: {
@@ -271,6 +266,11 @@ async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
     }
   });
 
+  if (cart) {
+    assertPortalResourceOrg(cart.orgId, context.org);
+    assertPortalResourceOrg(cart.event.orgId, context.org);
+  }
+
   if (!cart || cart.orgId !== cart.event.orgId || cart.eventId !== cart.event.id) {
     throw new PublicActionError("Cart not found.");
   }
@@ -278,6 +278,7 @@ async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
   assertOrganizationActive(cart.event.org.status);
 
   const voucher = await validateVoucher(cart.event, parsed.data.code);
+  assertPortalResourceOrg(voucher.orgId, context.org);
   const restrictions = getVoucherRestrictions(voucher.restrictions);
 
   if (restrictions.compedRegistration) {
@@ -291,7 +292,7 @@ async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
   const updated = await prisma.cart.updateMany({
     where: {
       id: cart.id,
-      userId,
+      portalAccountId,
       orgId: cart.event.orgId,
       eventId: cart.event.id
     },
@@ -304,6 +305,5 @@ async function applyVoucherInner(formData: FormData): Promise<PublicFormState> {
     throw new Error("Cart not found.");
   }
 
-  revalidatePath(String(formData.get("returnPath") ?? "/"));
-  return {};
+  return { redirectTo: "/store" };
 }

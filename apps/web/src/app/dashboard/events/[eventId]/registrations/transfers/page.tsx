@@ -3,6 +3,7 @@ import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { formatDate } from "@/lib/i18n";
 import { cancelRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,11 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         include: {
           transferredTo: {
             include: {
-              user: true
+              portalAccount: { select: { id: true, email: true, name: true } }
             }
           },
           type: true,
-          user: true
+          portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
           createdAt: "desc"
@@ -46,8 +47,8 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
     where: { eventId: event.id, orgId: event.orgId },
     include: {
       requester: true,
-      recipient: true,
-      sourceRegistration: { include: { type: true, user: true } }
+      recipient: { select: { id: true, email: true, name: true } },
+      sourceRegistration: { include: { type: true, portalAccount: { select: { id: true, email: true, name: true } } } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -70,7 +71,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.user.name ?? registration.user.email} - {registration.type.name}
+                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -90,7 +91,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.user.name ?? registration.user.email} - {registration.type.name}
+                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -114,10 +115,10 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             const status = request.status;
             return (
               <div key={request.id} className="vf-list-row">
-                <span>{request.sourceRegistration.user.name ?? request.sourceRegistration.user.email} → {request.recipientEmail}</span>
+                <span>{request.sourceRegistration.portalAccount.email} → {request.recipientEmail}</span>
                 <small>
-                  {request.sourceRegistration.type.name} · {status} · expires {request.expiresAt.toLocaleString()}
-                  {request.recipient ? ` · claimed by ${request.recipient.name ?? request.recipient.email}` : ""}
+                  {request.sourceRegistration.type.name} · {status} · expires {formatDate(request.expiresAt, { dateStyle: "medium", timeStyle: "short" })}
+                  {request.recipient ? ` · claimed by ${request.recipient.email}` : ""}
                 </small>
                 {request.status === "PENDING" ? (
                   <form action={cancelRegistrationTransferRequest}>
@@ -137,10 +138,10 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         <div className="vf-list">
           {transferred.map((registration) => (
             <div key={registration.id} className="vf-list-row">
-              <span>{registration.user.name ?? registration.user.email}</span>
+              <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
               <small>
                 {registration.type.name} - {registration.status}
-                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.user.name ?? item.user.email).join(", ")}` : ""}
+                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.portalAccount.name ?? item.portalAccount.email).join(", ")}` : ""}
               </small>
             </div>
           ))}

@@ -10,6 +10,11 @@ const host = "localhost";
 const port = "3000";
 const baseUrl = `http://${host}:${port}`;
 const serverMode = process.env.E2E_PRODUCTION === "1" ? "start" : "dev";
+// Next renders a server action's redirect target by fetching it from its own bind address.
+// The production image binds 0.0.0.0, which Linux connects to as loopback; Windows refuses
+// it and Next falls back to a client redirect. Binding 127.0.0.1 gives every OS that same
+// internal request (Host = bind address, x-forwarded-host = the original host).
+const bindHost = serverMode === "start" ? "127.0.0.1" : host;
 const rateLimitPrefix = process.env.VFURST_RATE_LIMIT_PREFIX ?? `vfurst:e2e:${process.pid}:${Date.now()}`;
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? "sk_test_e2e_stripe_secret_key_1234567890";
@@ -22,7 +27,7 @@ const serverArgs = [
   serverMode,
   "apps/web",
   "--hostname",
-  host,
+  bindHost,
   "--port",
   port
 ];
@@ -63,6 +68,11 @@ function startServer() {
       AUTH_TRUST_HOST: "true",
       AUTH_URL: baseUrl,
       AUTH_SECRET: process.env.AUTH_SECRET ?? "e2e-auth-secret-32-bytes-minimum-value",
+      AUTH_AUTHENTIK_ISSUER: process.env.AUTH_AUTHENTIK_ISSUER ?? "http://localhost:8090/vfurst",
+      AUTH_AUTHENTIK_ID: process.env.AUTH_AUTHENTIK_ID ?? "vfurst-local",
+      AUTH_AUTHENTIK_SECRET: process.env.AUTH_AUTHENTIK_SECRET ?? "vfurst-local-mock-secret",
+      VFURST_PLATFORM_ADMIN_GROUP: process.env.VFURST_PLATFORM_ADMIN_GROUP ?? "vfurst-platform-admins",
+      VFURST_STAFF_SESSION_MAX_AGE_SECONDS: process.env.VFURST_STAFF_SESSION_MAX_AGE_SECONDS ?? "43200",
       CHECKOUT_TOKEN_SECRET: process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum",
       SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET ?? "e2e-sepay-webhook-secret",
       SEPAY_API_TOKEN: process.env.SEPAY_API_TOKEN ?? "e2e-sepay-api-token",
