@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { auth, signIn } from "@/lib/auth";
 import { formatDate } from "@/lib/i18n";
-import { getStaffEmailVerificationUrl } from "@/lib/staff-oidc";
 import { prisma } from "@vfurst/db";
 import {
   getOrganizationInvitationByToken,
@@ -14,7 +13,7 @@ import {
 const errorMessages: Record<string, string> = {
   ALREADY_ACCEPTED: "This invitation has already been accepted.",
   EMAIL_MISMATCH: "Sign in with the email address that received this invitation.",
-  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Verify it, then sign in again here to accept this invitation.",
+  EMAIL_UNVERIFIED: "Your Reyuu Games account email is not verified yet. Continue with Reyuu Games Account to verify it and return to this invitation.",
   EXPIRED: "This invitation has expired.",
   INVALID: "This invitation is invalid.",
   REVOKED: "This invitation has been revoked.",
@@ -48,11 +47,11 @@ export default async function OrganizationInvitationPage({
   }
 
   const state = getOrganizationInvitationState(invitation);
-  const signedInEmail = session?.user?.email ? normalizeInvitationEmail(session.user.email) : null;
-  const matchesRecipient = signedInEmail === normalizeInvitationEmail(invitation.email);
   const signedInUser = session?.user?.id
-    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { emailVerified: true } })
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { email: true, emailVerified: true } })
     : null;
+  const signedInEmail = signedInUser?.email ? normalizeInvitationEmail(signedInUser.email) : null;
+  const matchesRecipient = signedInEmail === normalizeInvitationEmail(invitation.email);
   const emailVerified = Boolean(signedInUser?.emailVerified);
   const canAccept =
     state === "PENDING" && matchesRecipient && emailVerified && !["SUSPENDED", "RETIRED"].includes(invitation.org.status);
@@ -108,9 +107,8 @@ export default async function OrganizationInvitationPage({
               <p>{errorMessages.EMAIL_UNVERIFIED}</p>
               <p>If you cannot verify it yourself, ask a Reyuu Games administrator.</p>
             </div>
-            <Button href={getStaffEmailVerificationUrl()} label="Verify your email" variant="primary" />
             <form action={signInAgain}>
-              <Button label="Sign in again" type="submit" />
+              <Button label="Verify your email and sign in again" type="submit" variant="primary" />
             </form>
           </div>
         ) : canAccept ? (

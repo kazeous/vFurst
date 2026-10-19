@@ -1,4 +1,4 @@
-const SESSION_COOKIE_NAME = /^(?:__Secure-)?authjs\.session-token(?:\.\d+)?$/;
+const SESSION_COOKIE_NAME = /^(?:__Host-)?vfurst-staff(?:\.\d+)?$/;
 
 function storeCookies(jar, response) {
   for (const header of response.headers.getSetCookie()) {
@@ -50,11 +50,20 @@ function redirectLocation(step, response) {
  * a Cookie header carrying the Auth.js session cookie. The four hops mirror the browser:
  * csrf, Auth.js sign-in, the mock's interactive login form, and the Auth.js callback.
  */
-export async function loginStaffThroughMockOidc({ baseUrl, sub, email, groups = [], fetchImpl = fetch }) {
+export async function loginStaffThroughMockOidc({ baseUrl, sub, email, groups = [], existingCookie = "", authenticatedAt = Math.floor(Date.now() / 1_000), fetchImpl = fetch }) {
   const origin = baseUrl.replace(/\/+$/, "");
+  const browserOrigin = new URL(origin);
+  if (browserOrigin.hostname === "127.0.0.1") browserOrigin.hostname = "localhost";
   const jar = new Map();
+  for (const pair of existingCookie.split(";")) {
+    const index = pair.indexOf("=");
+    if (index > 0) jar.set(pair.slice(0, index).trim(), pair.slice(index + 1).trim());
+  }
 
-  const csrfResponse = await fetchImpl(`${origin}/api/auth/csrf`, { redirect: "manual" });
+  // Node's fetch can drop an explicit Host header. Connect to the canonical
+  // local hostname so auth cookies and middleware see the same browser host.
+  const authOrigin = browserOrigin.origin;
+  const csrfResponse = await fetchImpl(`${authOrigin}/api/auth/csrf`, { redirect: "manual" });
 
   if (csrfResponse.status !== 200) {
     throw fail("csrf", `expected HTTP 200, got HTTP ${csrfResponse.status}.`);
@@ -67,11 +76,12 @@ export async function loginStaffThroughMockOidc({ baseUrl, sub, email, groups = 
     throw fail("csrf", "the response has no csrfToken.");
   }
 
-  const signInResponse = await fetchImpl(`${origin}/api/auth/signin/authentik`, {
+  const signInPath = `/api/auth/signin/authentik${existingCookie ? "?vfurstPurpose=lease&prompt=none" : ""}`;
+  const signInResponse = await fetchImpl(`${authOrigin}${signInPath}`, {
     method: "POST",
     redirect: "manual",
-    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
-    body: new URLSearchParams({ csrfToken, callbackUrl: `${origin}/dashboard` }).toString()
+    headers: { "content-type": "application/x-www-form-urlencoded", origin: authOrigin, cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ csrfToken, callbackUrl: `${authOrigin}/dashboard` }).toString()
   });
   const authorizeUrl = redirectLocation("signin", signInResponse);
   storeCookies(jar, signInResponse);
@@ -82,7 +92,10 @@ export async function loginStaffThroughMockOidc({ baseUrl, sub, email, groups = 
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       username: sub,
-      claims: JSON.stringify({ email, email_verified: true, groups })
+      claims: JSON.stringify({ email, email_verified: true, groups,
+        auth_time: authenticatedAt, amr: ["pwd", "mfa"],
+        vfurst_assurance: { version: 1, policy: "vfurst-v1", primary_at: authenticatedAt, primary_method: "password", mfa_enrolled: true, mfa_at: authenticatedAt }
+      })
     }).toString()
   });
   const callbackUrl = new URL(redirectLocation("authorize", authorizeResponse), authorizeUrl).toString();
@@ -91,13 +104,14 @@ export async function loginStaffThroughMockOidc({ baseUrl, sub, email, groups = 
     redirect: "manual",
     headers: { cookie: cookieHeader(jar) }
   });
-  redirectLocation("callback", callbackResponse);
+  const destination = new URL(redirectLocation("callback", callbackResponse), browserOrigin);
+  if (destination.pathname === "/login" || destination.searchParams.has("error")) throw fail("callback", "the identity was rejected.");
   storeCookies(jar, callbackResponse);
 
   const sessionCookie = cookieHeader(jar, (name) => SESSION_COOKIE_NAME.test(name));
 
   if (!sessionCookie) {
-    throw fail("callback", "no authjs.session-token cookie was set.");
+    throw fail("callback", "no staff session cookie was set.");
   }
 
   return sessionCookie;

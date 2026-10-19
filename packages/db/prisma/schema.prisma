@@ -390,6 +390,15 @@ model Session {
   revokedAt          DateTime?
   /// OIDC `sid` from the studio identity provider; back-channel logout revokes by it.
   oidcSid            String?
+  oidcIssuer         String?
+  oidcClientId       String?
+  oidcSubject        String?
+  idpValidUntil      DateTime?
+  idleExpiresAt      DateTime?
+  lastUsedAt         DateTime?
+  primaryAuthenticatedAt DateTime?
+  mfaVerifiedAt      DateTime?
+  mfaEnrolled        Boolean?
   /// ID token kept only as the logout `id_token_hint`; cleared on revocation.
   idToken            String?             @db.Text
   createdAt          DateTime            @default(now())
@@ -400,6 +409,51 @@ model Session {
   @@index([userId, revokedAt, expires])
   @@index([oidcSid])
   @@map("sessions")
+}
+
+/// Single-use browser-bound OIDC intent. Refresh/step-up keep the original actor and deadline.
+model StaffOidcTransaction {
+  id                String    @id @default(uuid()) @db.Uuid
+  tokenHash         String    @unique @db.Char(64)
+  purpose           String
+  userId            String?   @db.Uuid
+  sessionId         String?   @db.Uuid
+  authVersion       Int?
+  returnTo          String
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("staff_oidc_transactions")
+}
+
+/// Logout fences also reject callbacks already in flight when the logout arrived.
+model StaffOidcRevocation {
+  id                String   @id @default(uuid()) @db.Uuid
+  issuer            String
+  clientId          String
+  kind              String
+  valueHash         String   @db.Char(64)
+  revokedThrough    DateTime
+  expiresAt         DateTime
+
+  @@unique([issuer, clientId, kind, valueHash])
+  @@index([expiresAt])
+  @@map("staff_oidc_revocations")
+}
+
+/// Replay receipts commit atomically with session revocation.
+model StaffOidcLogoutReceipt {
+  id                String   @id @default(uuid()) @db.Uuid
+  issuer            String
+  clientId          String
+  jtiHash           String   @db.Char(64)
+  expiresAt         DateTime
+
+  @@unique([issuer, clientId, jtiHash])
+  @@index([expiresAt])
+  @@map("staff_oidc_logout_receipts")
 }
 
 model ControlPlaneOutboxEvent {

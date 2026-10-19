@@ -2,6 +2,33 @@ import { describe, expect, it } from "vitest";
 import { SENSITIVE_QUERY_KEYS, scrubSensitiveUrl, scrubSentryEventUrls } from "./sentry-url-scrub";
 
 describe("Sentry URL scrubbing", () => {
+  it("scrubs invitation and OAuth tokens nested inside return URLs, including repeated encoding", () => {
+    for (const target of ["/invitations/private-invite", "/set-password?token=private-token", "/api/auth/callback/authentik?code=private-code&state=private-state"]) {
+      let nested = target;
+      for (let depth = 0; depth < 6; depth++) {
+        nested = `/login?returnTo=${encodeURIComponent(nested)}`;
+        const scrubbed = scrubSensitiveUrl(nested);
+        expect(scrubbed).not.toContain("private-");
+      }
+    }
+    const event = scrubSentryEventUrls({ request: { query_string: { returnTo: "/invitations/private-invite" } } });
+    expect(event.request.query_string.returnTo).toBe("/invitations/[Filtered]");
+  });
+
+  it("removes cookie/authorization headers and auth payloads without retaining bearer material", () => {
+    const event = scrubSentryEventUrls({ request: {
+      url: "https://vfurst.reyuugames.com/api/oidc/backchannel-logout", cookies: { staff: "private-cookie" },
+      headers: { Cookie: "private-cookie", Authorization: "Bearer private-token", "content-type": "application/x-www-form-urlencoded" },
+      data: "logout_token=private-logout"
+    } });
+    expect(JSON.stringify(event)).not.toContain("private-");
+    expect(event.request.data).toBe("[Filtered]");
+  });
+
+  it("fails closed for unexpected structured query values from telemetry adapters", () => {
+    const event = scrubSentryEventUrls({ request: { query_string: { returnTo: ["/invitations/private-invite"] } } });
+    expect(JSON.stringify(event)).not.toContain("private-invite");
+  });
   it("filters token, code, state, id_token_hint, and logout_token values in absolute and relative URLs", () => {
     expect(SENSITIVE_QUERY_KEYS).toEqual(["token", "code", "state", "id_token_hint", "logout_token"]);
     expect(scrubSensitiveUrl("https://acme.vfurst.reyuugames.com/set-password?token=abc&returnTo=%2F")).toBe(

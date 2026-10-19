@@ -1,12 +1,21 @@
 import type { Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export const STAFF_ADMIN_GROUP = "vfurst-platform-admins";
 const appOrigin = "http://localhost:3000";
 const mockIdentityProviderOrigin = "http://localhost:8090";
 
-let lookupClient: PrismaClient | undefined;
+export function mockStaffClaims(input: { email: string; emailVerified?: boolean; name?: string; groups?: string[]; sid?: string; mfa?: boolean; authenticatedAt?: number }) {
+  const authenticatedAt = input.authenticatedAt ?? Math.floor(Date.now() / 1_000);
+  const mfa = input.mfa ?? true;
+  return {
+    email: input.email, email_verified: input.emailVerified ?? true, ...(input.name ? { name: input.name } : {}),
+    groups: input.groups ?? [], ...(input.sid ? { sid: input.sid } : {}),
+    auth_time: authenticatedAt, amr: mfa ? ["pwd", "mfa"] : ["pwd"],
+    vfurst_assurance: { version: 1, policy: "vfurst-v1", primary_at: authenticatedAt, primary_method: "password", mfa_enrolled: mfa, mfa_at: mfa ? authenticatedAt : null }
+  };
+}
 
 /**
  * Nested `prisma.user.create` data that links a new staff user to a studio
@@ -59,18 +68,16 @@ export async function createStaffFixture(
  */
 export async function loginAsStaff(
   page: Page,
-  staff: { sub: string; email: string; groups?: string[]; emailVerified?: boolean; name?: string; sid?: string },
+  staff: { sub: string; email: string; groups?: string[]; emailVerified?: boolean; name?: string; sid?: string; mfa?: boolean; authenticatedAt?: number },
   options: { returnTo?: string; expectPath?: string } = {}
 ): Promise<void> {
+  // Distinct fixture users model distinct client IPs and exercise the real
+  // per-IP quota without exhausting it across the complete serial suite.
+  const address = createHash("sha256").update(staff.sub).digest();
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": `198.18.${address[0]}.${address[1]}` });
   const returnTo = options.returnTo ?? "/dashboard";
   const expectPath = options.expectPath ?? new URL(returnTo, appOrigin).pathname;
-  const claims = {
-    email: staff.email,
-    email_verified: staff.emailVerified ?? true,
-    ...(staff.name ? { name: staff.name } : {}),
-    groups: staff.groups ?? [],
-    ...(staff.sid ? { sid: staff.sid } : {})
-  };
+  const claims = mockStaffClaims(staff);
 
   await page.goto(`${appOrigin}/login?returnTo=${encodeURIComponent(returnTo)}`);
   await page.getByRole("button", { name: "Sign in with your Reyuu Games account" }).click();
@@ -94,7 +101,7 @@ export async function loginAsStaffEmail(
   email: string,
   options: { returnTo?: string; expectPath?: string } = {}
 ): Promise<void> {
-  lookupClient ??= new PrismaClient();
+  const lookupClient = new PrismaClient();
   const user = await lookupClient.user.findUniqueOrThrow({
     where: { email: email.trim().toLowerCase() },
     select: {
@@ -103,7 +110,7 @@ export async function loginAsStaffEmail(
       emailVerified: true,
       accounts: { where: { provider: "authentik" }, select: { providerAccountId: true } }
     }
-  });
+  }).finally(() => lookupClient.$disconnect());
   const sub = user.accounts[0]?.providerAccountId;
   if (!sub) throw new Error(`Staff fixture ${email} has no linked identity-provider subject.`);
 

@@ -1,11 +1,13 @@
 import { auth } from "@/lib/auth";
 import { prisma, type OrgRole } from "@vfurst/db";
 import { notFound, redirect } from "next/navigation";
+import { requireStaffAssurance } from "@/lib/staff-verification";
 
 export async function requireDashboardSession() {
   const session = await auth();
 
   if (!session?.user?.id) {
+    await requireStaffAssurance(false);
     redirect("/login");
   }
 
@@ -525,6 +527,12 @@ function hasAllowedOrgRole(
   );
 }
 
+async function requireMutationAssurance(allowedRoles: OrgRole[]) {
+  // Member-level event-day capabilities keep their lease policy. Privileged
+  // owner/admin-only commands also require recent primary and MFA evidence.
+  if (!allowedRoles.includes("MEMBER")) await requireStaffAssurance();
+}
+
 export async function requirePlatformAdmin() {
   const userId = await requireDashboardUser();
   const user = await getPlatformUser(userId);
@@ -532,6 +540,7 @@ export async function requirePlatformAdmin() {
   if (!user || user.platformRole !== "PLATFORM_ADMIN") {
     throw new Error("You do not have permission to manage platform settings.");
   }
+  await requireStaffAssurance();
 
   return user;
 }
@@ -543,6 +552,7 @@ export async function requirePlatformAdminPage() {
   if (!user || user.platformRole !== "PLATFORM_ADMIN") {
     notFound();
   }
+  await requireStaffAssurance();
 
   return user;
 }
@@ -558,6 +568,8 @@ export async function requireOrgAccess(
   if (!hasAllowedOrgRole(membership, allowedRoles, options)) {
     throw new Error("You do not have permission to manage this organization.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -593,6 +605,8 @@ export async function requireEventAccess(eventId: string, allowedRoles: OrgRole[
     throw new Error("You do not have permission to manage this event.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -618,6 +632,8 @@ export async function requireRegistrationTypeAccess(typeId: string, allowedRoles
     throw new Error("You do not have permission to manage this registration type.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -640,6 +656,8 @@ export async function requireAddOnDefinitionAccess(addOnId: string, allowedRoles
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this add-on.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -674,6 +692,8 @@ export async function requireRegistrationAccess(
     throw new Error("You do not have permission to manage this registration.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -700,6 +720,8 @@ export async function requireBadgeTemplateAccess(templateId: string, allowedRole
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this badge template.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -731,6 +753,8 @@ export async function requireBadgeAccess(badgeId: string, allowedRoles: OrgRole[
     throw new Error("You do not have permission to manage this badge.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -755,6 +779,8 @@ export async function requireRaffleAccess(raffleId: string, allowedRoles: OrgRol
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this raffle.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -782,6 +808,8 @@ export async function requireApiKeyAccess(
     throw new Error("You do not have permission to manage this API key.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -807,6 +835,8 @@ export async function requireWebhookEndpointAccess(
     throw new Error("You do not have permission to manage this webhook endpoint.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -828,6 +858,8 @@ export async function requireAttendeeNoteAccess(noteId: string, allowedRoles: Or
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this attendee note.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -852,6 +884,8 @@ export async function requireStoreProductAccess(productId: string, allowedRoles:
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this store product.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -880,6 +914,8 @@ export async function requireOrderAccess(
     throw new Error("You do not have permission to manage this order.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -902,6 +938,8 @@ export async function requireHotelBlockAccess(blockId: string, allowedRoles: Org
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this hotel block.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -926,6 +964,8 @@ export async function requireHotelBookingAccess(bookingId: string, allowedRoles:
     throw new Error("You do not have permission to manage this hotel booking.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -948,6 +988,8 @@ export async function requireDepartmentAccess(departmentId: string, allowedRoles
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this department.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -976,6 +1018,8 @@ export async function requireStaffRoleAccess(roleId: string, allowedRoles: OrgRo
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this staff role.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,
@@ -1010,6 +1054,8 @@ export async function requireVolunteerApplicationAccess(
     throw new Error("You do not have permission to manage this volunteer application.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -1043,6 +1089,8 @@ export async function requireStaffAssignmentAccess(
     throw new Error("You do not have permission to manage this staff assignment.");
   }
 
+  await requireMutationAssurance(allowedRoles);
+
   return {
     userId,
     membership,
@@ -1074,6 +1122,8 @@ export async function requireVendorApplicationAccess(
   if (!hasAllowedOrgRole(membership, allowedRoles)) {
     throw new Error("You do not have permission to manage this vendor application.");
   }
+
+  await requireMutationAssurance(allowedRoles);
 
   return {
     userId,

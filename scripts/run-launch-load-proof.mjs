@@ -487,6 +487,9 @@ async function main() {
   }
 
   const seed = await seedLoadData();
+  let leaseTimer;
+  let leaseRefresh;
+  let leaseFailure;
 
   try {
     if (!config.skipLocalServer && !(await canReachApp())) {
@@ -494,12 +497,25 @@ async function main() {
       await waitForApp();
     }
 
+    const authenticatedAt = Math.floor(Date.now() / 1_000);
     const staffCookie = await loginStaffThroughMockOidc({
       baseUrl: config.baseUrl,
       sub: seed.staffSub,
-      email: config.staffEmail
+      email: config.staffEmail,
+      authenticatedAt
     });
     console.log(`Signed ${config.staffEmail} in through the mock OIDC provider.`);
+    // The full proof lasts eight minutes. Renew the original session's real
+    // five-minute lease through OIDC, without extending its authentication age
+    // or disabling production policy. k6's original JWT keeps the same binding.
+    leaseTimer = setInterval(() => {
+      if (leaseRefresh) return;
+      leaseRefresh = loginStaffThroughMockOidc({
+        baseUrl: config.baseUrl, sub: seed.staffSub, email: config.staffEmail, existingCookie: staffCookie, authenticatedAt
+      }).then(() => console.log("Renewed the load staff session through the mock OIDC provider."))
+        .catch((error) => { leaseFailure = error; })
+        .finally(() => { leaseRefresh = undefined; });
+    }, 240_000);
 
     const load = await run(process.execPath, ["scripts/run-load-test.mjs", ...k6Args], {
       env: {
@@ -524,9 +540,12 @@ async function main() {
     if (load.code !== 0) {
       throw new Error(`Full k6 profile failed with exit code ${load.code}.`);
     }
+    if (leaseFailure) throw new Error("Staff OIDC lease renewal failed during the load proof.", { cause: leaseFailure });
 
     process.exitCode = load.code;
   } finally {
+    clearInterval(leaseTimer);
+    await leaseRefresh;
     stopServer();
   }
 }

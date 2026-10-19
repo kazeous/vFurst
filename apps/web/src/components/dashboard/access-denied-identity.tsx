@@ -1,8 +1,12 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { SessionProvider, useSession } from "next-auth/react";
 
 export function AccessDeniedIdentity() {
+  return <SessionProvider><CurrentStaffIdentity /></SessionProvider>;
+}
+
+function CurrentStaffIdentity() {
   const email = useSession().data?.user?.email;
 
   if (!email) {

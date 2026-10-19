@@ -296,6 +296,7 @@ export function DashboardAppShell({
             <DropdownMenuContent side="top" align="start">
               <DropdownMenuItem asChild><Link href="/dashboard/settings"><Settings size={16} />Account settings</Link></DropdownMenuItem>
               <DropdownMenuItem asChild><a href={accountManagementUrl}><UserCog size={16} />Manage your Reyuu Games account</a></DropdownMenuItem>
+              <DropdownMenuItem asChild><Link href="/staff/sessions"><ShieldCheck size={16} />Your vFurst sessions</Link></DropdownMenuItem>
               <form action={logoutAction}>
                 <button className="vf-dropdown-item" type="submit"><LogOut size={16} />Log out</button>
               </form>

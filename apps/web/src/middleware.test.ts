@@ -22,6 +22,14 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("canonical host middleware", () => {
+  it("canonicalizes staff routes on platform aliases before setting host-only auth cookies", async () => {
+    const response = await middleware(request("/login?returnTo=/dashboard", "console.vfurst.reyuugames.com"));
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/login?returnTo=/dashboard");
+    const post = await middleware(request("/api/auth/signin/authentik", "console.vfurst.reyuugames.com", "POST"));
+    expect(post.status).toBe(421);
+    expect(post.headers.get("set-cookie")).toBeNull();
+  });
   it("sets tenant headers on a tenant-host API request without rewriting", async () => {
     const response = await middleware(request("/api/portal/session", "acme.localhost"));
     expect(response.status).toBe(200);

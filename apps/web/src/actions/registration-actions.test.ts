@@ -28,6 +28,7 @@ vi.mock("@vfurst/db", () => ({
   }
 }));
 vi.mock("@/lib/dashboard-access", () => ({}));
+vi.mock("@/lib/staff-verification", () => ({ requireStaffAssurance: vi.fn() }));
 vi.mock("@/lib/email", () => ({}));
 vi.mock("@/actions/registration-transfer-actions", () => ({}));
 vi.mock("@/lib/fulfillment", () => ({ markOrderPaid: mocks.markOrderPaid }));

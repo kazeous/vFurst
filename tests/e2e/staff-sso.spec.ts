@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
-import { createStaffFixture, loginAsStaff, STAFF_ADMIN_GROUP, type StaffFixture } from "./support/staff";
+import { createStaffFixture, loginAsStaff, mockStaffClaims, STAFF_ADMIN_GROUP, type StaffFixture } from "./support/staff";
 
 const prisma = new PrismaClient();
 const run = `${Date.now()}-${process.pid}`;
@@ -60,8 +60,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  // orgId stays unset when beforeAll fails early, and Prisma drops an undefined filter, matching every row.
-  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId } });
+  if (orgId) await prisma.organization.deleteMany({ where: { id: orgId, slug: orgSlug } });
   await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } });
   await prisma.$disconnect();
 });
@@ -193,24 +192,20 @@ test("an unverified studio email verifies, signs in again, then accepts the invi
 
   const unverified = page.getByTestId("invitation-email-unverified");
   await expect(unverified).toContainText(
-    "Your Reyuu Games account email is not verified yet. Verify it, then sign in again here to accept this invitation."
+    "Your Reyuu Games account email is not verified yet. Continue with Reyuu Games Account to verify it and return to this invitation."
   );
   await expect(unverified).toContainText("If you cannot verify it yourself, ask a Reyuu Games administrator.");
-  await expect(page.getByRole("link", { name: "Verify your email" })).toHaveAttribute(
-    "href",
-    "http://localhost:8090/if/flow/vfurst-verify-email/"
-  );
   await expect(page.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
   expect(await prisma.orgMember.count({ where: { userId: invitedUnverified.id } })).toBe(0);
   expect((await prisma.user.findUniqueOrThrow({ where: { id: invitedUnverified.id } })).emailVerified).toBeNull();
 
   // The studio account is verified now: signing in again re-reads the claim and returns here.
-  await page.getByRole("button", { name: "Sign in again" }).click();
+  await page.getByRole("button", { name: "Verify your email and sign in again" }).click();
   await page.waitForURL((url) => url.port === "8090");
   await page.locator('input[name="username"]').fill(invitedUnverified.sub);
   await page
     .locator('textarea[name="claims"]')
-    .fill(JSON.stringify({ email: emails.invitedUnverified, email_verified: true, groups: [] }));
+    .fill(JSON.stringify(mockStaffClaims({ email: emails.invitedUnverified })));
   await page.locator('input[type="submit"]').click();
   await page.waitForURL((url) => url.pathname === `/invitations/${token}`, { waitUntil: "load" });
 

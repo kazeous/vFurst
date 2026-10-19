@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { filterExpectedNextHttpAccessFallback } from "./lib/sentry-event-filter";
 import { isPortalTokenPage } from "./lib/portal-token-telemetry";
+import { scrubSentryEventUrls } from "./lib/sentry-url-scrub";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 let telemetryExcluded = false;
@@ -32,7 +33,11 @@ if (!excludePortalTokenPage(window.location.href)) {
     replaysSessionSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? 0.02),
     replaysOnErrorSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? 1),
     sendDefaultPii: false,
-    beforeSend: filterExpectedNextHttpAccessFallback,
+    beforeSend: (event, hint) => {
+      const kept = filterExpectedNextHttpAccessFallback(event, hint);
+      return kept ? scrubSentryEventUrls(kept) : null;
+    },
+    beforeSendTransaction: (event) => scrubSentryEventUrls(event),
     transport: (options: Parameters<typeof Sentry.makeFetchTransport>[0]) => {
       const transport = Sentry.makeFetchTransport(options);
       return {

@@ -136,6 +136,15 @@ export async function cleanupIdentityProtocolRecordBatch(
             }
           });
 
+    const protocolWhere = { expiresAt: { lte: now } };
+    const protocolQuery = { where: protocolWhere, select: { id: true }, orderBy: { expiresAt: "asc" as const }, take: batchSize };
+    const [flows, fences, receipts] = await Promise.all([
+      tx.staffOidcTransaction.findMany(protocolQuery), tx.staffOidcRevocation.findMany(protocolQuery), tx.staffOidcLogoutReceipt.findMany(protocolQuery)
+    ]);
+    if (flows.length) await tx.staffOidcTransaction.deleteMany({ where: { ...protocolWhere, id: { in: flows.map(({ id }) => id) } } });
+    if (fences.length) await tx.staffOidcRevocation.deleteMany({ where: { ...protocolWhere, id: { in: fences.map(({ id }) => id) } } });
+    if (receipts.length) await tx.staffOidcLogoutReceipt.deleteMany({ where: { ...protocolWhere, id: { in: receipts.map(({ id }) => id) } } });
+
     return Object.freeze({
       identitySessionsSelected: identitySessionIds.length,
       identitySessionsDeleted: identitySessionDelete.count,
@@ -146,7 +155,7 @@ export async function cleanupIdentityProtocolRecordBatch(
       hasMore:
         identitySessionIds.length === batchSize ||
         portalSessionIds.length === batchSize ||
-        portalAccountTokenIds.length === batchSize
+        portalAccountTokenIds.length === batchSize || [flows, fences, receipts].some((rows) => rows.length === batchSize)
     });
   });
 }

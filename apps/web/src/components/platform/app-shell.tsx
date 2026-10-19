@@ -57,6 +57,7 @@ export function PlatformAppShell({
             <span className="vf-app-user-copy"><strong>{userName ?? "Platform admin"}</strong><span>{userEmail}</span></span>
           </div>
           <a className="vf-nav-link" href={accountManagementUrl}><UserCog size={18} aria-hidden="true" /><span>Manage your Reyuu Games account</span></a>
+          <Link className="vf-nav-link" href="/staff/sessions"><UserCog size={18} aria-hidden="true" /><span>Your vFurst sessions</span></Link>
           <form action={staffSignOut}>
             <button className="vf-nav-link" type="submit"><LogOut size={18} aria-hidden="true" /><span>Log out</span></button>
           </form>

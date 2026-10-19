@@ -1,5 +1,7 @@
 "use server";
 
+import { requireStaffAssurance } from "@/lib/staff-verification";
+
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requireOrderAccess, requireStoreProductAccess } from "@/lib/dashboard-access";
@@ -223,6 +225,7 @@ export async function restoreProduct(formData: FormData) {
 }
 
 export async function refundOrder(formData: FormData) {
+  await requireStaffAssurance();
   const orderId = z.string().uuid().parse(formData.get("orderId"));
   const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
 
@@ -247,6 +250,7 @@ export async function refundOrder(formData: FormData) {
 }
 
 export async function partialRefund(formData: FormData) {
+  await requireStaffAssurance();
   const orderId = z.string().uuid().parse(formData.get("orderId"));
   const { order, event } = await requireOrderAccess(orderId, ["OWNER", "ADMIN"], { allowInactive: true });
   await assertActionRateLimit("payment:store-partial-refund", `${event.orgId}:${order.id}`);
