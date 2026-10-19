@@ -23,6 +23,8 @@ The pre-2026-07-26 plan (phases 0–7) and its session history are in git histor
 
 Read `PROGRESS.md` before doing anything. It says which phase and unit is active. Don't trust this file or plan docs for "what's done" — `PROGRESS.md` and the repository are the only ground truth.
 
+Like `docs/`, `PROGRESS.md` is git-ignored and kept only in the local checkout. Update it, but never commit it. A fresh clone or worktree does not have it, so read the main checkout's copy.
+
 ## Working rules
 
 1. **One phase unit per session** (a numbered unit in the phase file, or one audit batch in Phase 1). Don't start the next unit just because there's room left.
