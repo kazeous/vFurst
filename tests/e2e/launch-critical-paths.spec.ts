@@ -388,6 +388,9 @@ test("admin CRUD and staff check-in paths work", async ({ page }) => {
     where: { slug: crudOrgSlug },
     include: { invitations: true, members: true }
   });
+  // The action redirects to the new organization's page; wait for that
+  // navigation so the page.goto below cannot race it.
+  await page.waitForURL((url) => url.pathname === `/platform/organizations/${createdOrg.id}`);
   expect(createdOrg.status).toBe("PROVISIONING");
   expect(createdOrg.members).toHaveLength(0);
   expect(createdOrg.invitations).toEqual([
