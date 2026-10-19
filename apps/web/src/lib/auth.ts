@@ -16,14 +16,15 @@ import {
   STAFF_IDENTITY_PROVIDER,
 } from "@/lib/staff-identity";
 import { staffOidcFetch, verifyStaffIdentityToken } from "@/lib/staff-oidc";
-import { beginStaffOidcFlow, clearStaffOidcFlow, currentStaffOidcTransaction } from "@/lib/staff-oidc-flow";
-import { completeStaffOidcTransaction, createStaffLogoutFence, staffIdentityTransaction, type StaffOidcPurpose } from "@/lib/staff-oidc-store";
+import { beginStaffOidcFlow, clearStaffOidcFlow, currentStaffOidcTransaction, currentStaffOidcFlowHash } from "@/lib/staff-oidc-flow";
+import { completeStaffOidcTransaction, endStaffBrowserSessions, type StaffOidcPurpose } from "@/lib/staff-oidc-store";
 import { assertStaffStepUp, StaffIdentityError, staffOidcCookiePolicy } from "@/lib/staff-session-policy";
 import { getCentralAppUrl } from "@/lib/central-url";
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { applyFixedWindowRateLimit, getClientIpFromHeaders, AUTH_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_WINDOW_MS, RateLimitUnavailableError } from "@/lib/rate-limit";
 import { safeReturnTo } from "@/lib/return-to";
+import { staffAuthErrorRecord } from "@/lib/staff-auth-log";
 
 declare module "next-auth" {
   interface Session {
@@ -68,8 +69,7 @@ const nextAuth = NextAuth({
     error: "/login"
   },
   logger: {
-    // OAuth error causes may contain codes or tokens. Keep only the bounded Auth.js error type.
-    error(error) { console.error({ event: "staff_auth_error", type: error instanceof AuthError ? error.type : "Unknown" }); }
+    error(error) { console.error(staffAuthErrorRecord(error)); }
   },
   callbacks: {
     async signIn({ account }) {
@@ -144,19 +144,15 @@ const nextAuth = NextAuth({
   events: {
     async signOut(message) {
       const identityToken = "token" in message ? (message.token as IdentityJwtClaims | null) : null;
-      if (identityToken?.identitySessionId && identityToken.sub) {
-        // The Auth.js HTTP sign-out surface has the same callback fence as
-        // the shell's logout Server Action, including for alternate clients.
-        await staffIdentityTransaction(async (tx) => {
-          const stored = await tx.session.findUnique({ where: { id: identityToken.identitySessionId! } });
-          if (!stored || stored.userId !== identityToken.sub || stored.revokedAt) return;
-          const now = new Date();
-          if (stored.oidcIssuer && stored.oidcClientId) await createStaffLogoutFence(tx, {
-            issuer: stored.oidcIssuer, clientId: stored.oidcClientId, kind: "local", value: stored.userId, revokedThrough: now, now
-          });
-          await tx.session.updateMany({ where: { id: stored.id, revokedAt: null }, data: { revokedAt: now, idToken: null } });
-        });
-      }
+      // Include a pending/completed browser flow even if IdP logout already
+      // invalidated the JWT. Both logout surfaces fence the issued replacement.
+      await endStaffBrowserSessions({
+        actor: identityToken?.identitySessionId && identityToken.sub
+          ? { userId: identityToken.sub, sessionId: identityToken.identitySessionId } : null,
+        flowHash: await currentStaffOidcFlowHash(), everywhere: false,
+        issuer: process.env.AUTH_AUTHENTIK_ISSUER!, clientId: process.env.AUTH_AUTHENTIK_ID!
+      });
+      await clearStaffOidcFlow();
     }
   }
 });

@@ -53,6 +53,7 @@ export async function completeStaffOidcTransaction(input: {
         OR: [
           { kind: "sub", valueHash: hashStaffProtocolValue(input.claims.sub) },
           { kind: "local", valueHash: hashStaffProtocolValue(input.userId) },
+          ...(flow.sessionId ? [{ kind: "session", valueHash: hashStaffProtocolValue(flow.sessionId) }] : []),
           ...(input.claims.sid ? [
             { kind: "sid", valueHash: hashStaffProtocolValue(input.claims.sid) },
             { kind: "sid-sub", valueHash: hashStaffProtocolValue(JSON.stringify([input.claims.sub, input.claims.sid])) }
@@ -61,7 +62,7 @@ export async function completeStaffOidcTransaction(input: {
       }
     });
     if (fences.some((fence) => fence.kind === "sid" || fence.kind === "sid-sub" ||
-      (fence.kind === "local" ? flow.createdAt <= fence.revokedThrough : input.assurance.primaryAuthenticatedAt <= fence.revokedThrough))) {
+      (["local", "session"].includes(fence.kind) ? flow.createdAt <= fence.revokedThrough : input.assurance.primaryAuthenticatedAt <= fence.revokedThrough))) {
       throw new StaffIdentityError("SessionRevoked");
     }
     const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId } });
@@ -69,22 +70,51 @@ export async function completeStaffOidcTransaction(input: {
     if (flow.purpose === "lease" || flow.purpose === "step-up") {
       if (flow.userId !== user.id || flow.authVersion !== user.authVersion || !flow.sessionId) throw new StaffIdentityError("ActorChanged");
       const session = await tx.session.findUnique({ where: { id: flow.sessionId } });
-      if (!session || session.userId !== user.id || session.authVersion !== user.authVersion || session.revokedAt ||
+      if (!session || session.userId !== user.id || session.authVersion !== user.authVersion ||
         session.expires <= now || !session.idleExpiresAt || session.idleExpiresAt <= now ||
         session.oidcIssuer !== input.issuer || session.oidcClientId !== input.clientId || session.oidcSubject !== input.claims.sub ||
         session.createdAt.getTime() + IDENTITY_SESSION_MAX_AGE_SECONDS * 1_000 <= now.getTime()) {
         throw new StaffIdentityError("SessionRevoked");
       }
+      if (session.revokedAt) {
+        // authentik can retire its previous sid during a fresh login. The old
+        // local session stays revoked; only fresh MFA for a different, live sid
+        // may issue its replacement. Local/session/subject fences above still win.
+        const previousSidFences = flow.purpose === "step-up" && session.oidcSid && input.claims.sid &&
+          session.oidcSid !== input.claims.sid && session.revokedAt >= flow.createdAt
+          ? await tx.staffOidcRevocation.findMany({ where: {
+            issuer: input.issuer, clientId: input.clientId, expiresAt: { gt: now },
+            revokedThrough: { gte: new Date(Math.floor(flow.createdAt.getTime() / 1_000) * 1_000) },
+            OR: [
+              { kind: "sid", valueHash: hashStaffProtocolValue(session.oidcSid) },
+              { kind: "sid-sub", valueHash: hashStaffProtocolValue(JSON.stringify([input.claims.sub, session.oidcSid])) }
+            ]
+          } }) : [];
+        if (previousSidFences.length === 0) throw new StaffIdentityError("SessionRevoked");
+      }
       if (flow.purpose === "lease" && session.oidcSid !== input.claims.sid) throw new StaffIdentityError("ActorChanged");
-      if (flow.purpose === "step-up") assertStaffStepUp(input.assurance, flow.createdAt, now);
-      await tx.session.update({
-        where: { id: session.id },
-        data: {
+      if (flow.purpose === "step-up") {
+        assertStaffStepUp(input.assurance, flow.createdAt, now);
+        await createStaffLogoutFence(tx, { issuer: input.issuer, clientId: input.clientId,
+          kind: "session", value: session.id, revokedThrough: now, now });
+        await tx.session.updateMany({ where: { id: session.id, revokedAt: null }, data: { revokedAt: now, idToken: null } });
+        const replacement = await issueIdentitySession({
+          userId: user.id, authVersion: user.authVersion, expires: session.expires, oidcSid: input.claims.sid,
+          issuer: input.issuer, clientId: input.clientId, subject: input.claims.sub, idToken: input.idToken,
           idpValidUntil: new Date(Math.min(session.expires.getTime(), flow.createdAt.getTime() + STAFF_IDP_LEASE_MS)),
-          oidcSid: input.claims.sid, idToken: input.idToken, ...input.assurance
-        }
-      });
-      identitySessionId = session.id;
+          assurance: input.assurance, now, lifetime: { createdAt: session.createdAt, idleExpiresAt: session.idleExpiresAt }
+        }, tx);
+        identitySessionId = replacement.id;
+      } else {
+        await tx.session.update({
+          where: { id: session.id },
+          data: {
+            idpValidUntil: new Date(Math.min(session.expires.getTime(), flow.createdAt.getTime() + STAFF_IDP_LEASE_MS)),
+            oidcSid: input.claims.sid, idToken: input.idToken, ...input.assurance
+          }
+        });
+        identitySessionId = session.id;
+      }
     } else if (flow.purpose === "login") {
       const expires = new Date(now.getTime() + IDENTITY_SESSION_MAX_AGE_SECONDS * 1_000);
       const session = await issueIdentitySession({
@@ -95,12 +125,19 @@ export async function completeStaffOidcTransaction(input: {
       identitySessionId = session.id;
     } else throw new StaffIdentityError("InvalidIdentity");
     await syncStaffUser(user.id, input.claims, now, tx);
+    // Logout can race the callback after the previous IdP sid was retired.
+    // Keep the issued binding on the same row that logout atomically consumes.
+    // Retain it past the original deadline for a logout request already in flight.
+    // consumedAt prevents this retention grace from extending authentication.
+    await tx.staffOidcTransaction.update({ where: { id: flow.id },
+      data: { userId: user.id, sessionId: identitySessionId, authVersion: user.authVersion,
+        expiresAt: new Date(now.getTime() + STAFF_FLOW_MS) } });
     return { identitySessionId, userId: user.id, authVersion: user.authVersion };
   });
 }
 
 export async function createStaffLogoutFence(tx: Prisma.TransactionClient, input: {
-  issuer: string; clientId: string; kind: "sid" | "sid-sub" | "sub" | "local"; value: string; revokedThrough: Date; now: Date;
+  issuer: string; clientId: string; kind: "sid" | "sid-sub" | "sub" | "local" | "session"; value: string; revokedThrough: Date; now: Date;
 }) {
   const key = { issuer: input.issuer, clientId: input.clientId, kind: input.kind, valueHash: hashStaffProtocolValue(input.value) };
   const existing = await tx.staffOidcRevocation.findUnique({ where: { issuer_clientId_kind_valueHash: key } });
@@ -109,5 +146,47 @@ export async function createStaffLogoutFence(tx: Prisma.TransactionClient, input
     where: { issuer_clientId_kind_valueHash: key },
     create: { ...key, revokedThrough, expiresAt: new Date(input.now.getTime() + IDENTITY_SESSION_MAX_AGE_SECONDS * 1_000 + STAFF_FLOW_MS) },
     update: { revokedThrough, expiresAt: new Date(input.now.getTime() + IDENTITY_SESSION_MAX_AGE_SECONDS * 1_000 + STAFF_FLOW_MS) }
+  });
+}
+
+/** Cancel this browser's flow even if IdP logout has already invalidated its JWT. */
+export async function endStaffBrowserSessions(input: {
+  actor: { userId: string; sessionId: string } | null;
+  flowHash: string | null;
+  everywhere: boolean;
+  issuer: string;
+  clientId: string;
+  now?: Date;
+}): Promise<string | null> {
+  return staffIdentityTransaction(async (tx) => {
+    const now = input.now ?? new Date();
+    const flow = input.flowHash ? await tx.staffOidcTransaction.findUnique({ where: { tokenHash: input.flowHash } }) : null;
+    const currentFlow = flow && flow.expiresAt > now ? flow : null;
+    if (currentFlow) await tx.staffOidcTransaction.updateMany({
+      where: { id: currentFlow.id, consumedAt: null }, data: { consumedAt: now }
+    });
+    const actors = new Map<string, Set<string>>();
+    for (const actor of [input.actor, currentFlow?.userId && currentFlow.sessionId
+      ? { userId: currentFlow.userId, sessionId: currentFlow.sessionId } : null]) {
+      if (!actor) continue;
+      if (!actors.has(actor.userId)) actors.set(actor.userId, new Set());
+      actors.get(actor.userId)!.add(actor.sessionId);
+    }
+    let idTokenHint: string | null = null;
+    for (const [userId, ids] of actors) {
+      await createStaffLogoutFence(tx, { issuer: input.issuer, clientId: input.clientId,
+        kind: "local", value: userId, revokedThrough: now, now });
+      const everywhere = input.everywhere && (!input.actor || input.actor.userId === userId);
+      for (const id of ids) {
+        const stored = await tx.session.findUnique({ where: { id }, select: { userId: true, idToken: true } });
+        if (stored?.userId === userId && stored.idToken) idTokenHint = stored.idToken;
+      }
+      if (everywhere) await tx.user.update({ where: { id: userId }, data: { authVersion: { increment: 1 } } });
+      await tx.session.updateMany({
+        where: { userId, ...(everywhere ? {} : { id: { in: [...ids] } }), revokedAt: null },
+        data: { revokedAt: now, idToken: null }
+      });
+    }
+    return idTokenHint;
   });
 }

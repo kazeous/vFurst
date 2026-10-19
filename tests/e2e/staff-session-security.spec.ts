@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { createStaffFixture, loginAsStaff, mockStaffClaims, type StaffFixture } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -9,6 +10,8 @@ let admin: StaffFixture;
 let other: StaffFixture;
 let orgId: string;
 let eventId: string;
+const fixtureFenceHashes = new Set<string>();
+const protocolHash = (value: string) => createHash("sha256").update(value).digest("hex");
 test.describe.configure({ mode: "serial" });
 test.use({ serviceWorkers: "block" });
 test.beforeAll(async () => {
@@ -23,12 +26,25 @@ test.beforeAll(async () => {
   } })).id;
 });
 test.afterAll(async () => {
+  if (fixtureFenceHashes.size) await prisma.staffOidcRevocation.deleteMany({ where: { valueHash: { in: [...fixtureFenceHashes] } } });
   if (orgId) await prisma.organization.deleteMany({ where: { id: orgId, slug: run } });
   if (owner) await prisma.user.deleteMany({ where: { id: { in: [owner.id, admin.id, other.id] } } });
   await prisma.$disconnect();
 });
 async function storedSession(userId: string) {
   return prisma.session.findFirstOrThrow({ where: { userId, revokedAt: null }, orderBy: { createdAt: "desc" } });
+}
+async function retireMockIdpSession(session: Awaited<ReturnType<typeof storedSession>>, sub: string) {
+  const now = new Date();
+  const valueHash = protocolHash(JSON.stringify([sub, session.oidcSid]));
+  fixtureFenceHashes.add(valueHash);
+  // Reproduce the committed result of authentik's signed old-sid logout while
+  // the browser is doing fresh authentication. Signature checks have separate tests.
+  await prisma.$transaction([
+    prisma.staffOidcRevocation.create({ data: { issuer: session.oidcIssuer!, clientId: session.oidcClientId!,
+      kind: "sid-sub", valueHash, revokedThrough: now, expiresAt: new Date(now.getTime() + 43_800_000) } }),
+    prisma.session.update({ where: { id: session.id }, data: { revokedAt: now, idToken: null } })
+  ]);
 }
 async function completeMock(page: Page, staff: StaffFixture, overrides: Parameters<typeof mockStaffClaims>[0] = { email: staff.email }) {
   await page.waitForURL((url) => url.port === "8090");
@@ -99,11 +115,59 @@ test("step-up requires new primary authentication and MFA and preserves the sess
   await page.waitForURL((url) => url.port === "8090");
   expect(new URL(page.url()).searchParams.get("prompt")).toBe("login");
   expect(new URL(page.url()).searchParams.get("max_age")).toBe("10");
+  // An existing tab may poll the session while the MFA tab is still at the IdP.
+  // Auth.js must not parse the pending flow cookie as a JWT chunk or clear it.
+  expect(await page.request.get("/api/auth/session").then(response => response.json()))
+    .toMatchObject({ identitySessionId: before.id });
   await completeMock(page, owner);
   await expect(page).toHaveURL((url) => url.pathname === "/dashboard");
   const after = await storedSession(owner.id);
-  expect(after.id).toBe(before.id);
+  expect(after.id).not.toBe(before.id);
+  expect(after.createdAt).toEqual(before.createdAt);
+  expect(after.idleExpiresAt).toEqual(before.idleExpiresAt);
   expect(after.expires).toEqual(before.expires);
+  expect((await prisma.session.findUniqueOrThrow({ where: { id: before.id } })).revokedAt).not.toBeNull();
+});
+
+test("fresh step-up survives IdP retirement of the old sid without reviving its original cookie", async ({ page, request }) => {
+  await loginAsStaff(page, { ...owner, sid: `${run}-retire-old` });
+  const before = await storedSession(owner.id);
+  const originalCookie = (await page.context().cookies("http://localhost:3000")).filter(c => c.name.startsWith("vfurst-staff")).map(c => `${c.name}=${c.value}`).join("; ");
+  await page.goto("/staff/verify?returnTo=/dashboard");
+  await page.getByRole("button", { name: "Verify your account", exact: true }).click();
+  await page.waitForURL(url => url.port === "8090");
+  await retireMockIdpSession(before, owner.sub);
+  await completeMock(page, owner, { email: owner.email, sid: `${run}-retire-new` });
+  await expect(page).toHaveURL(url => url.pathname === "/dashboard");
+  const after = await storedSession(owner.id);
+  expect(after.id).not.toBe(before.id);
+  expect(after.expires).toEqual(before.expires);
+  expect(after.createdAt).toEqual(before.createdAt);
+  expect(after.idleExpiresAt).toEqual(before.idleExpiresAt);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    expect(await (await request.get("/api/auth/session", { headers: { cookie: originalCookie } })).json()).toBeNull();
+  }
+  expect((await prisma.session.findUniqueOrThrow({ where: { id: before.id } })).revokedAt).not.toBeNull();
+  expect(await page.request.get("/api/auth/session").then(r => r.json())).toMatchObject({ identitySessionId: after.id });
+});
+
+test("logout cancels a pending step-up even when old-sid logout already cleared its JWT binding", async ({ page, context }) => {
+  await loginAsStaff(page, { ...owner, sid: `${run}-cancel-old` });
+  const before = await storedSession(owner.id);
+  await page.goto("/staff/sessions");
+  const pending = await context.newPage();
+  try {
+    await pending.goto("/staff/verify?returnTo=/dashboard");
+    await pending.getByRole("button", { name: "Verify your account", exact: true }).click();
+    await pending.waitForURL(url => url.port === "8090");
+    await retireMockIdpSession(before, owner.sub);
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await page.waitForURL("http://localhost:3000/", { waitUntil: "load" });
+    await completeMock(pending, owner, { email: owner.email, sid: `${run}-cancel-new` });
+    await expect(pending).toHaveURL(url => url.pathname === "/login");
+    expect(await prisma.session.count({ where: { userId: owner.id, revokedAt: null, createdAt: before.createdAt } })).toBe(0);
+    expect((await prisma.staffOidcTransaction.findFirstOrThrow({ where: { userId: owner.id, purpose: "step-up" }, orderBy: { createdAt: "desc" } })).consumedAt).not.toBeNull();
+  } finally { await pending.close(); }
 });
 
 for (const proof of ["stale", "missing-mfa"] as const) {

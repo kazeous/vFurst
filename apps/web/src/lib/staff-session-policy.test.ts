@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertStaffStepUp, hasFreshStaffProof, parseStaffAssurance, staffOidcCookiePolicy } from "./staff-session-policy";
+import { assertStaffStepUp, hasFreshStaffProof, parseStaffAssurance, staffOidcCookiePolicy, staffOidcFlowCookieName } from "./staff-session-policy";
 
 const now = new Date("2026-10-19T10:00:00Z");
 const primary = now.getTime() / 1_000;
@@ -9,6 +9,14 @@ function claims(overrides = {}) {
   }, ...overrides };
 }
 describe("Pawket-compatible staff assurance", () => {
+  it.each(["https://vfurst.reyuugames.com", "http://localhost:3000"])("keeps the browser flow outside Auth.js session chunks on %s", (baseUrl) => {
+    const policy = staffOidcCookiePolicy(baseUrl);
+    const flowName = staffOidcFlowCookieName(baseUrl);
+    expect(flowName).toBe(`${baseUrl.startsWith("https:") ? "__Host-" : ""}vfurst-oidc-flow`);
+    for (const cookie of [...Object.values(policy).filter(cookie => cookie !== policy.sessionToken), { name: flowName }]) {
+      expect(cookie.name.startsWith(policy.sessionToken.name)).toBe(false);
+    }
+  });
   it("protects every production OIDC cookie against sibling-host shadowing", () => {
     const policy = staffOidcCookiePolicy("https://vfurst.reyuugames.com");
     for (const cookie of Object.values(policy)) {

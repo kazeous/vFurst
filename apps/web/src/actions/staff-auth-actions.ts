@@ -3,10 +3,9 @@
 import { getStaffSession, signOut } from "@/lib/auth";
 import { getCentralAppUrl } from "@/lib/central-url";
 import { buildStaffEndSessionUrl, getStaffOidcMetadata } from "@/lib/staff-oidc";
-import { prisma } from "@vfurst/db";
 import { redirect } from "next/navigation";
-import { createStaffLogoutFence, staffIdentityTransaction } from "@/lib/staff-oidc-store";
-import { clearStaffOidcFlow } from "@/lib/staff-oidc-flow";
+import { createStaffLogoutFence, endStaffBrowserSessions, staffIdentityTransaction } from "@/lib/staff-oidc-store";
+import { clearStaffOidcFlow, currentStaffOidcFlowHash } from "@/lib/staff-oidc-flow";
 import { runActionWithState } from "@/lib/action-state";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { ExpectedActionError } from "@/lib/expected-action-error";
@@ -28,27 +27,11 @@ export async function staffSignOutEverywhere(): Promise<never> {
 
 async function endStaffSession(everywhere: boolean): Promise<never> {
   const session = await getStaffSession();
-  let idTokenHint: string | null = null;
-
-  if (session?.identitySessionId) {
-    const stored = await prisma.session.findUnique({
-      where: { id: session.identitySessionId },
-      select: { idToken: true }
-    });
-    idTokenHint = stored?.idToken ?? null;
-    await staffIdentityTransaction(async (tx) => {
-      const now = new Date();
-      await createStaffLogoutFence(tx, {
-        issuer: process.env.AUTH_AUTHENTIK_ISSUER!, clientId: process.env.AUTH_AUTHENTIK_ID!,
-        kind: "local", value: session.user.id, revokedThrough: now, now
-      });
-      if (everywhere) await tx.user.update({ where: { id: session.user.id }, data: { authVersion: { increment: 1 } } });
-      await tx.session.updateMany({
-        where: { userId: session.user.id, ...(everywhere ? {} : { id: session.identitySessionId }), revokedAt: null },
-        data: { revokedAt: now, idToken: null }
-      });
-    });
-  }
+  const idTokenHint = await endStaffBrowserSessions({
+    actor: session?.identitySessionId ? { userId: session.user.id, sessionId: session.identitySessionId } : null,
+    flowHash: await currentStaffOidcFlowHash(), everywhere,
+    issuer: process.env.AUTH_AUTHENTIK_ISSUER!, clientId: process.env.AUTH_AUTHENTIK_ID!
+  });
 
   await clearStaffOidcFlow();
   await signOut({ redirect: false });
@@ -75,8 +58,13 @@ export async function revokeOtherStaffSession(_state: ActionFormState, formData:
     if (!session?.user?.id || session.staffSecurity.leaseRequired) throw new ExpectedActionError("Sign in again before managing sessions.");
     const id = z.string().uuid().parse(formData.get("sessionId"));
     if (id === session.identitySessionId) throw new ExpectedActionError("Use Log out to end this session.");
-    const revoked = await prisma.session.updateMany({
-      where: { id, userId: session.user.id, revokedAt: null }, data: { revokedAt: new Date(), idToken: null }
+    const revoked = await staffIdentityTransaction(async (tx) => {
+      const target = await tx.session.findUnique({ where: { id }, select: { userId: true, oidcIssuer: true, oidcClientId: true } });
+      if (!target || target.userId !== session.user.id || !target.oidcIssuer || !target.oidcClientId) return { count: 0 };
+      const now = new Date();
+      await createStaffLogoutFence(tx, { issuer: target.oidcIssuer, clientId: target.oidcClientId,
+        kind: "session", value: id, revokedThrough: now, now });
+      return tx.session.updateMany({ where: { id, userId: session.user.id, revokedAt: null }, data: { revokedAt: now, idToken: null } });
     });
     if (revoked.count !== 1) throw new ExpectedActionError("This session has already ended.");
     revalidatePath("/staff/sessions");
