@@ -301,21 +301,16 @@ async function loginAs(page: Page, email: string) {
   await loginAsAttendee(page, { subdomain: orgASlug }, email, { password });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      const interrupted =
-        error instanceof Error &&
-        (error.message.includes("ERR_ABORTED") || error.message.includes("interrupted by another navigation"));
-      if (!interrupted || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitAction(page: Page, pathname: string, form: Locator, buttonName: string) {
@@ -542,7 +537,9 @@ test("vendor file policy rejects unsupported and forged uploads before persisten
   await submitAction(page, vendorPath, form, "Submit vendor application");
   expect(await prisma.vendorApplication.count({ where: { businessName: invalidVendorName } })).toBe(0);
 
-  await navigateAfterRejectedAction(page, vendorPath);
+  // The file policy rejects the upload inline and the form stays on the page.
+  await expect(page.getByTestId("vendor-error")).toContainText("Vendor files must be PDF, PNG, JPEG, or WebP files.");
+  await page.goto(vendorPath);
   form = page.getByRole("heading", { name: "Apply for dealer space" }).locator("xpath=ancestor::form");
   await form.getByLabel("Contact name").fill("Forged Vendor");
   await expect(form.getByLabel("Contact email")).toHaveValue(vendorAEmail);

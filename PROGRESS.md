@@ -38,6 +38,79 @@ Type-check/lint/test 32/32 tasks (133 web unit tests); build 10/10; split topolo
 
 ## Session log
 
+### 2026-10-19 — Deterministic waits after rejected actions (out-of-phase test repair)
+
+- **Executor:** Claude, side session; branch `test/e2e-rejected-action-waits` from `origin/staging` (`3722353`). Test-only; no production code changed. This closes the two "Not changed" items of the "Deterministic waits after the registration and provisioning actions" entry (commit `95126f4` on `test/e2e-action-redirect-waits`). At the user's request, this branch then merged `test/e2e-sepay-qr-navigation-race` (`0c425bf`) and `test/e2e-action-redirect-waits` (`95126f4`) so all three repairs go to `staging` in one PR; both entries follow this one.
+- **What each rejected action does in the page:** a scratch probe (not committed) logged, at each of the 49 `navigateAfterRejectedAction` calls in the eight `*-resource-authorization` specs, the page's error boundary, alerts, document loads and history changes after the action:
+  - 40 follow a tampered action that throws on the server. Its POST answers 500 and the route error boundary (`data-testid="route-error"`) replaces the page. None of these actions calls `redirect()` or returns `redirectTo`, so nothing navigates.
+  - 3 follow an inline rejection: the voucher form's "Cart not found." (`raffle-voucher`), the vendor file policy (`staff-vendor`), and the product image policy (`store`, already asserted before the call).
+  - 5 follow only the sign-in helper, which already returns after its landing page has loaded.
+  - The last one sits in the registration status/refund/email loop: its first pass follows sign-in, the next three follow route-error rejections.
+  - `apps/web` registers no `beforeunload` handler, so nothing else can cancel a goto. The retry branch never fired: 0 retries in the 20× baseline, the mapping run and the old specs' probe run below. No call site needs it.
+- **What changed:**
+  - `navigateAfterRejectedAction` in the eight specs waits for the route error boundary and then calls `page.goto` once; the retry loop and its 500 ms sleep are gone. The post-sign-in calls are plain `page.goto`. The three inline calls wait for their error (`cart-voucher-error`, `vendor-error`, and the existing `create-product-error` assertion), then go to the page. The registration status/refund/email loop opens the page at the top of each pass and waits for the boundary after each rejected action, including the last one ("Resend email").
+  - `registration-policy.spec.ts` "disabled transfers…" waits up to 30 s for the route error boundary instead of sleeping `waitForTimeout(1_000)`. `requestRegistrationTransfer` throws `RegistrationPolicyError` from a plain form, so the boundary renders only after the server has rejected the request. The test also asserts that no `RegistrationTransferRequest` row exists for the event. A successful request leaves the registration untouched, so the existing status and count assertions could not tell a rejection from an accepted request.
+- **Verification:**
+  - `--repeat-each=20` on the production build, one worker, all nine specs. **Before:** 840/840 (24.4 min). **After:** 840/840 (24.4 min). The transfer test's mean time went from 2.23 s to 1.27 s.
+  - Scratch probe, not committed, `--repeat-each=5`. An init script wraps `window.fetch` and delays in-page POST requests or responses by 1.5 s. The hold variant also holds, for 3 s, any top-level document load that starts within 2 s of an action's response (`page.route` with `route.continue`). Before the merges, this branch still had the old `submitRegistration` sleep, so the `registration-policy` copies used for the probe carried `95126f4`'s version. The transfer test is their only difference.
+
+    | Probe | Old specs | Changed specs |
+    |---|---|---|
+    | All nine specs, response +1.5 s, next goto held 3 s | 210/210 passed, 270 gotos held, 0 retries | 210/210 passed, 270 held |
+    | `registration-policy`, request +1.5 s | 15/15 passed, but the transfer POST was sent in **0 of 5** runs: the test asserted and navigated away before the action ran | 15/15 passed, transfer POST sent 5 of 5 |
+
+  - Not run: a scratch mutation that disables the server's transfer check, to show the old transfer test passing without the policy; the session's permission policy refused the edit. The claim that the old assertions could not detect an accepted request rests on reading `createRegistrationTransferRequest`.
+  - The nine specs type-check under the base `strict` config in a scratch run. ESLint's type-aware config does not include `tests/e2e`.
+  - Two dev-mode runs of `registration-policy` against unmodified code (old and changed spec): 3/3 each.
+  - `npm run build --workspace @vfurst/web` (only the known BullMQ warning), then full production E2E on one worker: **171 passed / 0 failed / 0 did not run (3.9 min)**. Port 3000 was checked free on IPv4 and `[::1]` before every run.
+  - `npx turbo run type-check lint test build --concurrency=1`: **29/29** tasks. Unit tests: web 487, auth 44, contracts 19, db 51, worker 43, email 25, tenant-context 50 = **719**. 28 tasks were replayed from the Turbo cache because no task input changed (no task covers `tests/e2e`).
+- **Combined branch:** both merges conflicted only in this file, and both were resolved by keeping every entry. The two specs merged cleanly. After the merges, neither `launch-critical-paths.spec.ts` nor `registration-policy.spec.ts` has a fixed sleep left. On the merged branch (no app, package or script change against `staging`, so the same web build was used), full production E2E on one worker gave **171 passed / 0 failed / 0 did not run (3.8 min)**, and the turbo gates gave **29/29** with **719** unit tests (28 cache replays).
+- **Next:** unchanged — Phase 2 unit 2.1 (the corrective identity acceptance closed in PR #37).
+
+### 2026-10-19 — Deterministic waits after the registration and provisioning actions (out-of-phase test repair)
+
+- **Executor:** Claude, a side session started from the SePay QR navigation-race session; branch `test/e2e-action-redirect-waits` from `origin/staging` (`f6764fb`). Test-only; no production code changed. This closes the two "Not changed" items in that session's entry (commit `0c425bf` on `test/e2e-sepay-qr-navigation-race`, not merged yet, so its entry is not in this file on this branch).
+- **What changed:**
+  - `registration-policy.spec.ts` `submitRegistration` no longer sleeps a fixed `waitForTimeout(1_500)`. It waits for whichever outcome comes first, each bounded at 30 s. On success, the app's `window.location.replace` to `/register?success=<id>` must finish loading. On rejection, the inline `registration-error` alert must appear. The helper returns `"registered"` or `"rejected"`. The approval test now asserts `"registered"`. The concurrent per-account cap test used to swallow both outcomes with `.catch(() => undefined)`. It now asserts one of each, and it ends only after both actions have finished.
+  - `launch-critical-paths.spec.ts` "admin CRUD…": after the DB poll for the provisioned organization, the test waits for the action's `redirect()` to `/platform/organizations/<id>` before its later `goto` to the check-in page.
+- **Verification:**
+  - `--repeat-each=20` on the production build, one worker. **Before:** registration-policy 60/60 (3 tests × 20), admin CRUD 20/20. **After:** 60/60 and 20/20. Neither race shows up at normal speed. Mean test time after the change: approval 4.3 s → 2.9 s, cap 3.3 s → 2.1 s.
+  - Scratch probe, not committed, `--repeat-each=5`. An init script wraps `window.fetch` and delays in-page POST requests or responses by 1.5 s. Two variants add to that delay: one holds the load of the test's next `goto` target for 3 s (`page.route` with `route.continue`, not `route.fetch`). The other strips the flight data from `x-action-redirect` responses, which forces Next's hard-navigation fallback.
+
+    | Probe | Old spec | Fixed spec |
+    |---|---|---|
+    | Registration, response +1.5 s | approval 5/5 failed: `page.goto: net::ERR_ABORTED` at staff `/login` | 15/15 (whole file) |
+    | Registration, response +1.5 s, `/login` held 3 s | approval 4/5 failed (same error), 1/5 passed | 15/15 |
+    | Registration, request +1.5 s (the action itself runs late) | approval 5/5 failed: `findFirstOrThrow` found no registration | 15/15 |
+    | Admin CRUD, response +1.5 s | 5/5 passed | 5/5 |
+    | Admin CRUD, response +1.5 s, check-in load held 3 s | 5/5 passed: Next's soft redirect does not abort a pending `goto` | 5/5 |
+    | Admin CRUD, the same plus forced hard-navigation fallback | 5/5 failed: `page.goto: net::ERR_ABORTED` at the check-in URL | 5/5 |
+
+    In the old-spec registration runs, the cap test never ran, because serial mode stopped after the approval failure. Run alone under the probe, it passed 5/5 with a delayed response. With a delayed request, it passed 4/5; the fifth repetition failed in `afterAll`, where `organization.deleteMany` hit a Postgres deadlock (`40P01`) with the losing submission's still-running transaction. The admin CRUD change is hardening: as with the settings case in `0c425bf`, it races only when Next falls back to a hard navigation.
+  - `npm run build --workspace @vfurst/web`, then full production E2E on one worker: **155 passed / 0 failed / 0 did not run** (3.4 min). Port 3000 was checked free on IPv4 and `[::1]` before every run.
+  - `npx turbo run type-check lint test build --concurrency=1`: **29/29** tasks. Unit tests: web 422, auth 44, contracts 19, db 50, worker 43, email 25, tenant-context 50 = **653**. 28 tasks were replayed from the Turbo cache because no task input changed (no task covers `tests/e2e`). Only `@vfurst/db:build` executed, since it always bypasses the cache. Both changed specs type-check under the base `strict` config in a scratch run.
+- **Not changed (follow-up candidates):**
+  - `registration-policy` "disabled transfers…" still sleeps `waitForTimeout(1_000)` after "Send transfer email" and then asserts that nothing changed.
+  - Eight `*-resource-authorization` specs (`event`, `hotel`, `badge-checkin`, `api-key-webhook`, `raffle-voucher`, `registration`, `staff-vendor`, `store`) handle the same race class with a retry: `navigateAfterRejectedAction` re-runs `goto` after `ERR_ABORTED` with a 500 ms sleep.
+- **Next:** unchanged — Phase 2 unit 2.1.
+
+### 2026-10-19 — SePay QR navigation-race flake (out-of-phase test repair)
+
+- **Problem.** A full production run on 2026-10-18 (verifying `test/e2e-cleanup-guards`) went 147 passed / 1 failed, and the rerun went 148/0. The failing test was `launch-critical-paths` "embedded SePay QR fulfills…". Its `page.goto(".../checkout/<order>?token=…&sepay=1")` failed with "Navigation … is interrupted by another navigation to" the same URL. "Show QR" runs `startSePayPayment`, which returns `redirectTo` that URL, and `ActionStateForm` then calls `window.location.replace`. The test polled the database for the PaymentAttempt and then started its own `goto`. The attempt commits before the action response reaches the page. When the response arrived while that `goto` was still pending, the app's navigation aborted it.
+- **Fix (tests only):** instead of a second `goto`, the test now waits for the app's navigation with `page.waitForURL(<QR URL>, { waitUntil: "load" })`. The spec's registration and vendor tests already use this idiom. The DB poll stays because it still asserts exactly one SePay attempt. The settings-hub test had the same shape: after "Save event settings" it called `goto(".../settings?saved=1")`, which is exactly where the action's `redirect()` sends it. It now waits for that URL too. No assertion changed.
+- **Sweep:** I checked every spec click on an `ActionStateForm`/`useActionRedirect` action that is followed by a `goto`. The other cases already wait (`waitForURL`, `Promise.all`, `waitForEvent("load")`), end in an inline error, or only `revalidatePath` without navigating.
+- **Verification:**
+  - Baseline on the unchanged spec, running both tests with `--repeat-each=20`: 40/40 passed. The race does not show up when the tests run alone.
+  - Scratch probe (not committed): the page waits 1.5 s before handling the action response, and loads of the redirect URL are held for 3 s. Unchanged SePay test: 5/5 failed (`page.goto: net::ERR_ABORTED` at the QR URL). Fixed: 5/5 passed.
+  - The same probe on the settings test: unchanged 5/5 passed and fixed 5/5 passed. Next applies that `redirect()` as a soft navigation, which does not abort a pending `goto`. It races only when Next falls back to a hard navigation, which happens when it cannot render the target server-side (as before PR #30). So the settings change is hardening, not a reproduced flake.
+  - After the fix, both tests with `--repeat-each=20`: 40/40.
+  - `npm run build --workspace @vfurst/web`, then full production E2E on one worker: **148 passed / 0 failed**.
+  - `npx turbo run type-check lint test build --concurrency=1`: **29/29** tasks (web unit tests 386/386). 28 tasks replayed from the Turbo cache because no task input changed; no task covers `tests/e2e`. The changed spec type-checks under the base `strict` config in a scratch run.
+- **Not changed (follow-up candidates):**
+  - `launch-critical-paths` "admin CRUD…": "Provision organization" (`redirect()` to `/platform/organizations/<id>`) is followed by a later `goto` to the check-in page, with no wait for that redirect. This is the same exposure as the settings case: it can only race on a hard-navigation fallback.
+  - `registration-policy.spec.ts` `submitRegistration`: it clicks "Complete registration" (a `redirectTo` hard navigation) and then sleeps a fixed 1.5 s before the caller's DB read and `goto`.
+- **Next:** unchanged — Phase 2 unit 2.1.
+
 ### 2026-10-19 — Shared reyuuGAMES Account branding correction
 
 - The user reported vendor branding in verification email and the default login page, and authorized removing user-visible vendor branding. The previous SSO unit remains accepted; this is one separate presentation correction, with no Phase 2 work.

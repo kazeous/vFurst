@@ -112,15 +112,26 @@ async function prepareRegistration(page: Page, targetOrgSlug: string) {
   return page;
 }
 
-async function submitRegistration(page: Page) {
+/**
+ * Submits the review step and waits for its outcome. A successful submission
+ * returns redirectTo and the form leaves with window.location.replace; until
+ * that page has loaded, the caller's next page.goto would race it. A rejected
+ * submission stays on the form and shows the inline error.
+ */
+async function submitRegistration(page: Page): Promise<"registered" | "rejected"> {
   await page.getByRole("button", { name: "Complete registration" }).click({ noWaitAfter: true });
-  await page.waitForTimeout(1_500);
+  return Promise.race([
+    page
+      .waitForURL((url) => url.pathname === "/register" && url.searchParams.has("success"), { waitUntil: "load", timeout: 30_000 })
+      .then(() => "registered" as const),
+    page.getByTestId("registration-error").waitFor({ timeout: 30_000 }).then(() => "rejected" as const)
+  ]);
 }
 
 test("required approval remains separate from paid registration status", async ({ page }) => {
   await login(page, attendeeEmail);
   await prepareRegistration(page, orgSlug);
-  await submitRegistration(page);
+  expect(await submitRegistration(page)).toBe("registered");
 
   const created = await prisma.registration.findFirstOrThrow({ where: { eventId: approvalEventId, portalAccountId: attendeeId } });
   expect(created.status).toBe("CONFIRMED");
@@ -144,7 +155,11 @@ test("the per-account cap survives concurrent submissions", async ({ browser }) 
   try {
     await Promise.all(pages.map((page) => loginAsAttendee(page, { subdomain: capOrgSlug }, attendeeEmail, { password })));
     await Promise.all(pages.map((page) => prepareRegistration(page, capOrgSlug)));
-    await Promise.all(pages.map((page) => submitRegistration(page).catch(() => undefined)));
+    // One submission takes the account's only slot and the other is rejected
+    // inline. Waiting for both also keeps afterAll from deleting the
+    // organizations while the losing action is still running.
+    const outcomes = await Promise.all(pages.map((page) => submitRegistration(page)));
+    expect(outcomes.sort()).toEqual(["registered", "rejected"]);
 
     await expect.poll(async () => prisma.registration.count({ where: { eventId: capEventId, portalAccountId: capAttendeeId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } } })).toBe(1);
   } finally {
@@ -168,11 +183,14 @@ test("disabled transfers are rejected by the server policy", async ({ page }) =>
   });
   await requestForm.getByLabel("Recipient email").fill(`blocked-recipient-${runId}@example.com`);
   await requestForm.getByRole("button", { name: "Send transfer email" }).click({ noWaitAfter: true });
-  await page.waitForTimeout(1_000);
+  // The action throws RegistrationPolicyError from a plain form, so the route
+  // error boundary replaces the page once the server has rejected it.
+  await expect(page.getByTestId("route-error")).toBeVisible({ timeout: 30_000 });
 
   const unchanged = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
   expect(unchanged.status).toBe("CONFIRMED");
   expect(await prisma.registration.count({ where: { eventId: approvalEventId } })).toBe(1);
+  expect(await prisma.registrationTransferRequest.count({ where: { eventId: approvalEventId } })).toBe(0);
   await page.goto(`/dashboard/events/${approvalEventId}/registrations/transfers`);
   await expect(page.getByRole("heading", { name: "Transfers disabled" })).toBeVisible();
 });

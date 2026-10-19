@@ -169,18 +169,16 @@ async function loginAsOwnerA(page: Page) {
   await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      if (!(error instanceof Error) || !error.message.includes("ERR_ABORTED") || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitTamperedAction(
@@ -241,7 +239,7 @@ test("registration tier mutations cannot combine an owned page with foreign reso
   await loginAsOwnerA(page);
   const typesPath = `/dashboard/events/${eventAId}/registrations/types`;
 
-  await navigateAfterRejectedAction(page, typesPath);
+  await page.goto(typesPath);
   const createForm = page.getByRole("button", { name: "Create tier" }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Name").fill(attackTierName);
   await createForm.locator('input[name="price"]').fill("10.00");
@@ -266,7 +264,7 @@ test("add-on mutations cannot combine an owned page with foreign resource IDs", 
   await loginAsOwnerA(page);
   const typesPath = `/dashboard/events/${eventAId}/registrations/types`;
 
-  await navigateAfterRejectedAction(page, typesPath);
+  await page.goto(typesPath);
   const createForm = page.getByRole("button", { name: "Add", exact: true }).locator("xpath=ancestor::form");
   await createForm.getByLabel("Name").fill(attackAddOnName);
   await createForm.locator('input[name="price"]').fill("5.00");

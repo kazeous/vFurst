@@ -166,21 +166,16 @@ async function loginAsAttendeeA(page: Page) {
   await expect(page.getByRole("heading", { name: "My registrations" })).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Opens pathname after a tampered action has been rejected. The action throws
+ * on the server, so its POST answers 500 and the route error boundary
+ * replaces the page; nothing navigates. Waiting for the boundary asserts the
+ * rejection the user sees, and the goto starts only after the page has
+ * finished handling the action.
+ */
 async function navigateAfterRejectedAction(page: Page, pathname: string) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await page.goto(pathname);
-      return;
-    } catch (error) {
-      const isInterruptedNavigation =
-        error instanceof Error &&
-        (error.message.includes("ERR_ABORTED") || error.message.includes("interrupted by another navigation"));
-      if (!isInterruptedNavigation || attempt === 2) {
-        throw error;
-      }
-      await page.waitForTimeout(500);
-    }
-  }
+  await expect(page.getByTestId("route-error")).toBeVisible();
+  await page.goto(pathname);
 }
 
 async function submitTamperedAction(
@@ -357,9 +352,12 @@ test("status, refund, and email actions reject a foreign registration ID", async
   expect((await page.request.get(`/dashboard/events/${eventAId}/registrations/${registrationBId}`)).status()).toBe(404);
 
   for (const buttonName of ["Approve registration", "Cancel", "Refund", "Resend email"]) {
-    await navigateAfterRejectedAction(page, detailPath);
+    await page.goto(detailPath);
     const form = page.getByRole("button", { name: buttonName, exact: true }).locator("xpath=ancestor::form");
     await submitTamperedAction(page, detailPath, form, buttonName, "registrationId", registrationBId);
+    // The rejected action renders the route error boundary and does not
+    // navigate, so the next iteration's goto cannot race it.
+    await expect(page.getByTestId("route-error")).toBeVisible();
     await expectOriginalRegistrations();
   }
 });
@@ -368,7 +366,7 @@ test("tier upgrade rejects both a foreign registration and a foreign target tier
   await loginAsOwnerA(page);
   const detailPath = `/dashboard/events/${eventAId}/registrations/${registrationAId}`;
 
-  await navigateAfterRejectedAction(page, detailPath);
+  await page.goto(detailPath);
   let form = page.getByRole("button", { name: "Upgrade", exact: true }).locator("xpath=ancestor::form");
   await submitTamperedAction(page, detailPath, form, "Upgrade", "registrationId", registrationBId);
   await expectOriginalRegistrations();
@@ -383,7 +381,7 @@ test("bulk and attendee-note mutations reject mixed or foreign resources", async
   await loginAsOwnerA(page);
   const registrationsPath = `/dashboard/events/${eventAId}/registrations`;
 
-  await navigateAfterRejectedAction(page, registrationsPath);
+  await page.goto(registrationsPath);
   const bulkForm = page.getByRole("button", { name: "Cancel selected" }).locator("xpath=ancestor::form");
   await submitTamperedAction(
     page,
@@ -413,7 +411,7 @@ test("all transfer actions derive tenant and event from the source registration"
   await loginAsOwnerA(page);
   const detailPath = `/dashboard/events/${eventAId}/registrations/${registrationAId}`;
 
-  await navigateAfterRejectedAction(page, detailPath);
+  await page.goto(detailPath);
   const detailTransferForm = page.getByRole("button", { name: "Transfer registration" }).locator("xpath=ancestor::form");
   await detailTransferForm.getByLabel("New attendee name").fill("Rejected Detail Transfer");
   await detailTransferForm.getByLabel("New attendee email").fill(transferEmail);
