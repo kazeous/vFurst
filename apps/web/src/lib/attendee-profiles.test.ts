@@ -120,12 +120,24 @@ describe("assertAttendeeProfileCeiling", () => {
 });
 
 describe("listEventAttendees", () => {
+  it("lists without a separate self-profile read when the account holder is listed", async () => {
+    const tx = client();
+    const result = await listEventAttendees(transaction(tx), { account, event });
+    expect(result.attendees[0].isAccountHolder).toBe(true);
+    expect(tx.attendeeProfile.findUnique).not.toHaveBeenCalled();
+    expect(tx.attendeeProfile.create).not.toHaveBeenCalled();
+    expect(tx.attendeeProfile.findMany).toHaveBeenCalledOnce();
+  });
+
   it("ensures the account holder profile and lists it first", async () => {
     const tx = client();
     tx.attendeeProfile.findUnique.mockResolvedValue(null);
-    tx.attendeeProfile.findMany.mockResolvedValue([{ ...self, id: "other", accountHolderOf: null }, { ...self, id: "created" }]);
+    tx.attendeeProfile.findMany
+      .mockResolvedValueOnce([{ ...self, id: "other", accountHolderOf: null }])
+      .mockResolvedValueOnce([{ ...self, id: "other", accountHolderOf: null }, { ...self, id: "created" }]);
     const result = await listEventAttendees(transaction(tx), { account, event });
     expect(tx.attendeeProfile.create).toHaveBeenCalledOnce();
+    expect(tx.attendeeProfile.findMany).toHaveBeenCalledTimes(2);
     expect(result.attendees.map(({ id }) => id)).toEqual(["created", "other"]);
     expect(result.attendees[0].isAccountHolder).toBe(true);
     expect(tx.attendeeProfile.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { orgId: account.orgId, portalAccountId: account.id } }));

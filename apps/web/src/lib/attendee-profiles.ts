@@ -125,8 +125,12 @@ export async function listEventAttendees(
   input: { account: ProfileAccount; event: { id: string; orgId: string; settings: Prisma.JsonValue } }
 ): Promise<EventAttendeeList> {
   if (input.event.orgId !== input.account.orgId) throw new PublicActionError("That attendee is not available.");
-  await ensureAccountHolderProfile(client, input.account);
-  const { profiles, registrations, registered } = await eventProfiles(client, input.account, input.event.id);
+  let listed = await eventProfiles(client, input.account, input.event.id);
+  if (!listed.profiles.some((profile) => profile.accountHolderOf === input.account.id)) {
+    await ensureAccountHolderProfile(client, input.account);
+    listed = await eventProfiles(client, input.account, input.event.id);
+  }
+  const { profiles, registrations, registered } = listed;
   return {
     cap: getCoreEventSettings(input.event.settings).maxRegistrationsPerUser,
     used: registrations.length,

@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { listEventAttendees } from "@/lib/attendee-profiles";
 import { getPortalAccount } from "@/lib/portal-account";
-import { getRequestPortalOrg } from "@/lib/portal-request";
+import { getCachedRequestPortalOrg } from "@/lib/portal-request";
 
 const responseHeaders = {
   "cache-control": "private, no-store, max-age=0",
@@ -11,7 +11,7 @@ const responseHeaders = {
 };
 
 export async function GET(request: NextRequest) {
-  const org = await getRequestPortalOrg();
+  const org = await getCachedRequestPortalOrg();
   if (!org) return NextResponse.json({ account: null, attendees: null }, { status: 404, headers: responseHeaders });
   const account = await getPortalAccount(org);
   if (!account) return NextResponse.json({ account: null, attendees: null }, { status: 401, headers: responseHeaders });

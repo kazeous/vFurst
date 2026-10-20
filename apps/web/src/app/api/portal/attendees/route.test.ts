@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   org: vi.fn(), account: vi.fn(), event: vi.fn(), self: vi.fn(), profiles: vi.fn(), registrations: vi.fn()
 }));
-vi.mock("@/lib/portal-request", () => ({ getRequestPortalOrg: mocks.org }));
+vi.mock("@/lib/portal-request", () => ({ getCachedRequestPortalOrg: mocks.org }));
 vi.mock("@/lib/portal-account", () => ({ getPortalAccount: mocks.account }));
 vi.mock("@vfurst/db", () => ({ prisma: {
   event: { findFirst: mocks.event },
@@ -79,6 +79,7 @@ describe("private portal attendees", () => {
       ]
     });
     expect(mocks.profiles).toHaveBeenCalledWith(expect.objectContaining({ where: { orgId: org.id, portalAccountId: account.id } }));
+    expect(mocks.self).not.toHaveBeenCalled();
     expect(mocks.registrations).toHaveBeenCalledWith(expect.objectContaining({ where: {
       orgId: org.id, portalAccountId: account.id, eventId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }
     } }));
