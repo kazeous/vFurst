@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { createHmac, randomBytes } from "node:crypto";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -171,6 +171,7 @@ async function ensureConfirmedRegistration() {
       orgId,
       eventId,
       portalAccountId: attendee.id,
+      attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId, portalAccountId: attendee.id, fullName: attendee.name ?? attendee.email })).id,
       typeId: registrationTypeId,
       status: "CONFIRMED"
     }

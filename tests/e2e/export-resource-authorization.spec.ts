@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { createPortalAccountFixture } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -121,6 +121,7 @@ test.beforeAll(async () => {
         orgId: orgAId,
         eventId: eventAId,
         portalAccountId: attendeeA.id,
+        attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: orgAId, portalAccountId: attendeeA.id, fullName: "=2+3" })).id,
         typeId: typeA.id,
         status: "CHECKED_IN",
         checkedInAt: new Date("2028-09-01T10:00:00Z")
@@ -131,6 +132,7 @@ test.beforeAll(async () => {
         orgId: orgBId,
         eventId: eventAId,
         portalAccountId: ownerBAttendee.id,
+        attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: orgBId, portalAccountId: ownerBAttendee.id, fullName: "Export Owner B" })).id,
         typeId: typeB.id,
         status: "CONFIRMED"
       }

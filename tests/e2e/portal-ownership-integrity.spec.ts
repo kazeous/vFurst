@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
+import { attendeeProfileFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
 const orgIds: string[] = [];
 let requesterUserId: string;
-type TenantFixture = { orgId: string; eventId: string; typeId: string; portalAccountId: string };
+type TenantFixture = { orgId: string; eventId: string; typeId: string; portalAccountId: string; attendeeProfileId: string };
 let tenantA: TenantFixture;
 let tenantB: TenantFixture;
 
@@ -34,7 +35,8 @@ test.describe.serial("portal ownership integrity", () => {
       const account = await prisma.portalAccount.create({
         data: { orgId: organization.id, email: `attendee-${runId}@example.com` }
       });
-      fixtures.push({ orgId: organization.id, eventId: event.id, typeId: registrationType.id, portalAccountId: account.id });
+      const profile = await attendeeProfileFixture(prisma, { orgId: organization.id, portalAccountId: account.id, fullName: account.email });
+      fixtures.push({ orgId: organization.id, eventId: event.id, typeId: registrationType.id, portalAccountId: account.id, attendeeProfileId: profile.id });
     }
     [tenantA, tenantB] = fixtures;
     const requester = await prisma.user.create({ data: { email: `ownership-staff-${runId}@example.com` } });
@@ -52,7 +54,7 @@ test.describe.serial("portal ownership integrity", () => {
 
   test("a registration that points at another organization's portal account is rejected", async () => {
     await expect(prisma.registration.create({
-      data: { ...tenantB, portalAccountId: tenantA.portalAccountId }
+      data: { ...tenantB, portalAccountId: tenantA.portalAccountId, attendeeProfileId: tenantA.attendeeProfileId }
     })).rejects.toMatchObject({ code: "P2003" });
   });
 

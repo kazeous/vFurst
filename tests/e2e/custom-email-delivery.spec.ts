@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { createHmac, randomBytes } from "node:crypto";
-import { createPortalAccountFixture, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -143,6 +143,7 @@ test.beforeAll(async () => {
       orgId,
       eventId,
       portalAccountId: attendee.id,
+      attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId, portalAccountId: attendee.id, fullName: "Attendee <One> & Co" })).id,
       typeId: tier.id,
       status: "PENDING",
       approvalStatus: "APPROVED"

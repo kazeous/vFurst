@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { createHmac } from "node:crypto";
-import { createPortalAccountFixture, E2E_PORTAL_PASSWORD, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, E2E_PORTAL_PASSWORD, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -163,8 +163,8 @@ test("a cashier walk-in can be claimed through sign-up and shows the registratio
 });
 
 test("the same email at two organizations is two independent accounts", async ({ page, context }) => {
-  await Promise.all([{ org: orgA, event: eventA, account: accountA, typeId: typeAId }, { org: orgB, event: eventB, account: accountB, typeId: typeBId }].map(({ org, event, account, typeId }) => prisma.registration.create({
-    data: { orgId: org.id, eventId: event.id, portalAccountId: account.id, typeId, status: "CONFIRMED" }
+  await Promise.all([{ org: orgA, event: eventA, account: accountA, typeId: typeAId }, { org: orgB, event: eventB, account: accountB, typeId: typeBId }].map(async ({ org, event, account, typeId }) => prisma.registration.create({
+    data: { orgId: org.id, eventId: event.id, portalAccountId: account.id, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: org.id, portalAccountId: account.id, fullName: "Independent Attendee" })).id, typeId, status: "CONFIRMED" }
   })));
   expect(accountA.id).not.toBe(accountB.id);
   await loginAsAttendee(page, orgA, email, { returnTo: "/account/registrations" });

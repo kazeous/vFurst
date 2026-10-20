@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -137,10 +137,10 @@ test.beforeAll(async () => {
 
   const [registrationA] = await Promise.all([
     prisma.registration.create({
-      data: { orgId: orgAId, eventId: eventAId, portalAccountId: attendeeA.id, typeId: tierA.id, status: "CONFIRMED" }
+      data: { orgId: orgAId, eventId: eventAId, portalAccountId: attendeeA.id, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: orgAId, portalAccountId: attendeeA.id, fullName: "Raffle Attendee A" })).id, typeId: tierA.id, status: "CONFIRMED" }
     }),
     prisma.registration.create({
-      data: { orgId: orgBId, eventId: eventBId, portalAccountId: attendeeB.id, typeId: tierB.id, status: "CONFIRMED" }
+      data: { orgId: orgBId, eventId: eventBId, portalAccountId: attendeeB.id, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: orgBId, portalAccountId: attendeeB.id, fullName: "Raffle Attendee B" })).id, typeId: tierB.id, status: "CONFIRMED" }
     })
   ]);
 

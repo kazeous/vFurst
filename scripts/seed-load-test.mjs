@@ -142,11 +142,19 @@ async function main() {
     email: `attendee-${index + 1}@${attendeeDomain}`,
     name: `Load Attendee ${index + 1}`
   }));
+  const attendeeProfiles = portalAccounts.map((account) => ({
+    id: randomUUID(),
+    orgId: org.id,
+    portalAccountId: account.id,
+    accountHolderOf: account.id,
+    fullName: account.name
+  }));
   const registrations = portalAccounts.map((account, index) => ({
     id: randomUUID(),
     orgId: org.id,
     eventId: event.id,
     portalAccountId: account.id,
+    attendeeProfileId: attendeeProfiles[index].id,
     typeId: registrationType.id,
     status: "CONFIRMED",
     badgeNumber: `LOAD-${String(index + 1).padStart(5, "0")}`
@@ -183,6 +191,7 @@ async function main() {
   portalAccounts[0].emailVerifiedAt = new Date();
 
   await prisma.portalAccount.createMany({ data: portalAccounts });
+  await prisma.attendeeProfile.createMany({ data: attendeeProfiles });
   await prisma.registration.createMany({ data: registrations });
   await prisma.order.createMany({ data: orders });
   await prisma.orderItem.createMany({ data: orderItems });

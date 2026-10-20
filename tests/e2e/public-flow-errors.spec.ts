@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -88,7 +88,7 @@ test.beforeAll(async () => {
   ]);
 
   const sourceRegistration = await prisma.registration.create({
-    data: { orgId, eventId, portalAccountId: fillerId, typeId: transferTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId, portalAccountId: fillerId, fullName: "Public Flow Filler" })).id, typeId: transferTierId, status: "CONFIRMED" }
   });
   const transferRequest = await prisma.registrationTransferRequest.create({
     data: {
@@ -123,7 +123,7 @@ test("a tier that sells out mid-flow reports the capacity error inline", async (
   await page.locator(".vf-public-tier-list label").filter({ hasText: "Race Ticket" }).click();
 
   await prisma.registration.create({
-    data: { orgId, eventId, portalAccountId: fillerId, typeId: raceTierId, status: "CONFIRMED" }
+    data: { orgId, eventId, portalAccountId: fillerId, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId, portalAccountId: fillerId, fullName: "Public Flow Filler", accountHolder: false })).id, typeId: raceTierId, status: "CONFIRMED" }
   });
 
   await page.getByRole("button", { name: "Continue" }).click();

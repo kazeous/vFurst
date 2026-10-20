@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
 import { createHmac, randomUUID } from "node:crypto";
-import { createPortalAccountFixture, loginAsAttendee as loginPortalAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee as loginPortalAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -88,6 +88,7 @@ test.beforeAll(async () => {
       orgId: org.id,
       eventId: event.id,
       portalAccountId: attendee.id,
+      attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: org.id, portalAccountId: attendee.id, fullName: "Launch Accessibility Attendee" })).id,
       typeId: registrationType.id,
       status: "CONFIRMED",
       badgeNumber: "A11Y-001",
