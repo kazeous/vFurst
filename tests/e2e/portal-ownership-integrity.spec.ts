@@ -58,6 +58,16 @@ test.describe.serial("portal ownership integrity", () => {
     })).rejects.toMatchObject({ code: "P2003" });
   });
 
+  test("the composite key rejects a registration whose profile belongs to another account", async () => {
+    const account = await prisma.portalAccount.create({ data: { orgId: tenantA.orgId, email: `other-profile-${runId}@example.com` } });
+    try {
+      const profile = await attendeeProfileFixture(prisma, { orgId: tenantA.orgId, portalAccountId: account.id, fullName: "Other Account Attendee" });
+      await expect(prisma.registration.create({ data: { ...tenantA, attendeeProfileId: profile.id } })).rejects.toMatchObject({ code: "P2003" });
+    } finally {
+      await prisma.portalAccount.delete({ where: { id: account.id } });
+    }
+  });
+
   test("an order that points at another organization's portal account is rejected", async () => {
     await expect(prisma.order.create({
       data: {
