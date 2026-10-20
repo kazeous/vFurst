@@ -45,33 +45,34 @@ describe("private portal attendees", () => {
 
   it("returns 404 off a portal host", async () => {
     mocks.org.mockResolvedValue(null);
-    await expectPrivate(await GET(request()), 404, { attendees: null });
+    await expectPrivate(await GET(request()), 404, { account: null, attendees: null });
     expect(mocks.account).not.toHaveBeenCalled();
     expect(mocks.event).not.toHaveBeenCalled();
   });
 
   it("returns 401 without an account for the request organization", async () => {
     mocks.account.mockResolvedValue(null);
-    await expectPrivate(await GET(request()), 401, { attendees: null });
+    await expectPrivate(await GET(request()), 401, { account: null, attendees: null });
     expect(mocks.account).toHaveBeenCalledWith(org);
     expect(mocks.event).not.toHaveBeenCalled();
   });
 
   it.each(["unknown", "unpublished", "foreign"])("returns 404 for an %s event", async () => {
     mocks.event.mockResolvedValue(null);
-    await expectPrivate(await GET(request()), 404, { attendees: null });
+    await expectPrivate(await GET(request()), 404, { account: { email: "owner@example.com", name: "Owner" }, attendees: null });
     expect(mocks.event).toHaveBeenCalledWith(expect.objectContaining({ where: { id: eventId, orgId: org.id, status: "PUBLISHED" } }));
     expect(mocks.profiles).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a missing or invalid event id", async () => {
-    await expectPrivate(await GET(request("invalid")), 404, { attendees: null });
-    await expectPrivate(await GET(new NextRequest("https://acme.example.com/api/portal/attendees")), 404, { attendees: null });
+    await expectPrivate(await GET(request("invalid")), 404, { account: { email: "owner@example.com", name: "Owner" }, attendees: null });
+    await expectPrivate(await GET(new NextRequest("https://acme.example.com/api/portal/attendees")), 404, { account: { email: "owner@example.com", name: "Owner" }, attendees: null });
     expect(mocks.event).not.toHaveBeenCalled();
   });
 
   it("lists profiles without date of birth, contact email or phone", async () => {
     await expectPrivate(await GET(request()), 200, {
+      account: { email: "owner@example.com", name: "Owner" },
       cap: 4, used: 1, attendees: [
         { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false },
         { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true }
@@ -81,6 +82,11 @@ describe("private portal attendees", () => {
     expect(mocks.registrations).toHaveBeenCalledWith(expect.objectContaining({ where: {
       orgId: org.id, portalAccountId: account.id, eventId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }
     } }));
+  });
+
+  it("never returns the account's id or org id", async () => {
+    const body = await (await GET(request())).json();
+    expect(Object.keys(body.account).sort()).toEqual(["email", "name"]);
   });
 
   it("sends private no-store headers on a successful empty registration list", async () => {

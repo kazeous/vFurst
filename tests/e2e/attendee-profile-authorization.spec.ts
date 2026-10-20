@@ -87,7 +87,7 @@ test("Org B's attendee endpoint rejects Org A's portal cookie", async ({ page, r
     headers: { host: `${otherSlug}.localhost:3000`, cookie: cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ") }
   });
   expect(response.status()).toBe(401);
-  expect(await response.json()).toEqual({ attendees: null });
+  expect(await response.json()).toEqual({ account: null, attendees: null });
 });
 
 test("a tampered foreign attendee selection is rejected inline", async ({ page }) => {
