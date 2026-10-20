@@ -73,6 +73,9 @@ export default withSentryConfig(withSerwist(nextConfig), {
   tunnelRoute: "/monitoring",
   widenClientFileUpload: true,
   webpack: {
+    autoInstrumentServerFunctions: false,
+    autoInstrumentMiddleware: false,
+    autoInstrumentAppDirectory: false,
     treeshake: {
       removeDebugLogging: true
     }
