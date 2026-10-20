@@ -14,6 +14,7 @@ import {
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
 import { findOrCreatePortalAccount } from "@/lib/portal-accounts";
+import { resolveStaffAttendeeProfile } from "@/lib/attendee-profiles";
 import { buildObjectKey, uploadFromBuffer } from "@/lib/s3";
 import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
@@ -498,9 +499,11 @@ export async function createWalkInRegistration(formData: FormData) {
   const checkedInAt = new Date();
   const result = await runRegistrationPolicyTransaction(async (tx) => {
     const attendee = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: parsed.data.attendeeEmail, name: parsed.data.attendeeName });
+    const profile = await resolveStaffAttendeeProfile(tx, { account: attendee, fullName: parsed.data.attendeeName, eventId: event.id });
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
       portalAccountId: attendee.id,
+      attendeeProfileId: profile.id,
       typeId: registrationType.id
     });
 
@@ -509,6 +512,7 @@ export async function createWalkInRegistration(formData: FormData) {
         orgId: event.orgId,
         eventId: event.id,
         portalAccountId: attendee.id,
+        attendeeProfileId: profile.id,
         typeId: registrationType.id,
         status: "CHECKED_IN",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "CASHIER"),
@@ -564,6 +568,7 @@ export async function createWalkInRegistration(formData: FormData) {
     data: {
       registrationId: result.registration.id,
       userId: result.attendee.id,
+      attendeeProfileId: result.registration.attendeeProfileId,
       typeId: registrationType.id,
       status: result.registration.status,
       source: "cashier"
@@ -620,9 +625,11 @@ export async function adminTransferRegistration(formData: FormData) {
     }
 
     const attendee = await findOrCreatePortalAccount(tx, { orgId: event.orgId, email: attendeeEmail, name: attendeeName });
+    const profile = await resolveStaffAttendeeProfile(tx, { account: attendee, fullName: attendeeName, eventId: event.id });
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
       portalAccountId: attendee.id,
+      attendeeProfileId: profile.id,
       typeId: current.typeId,
       excludeRegistrationId: current.id
     });
@@ -646,6 +653,7 @@ export async function adminTransferRegistration(formData: FormData) {
         orgId: event.orgId,
         eventId: event.id,
         portalAccountId: attendee.id,
+        attendeeProfileId: profile.id,
         typeId: current.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(event.settings, "TRANSFER"),

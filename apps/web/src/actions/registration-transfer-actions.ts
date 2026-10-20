@@ -6,6 +6,7 @@ import { sendOrgEmail } from "@/lib/email";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { publicActionErrorMessage } from "@/lib/public-action-error";
+import { assertAttendeeProfileCeiling, parseAttendeeProfileForm } from "@/lib/attendee-profiles";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -153,7 +154,7 @@ export async function acceptRegistrationTransfer(_state: ActionFormState, formDa
   if (!parsed.success) return { error: "This transfer invitation is invalid." };
 
   try {
-    return await acceptRegistrationTransferInner(parsed.data);
+    return await acceptRegistrationTransferInner(parsed.data, formData);
   } catch (error) {
     unstable_rethrow(error);
 
@@ -171,10 +172,15 @@ export async function acceptRegistrationTransfer(_state: ActionFormState, formDa
   }
 }
 
-async function acceptRegistrationTransferInner(parsed: { requestId: string; token: string }): Promise<ActionFormState> {
+async function acceptRegistrationTransferInner(parsed: { requestId: string; token: string }, formData: FormData): Promise<ActionFormState> {
   const context = await getPortalActionContext(getRegistrationTransferPath(parsed.requestId, parsed.token));
   if (isPortalRedirect(context)) return context;
   const { account } = context;
+  const selected = z.union([z.literal("new"), z.string().uuid()]).safeParse(formData.get("attendeeProfileId"));
+  if (!selected.success) return { error: "Choose who will attend." };
+  const newProfile = selected.data === "new" ? parseAttendeeProfileForm(formData) : null;
+  if (newProfile && !newProfile.ok) return { error: newProfile.error };
+  const newProfileData = newProfile?.ok ? newProfile.data : null;
   const tokenHash = hashRegistrationTransferToken(parsed.token);
   const now = new Date();
 
@@ -218,9 +224,19 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     }
 
     assertTransfersAllowed(request.event.settings);
+    let attendeeProfileId = selected.data;
+    if (newProfileData) {
+      await assertAttendeeProfileCeiling(tx, { orgId: context.org.id, portalAccountId: account.id });
+      const profile = await tx.attendeeProfile.create({
+        data: { ...newProfileData, orgId: context.org.id, portalAccountId: account.id },
+        select: { id: true }
+      });
+      attendeeProfileId = profile.id;
+    }
     await assertRegistrationCapacity(tx, {
       eventId: request.eventId,
       portalAccountId: account.id,
+      attendeeProfileId,
       typeId: source.typeId,
       excludeRegistrationId: source.id,
       enforceUserLimit: true
@@ -246,6 +262,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
         orgId: request.orgId,
         eventId: request.eventId,
         portalAccountId: account.id,
+        attendeeProfileId,
         typeId: source.typeId,
         status: "CONFIRMED",
         approvalStatus: getRegistrationApprovalStatus(request.event.settings, "TRANSFER"),

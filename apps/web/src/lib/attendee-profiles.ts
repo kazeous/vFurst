@@ -1,5 +1,5 @@
 import { normalizeIdentityEmail } from "@vfurst/auth/core";
-import { prisma, type Prisma } from "@vfurst/db";
+import type { prisma, Prisma } from "@vfurst/db";
 import { z } from "zod";
 import { getCoreEventSettings } from "@/lib/event-settings";
 import type { PortalAccountSummary } from "@/lib/portal-session";

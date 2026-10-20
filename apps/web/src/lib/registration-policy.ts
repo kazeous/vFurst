@@ -47,6 +47,7 @@ export async function runRegistrationPolicyTransaction<T>(callback: (tx: Prisma.
 type CapacityInput = {
   eventId: string;
   portalAccountId: string;
+  attendeeProfileId: string;
   typeId: string;
   excludeRegistrationId?: string;
   enforceUserLimit?: boolean;
@@ -69,6 +70,27 @@ export async function assertRegistrationCapacity(tx: Prisma.TransactionClient, i
   const policy: CoreEventSettings = getCoreEventSettings(event.settings);
   const exclusion = input.excludeRegistrationId ? { not: input.excludeRegistrationId } : undefined;
 
+  const profile = await tx.attendeeProfile.findUnique({
+    where: { id: input.attendeeProfileId, orgId: event.orgId, portalAccountId: input.portalAccountId },
+    select: { id: true, orgId: true, portalAccountId: true }
+  });
+  if (!profile || profile.orgId !== event.orgId || profile.portalAccountId !== input.portalAccountId) {
+    throw new RegistrationPolicyError("That attendee is not available.");
+  }
+
+  const profileCount = await tx.registration.count({
+    where: {
+      orgId: event.orgId,
+      eventId: event.id,
+      attendeeProfileId: profile.id,
+      id: exclusion,
+      status: { in: [...registrationReservationStatuses] }
+    }
+  });
+  if (profileCount > 0) {
+    throw new RegistrationPolicyError("This attendee is already registered for this event.");
+  }
+
   if (input.enforceUserLimit !== false) {
     const userCount = await tx.registration.count({
       where: {
@@ -82,7 +104,7 @@ export async function assertRegistrationCapacity(tx: Prisma.TransactionClient, i
 
     if (userCount >= policy.maxRegistrationsPerUser) {
       throw new RegistrationPolicyError(
-        `This event allows at most ${policy.maxRegistrationsPerUser} active registration${policy.maxRegistrationsPerUser === 1 ? "" : "s"} per account.`
+        `This event allows at most ${policy.maxRegistrationsPerUser} attendee${policy.maxRegistrationsPerUser === 1 ? "" : "s"} per account.`
       );
     }
   }

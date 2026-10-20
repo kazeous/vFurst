@@ -373,14 +373,18 @@ export async function markOrderPaidWithProvider(
     });
   }
 
-  const registrationItem = order.items.find((item) => item.itemType === "REGISTRATION" && item.registrationId);
+  const registrationItems = order.items.filter((item) => item.itemType === "REGISTRATION" && item.registrationId);
   const hotelItem = order.items.find((item) => item.itemType === "HOTEL");
 
-  if (registrationItem) {
+  for (const item of registrationItems) {
     try {
+      const registration = await prisma.registration.findUniqueOrThrow({
+        where: { id: item.registrationId!, orgId: order.orgId, eventId: order.eventId, portalAccountId: order.portalAccountId },
+        select: { attendeeProfile: { select: { fullName: true } } }
+      });
       await sendOrgEmail(order.org, order.portalAccount.email, "registration-confirmation", {
         eventName: order.event.name,
-        attendeeName: order.portalAccount.name
+        attendeeName: registration.attendeeProfile.fullName
       }, order.event.id);
     } catch (error) {
       console.error("Registration confirmation email failed after payment fulfillment.", error);
