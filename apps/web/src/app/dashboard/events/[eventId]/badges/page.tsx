@@ -33,6 +33,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
             }
           },
           type: true,
+          attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
           portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
@@ -103,7 +104,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
 
             return (
               <div key={registration.id} className="vf-table-row vf-five-col">
-                <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
+                <span>{registration.attendeeProfile.fullName}</span>
                 <span>{registration.type.name}</span>
                 <span>{badge?.barcodeData ?? "Not generated"}</span>
                 <span>
@@ -119,7 +120,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
                   {badge ? (
                     <BadgePrintControls
                       badgeId={badge.id}
-                      label={registration.portalAccount.name ?? registration.portalAccount.email}
+                      label={registration.attendeeProfile.fullName}
                       pdfUrl={badge.pdfUrl}
                       zplData={badge.zplData}
                       generatedAt={badge.generatedAt?.toISOString() ?? null}

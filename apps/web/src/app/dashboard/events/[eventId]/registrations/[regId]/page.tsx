@@ -52,6 +52,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         }
       },
       type: true,
+      attendeeProfile: { select: { id: true, fullName: true, badgeName: true, dateOfBirth: true, email: true, phone: true } },
       portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
@@ -68,7 +69,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
       <header className="vf-page-header">
         <div>
           <p className="vf-label">Registration detail</p>
-          <h1>{registration.portalAccount.name ?? registration.portalAccount.email}</h1>
+          <h1>{registration.attendeeProfile.fullName}</h1>
           <p className="vf-muted">
             {registration.type.name} - payment {registration.status} - approval {registration.approvalStatus}
           </p>
@@ -111,6 +112,14 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
           <dl className="vf-details">
             <dt>Email</dt>
             <dd>{registration.portalAccount.email}</dd>
+            <dt>Badge name</dt>
+            <dd>{registration.attendeeProfile.badgeName ?? "—"}</dd>
+            <dt>Date of birth</dt>
+            <dd>{registration.attendeeProfile.dateOfBirth ? formatDate(registration.attendeeProfile.dateOfBirth, { dateStyle: "medium", timeZone: "UTC" }) : "—"}</dd>
+            <dt>Contact email</dt>
+            <dd>{registration.attendeeProfile.email ?? "—"}</dd>
+            <dt>Phone</dt>
+            <dd>{registration.attendeeProfile.phone ?? "—"}</dd>
             <dt>Tier</dt>
             <dd>{registration.type.name}</dd>
             <dt>Created</dt>

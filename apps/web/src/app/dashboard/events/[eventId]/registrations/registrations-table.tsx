@@ -13,6 +13,7 @@ type RegistrationRow = {
   id: string;
   eventId: string;
   attendee: string;
+  badgeName: string;
   email: string;
   type: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "TRANSFERRED" | "CHECKED_IN";
@@ -80,7 +81,7 @@ export function RegistrationsTable({ rows, eventId }: { rows: RegistrationRow[];
       filters.every((filter) => {
         if (filter.field === "content" && filter.value.type === "string") {
           const query = filter.value.value.toLowerCase();
-          return `${row.attendee} ${row.email} ${row.type}`.toLowerCase().includes(query);
+          return `${row.attendee} ${row.badgeName} ${row.email} ${row.type}`.toLowerCase().includes(query);
         }
 
         if (filter.field === "status" && filter.value.type === "enum") {

@@ -19,10 +19,12 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         include: {
           transferredTo: {
             include: {
+              attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
               portalAccount: { select: { id: true, email: true, name: true } }
             }
           },
           type: true,
+          attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
           portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
@@ -48,7 +50,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
     include: {
       requester: true,
       recipient: { select: { id: true, email: true, name: true } },
-      sourceRegistration: { include: { type: true, portalAccount: { select: { id: true, email: true, name: true } } } }
+      sourceRegistration: { include: { type: true, attendeeProfile: { select: { id: true, fullName: true, badgeName: true } }, portalAccount: { select: { id: true, email: true, name: true } } } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -71,7 +73,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
+                  {registration.attendeeProfile.fullName} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -91,7 +93,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             <select name="registrationId" required>
               {transferable.map((registration) => (
                 <option key={registration.id} value={registration.id}>
-                  {registration.portalAccount.name ?? registration.portalAccount.email} - {registration.type.name}
+                  {registration.attendeeProfile.fullName} - {registration.type.name}
                 </option>
               ))}
             </select>
@@ -138,10 +140,10 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
         <div className="vf-list">
           {transferred.map((registration) => (
             <div key={registration.id} className="vf-list-row">
-              <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
+              <span>{registration.attendeeProfile.fullName}</span>
               <small>
                 {registration.type.name} - {registration.status}
-                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.portalAccount.name ?? item.portalAccount.email).join(", ")}` : ""}
+                {registration.transferredTo.length > 0 ? ` - transferred to ${registration.transferredTo.map((item) => item.attendeeProfile.fullName).join(", ")}` : ""}
               </small>
             </div>
           ))}

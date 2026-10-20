@@ -24,13 +24,13 @@ function badgeVariant(status: string) {
   return "neutral";
 }
 
-function itemName(item: { itemType: string; storeProduct?: { name: string } | null; registration?: { portalAccount: { email: string; name: string | null } } | null }) {
+function itemName(item: { itemType: string; storeProduct?: { name: string } | null; registration?: { attendeeProfile: { fullName: string } } | null }) {
   if (item.storeProduct) {
     return item.storeProduct.name;
   }
 
   if (item.registration) {
-    return item.registration.portalAccount.name ?? item.registration.portalAccount.email;
+    return item.registration.attendeeProfile.fullName;
   }
 
   return item.itemType;
@@ -60,7 +60,7 @@ export default async function StoreOrdersPage({
               storeProduct: true,
               registration: {
                 include: {
-                  portalAccount: { select: { id: true, email: true, name: true } }
+                  attendeeProfile: { select: { id: true, fullName: true, badgeName: true } }
                 }
               }
             }

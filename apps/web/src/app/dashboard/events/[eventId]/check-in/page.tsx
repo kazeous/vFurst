@@ -16,6 +16,8 @@ function buildRegistrationSearch(eventId: string, query: string): Prisma.Registr
   }
 
   const textMatches: Prisma.RegistrationWhereInput[] = [
+    { attendeeProfile: { is: { fullName: { contains: query, mode: "insensitive" } } } },
+    { attendeeProfile: { is: { badgeName: { contains: query, mode: "insensitive" } } } },
     {
       badgeNumber: {
         contains: query,
@@ -122,6 +124,7 @@ const getCheckInData = unstable_cache(
               name: true
             }
           },
+          attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
           portalAccount: {
             select: {
               email: true,
@@ -178,7 +181,7 @@ export default async function CheckInPage({
         totalCount={checkInData.totalRegistrations}
         rows={checkInData.registrations.map((registration) => ({
           id: registration.id,
-          attendee: registration.portalAccount.name ?? registration.portalAccount.email,
+          attendee: registration.attendeeProfile.fullName,
           email: registration.portalAccount.email,
           type: registration.type.name,
           status: registration.status,
