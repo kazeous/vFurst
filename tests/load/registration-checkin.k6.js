@@ -111,6 +111,24 @@ export function registrationFlow() {
     "portal session resolved the account": (result) => Boolean(portalAccountEmail(result))
   });
 
+  const attendees = http.get(`${baseUrl}/api/portal/attendees?eventId=${eventId}`, {
+    headers: { Host: portalHost, Cookie: portalSessionCookie },
+    tags: { flow: "registration", name: "portal attendees" }
+  });
+  registrationDuration.add(attendees.timings.duration);
+
+  check(attendees, {
+    "portal attendees returned 200": (result) => result.status === 200,
+    "portal attendees listed the account": (result) => {
+      try {
+        const listed = result.json("attendees");
+        return Array.isArray(listed) && listed.length >= 1;
+      } catch {
+        return false;
+      }
+    }
+  });
+
   sleep(1);
 }
 
