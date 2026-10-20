@@ -15,6 +15,7 @@ export default async function AccountRegistrationDetailPage({ params }: { params
       event: true,
       org: true,
       type: true,
+      attendeeProfile: { select: { fullName: true, badgeName: true } },
       addOns: { include: { addOnDefinition: true } },
       badges: { orderBy: { createdAt: "desc" } },
       orderItems: { include: { order: true }, orderBy: { createdAt: "desc" } }
@@ -30,6 +31,8 @@ export default async function AccountRegistrationDetailPage({ params }: { params
         <div><p className="vf-label">{registration.org.name}</p><h2>{registration.event.name}</h2><p className="vf-muted">{registration.type.name}</p></div>
         <span className="vf-inline-status"><AccountStatus status={registration.status} />{registration.approvalStatus === "PENDING" ? <small>Awaiting organizer approval</small> : null}</span>
       </div>
+      <p>Attendee: {registration.attendeeProfile.fullName}</p>
+      {registration.attendeeProfile.badgeName ? <p>Badge: {registration.attendeeProfile.badgeName}</p> : null}
       <dl className="vf-review-list">
         <div><dt>Registration ID</dt><dd>{registration.id}</dd></div>
         <div><dt>Check-in</dt><dd>{registration.checkedInAt ? formatDate(registration.checkedInAt, { dateStyle: "medium", timeStyle: "short" }) : "Not checked in"}</dd></div>

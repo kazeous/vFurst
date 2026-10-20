@@ -10,6 +10,7 @@ const runId = Date.now();
 const password = "LaunchA11yPass123!";
 const adminEmail = `launch-a11y-admin-${runId}@example.com`;
 const attendeeEmail = `launch-a11y-attendee-${runId}@example.com`;
+const wizardAttendeeEmail = `launch-a11y-wizard-${runId}@example.com`;
 const orgSlug = `launch-a11y-${runId}`;
 const visualCheckoutToken = `visual-checkout-${runId}`;
 const checkoutSecret = process.env.CHECKOUT_TOKEN_SECRET ?? "e2e-checkout-token-secret-32-bytes-minimum";
@@ -47,6 +48,7 @@ test.beforeAll(async () => {
   });
 
   const attendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: attendeeEmail, name: "Launch Accessibility Attendee", password });
+  await createPortalAccountFixture(prisma, { orgId: org.id, email: wizardAttendeeEmail, name: "Accessibility Wizard Account", password });
   const adminAttendee = await createPortalAccountFixture(prisma, { orgId: org.id, email: adminEmail, name: "Launch Accessibility Admin", password });
 
   const event = await prisma.event.create({
@@ -210,7 +212,7 @@ test("marketing pages expose landmarks, alt text, keyboard order, and calculator
 test("public launch forms expose labels, names, and submit actions", async ({ page }) => {
   const clientErrors: string[] = [];
   page.on("pageerror", (error) => clientErrors.push(error.stack ?? error.message));
-  await loginAsAttendee(page);
+  await loginPortalAttendee(page, { subdomain: orgSlug }, wizardAttendeeEmail, { password });
   await page.goto(`${portalOrigin(orgSlug)}/register`);
   await expect.poll(async () => ({ ready: await page.locator('[data-registration-ready="true"]').isVisible(), clientErrors }), { timeout: 30_000 }).toEqual({ ready: true, clientErrors: [] });
 
@@ -218,15 +220,27 @@ test("public launch forms expose labels, names, and submit actions", async ({ pa
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Launch Accessibility General/ })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
+  const attendees = page.getByRole("group", { name: "Who is attending?" });
+  await expect(attendees.getByRole("radio", { name: /Accessibility Wizard Account.*Account holder/ })).toBeChecked();
+  await page.getByRole("button", { name: "Add another attendee" }).click();
   await expect(page.getByLabel("Full name")).toBeVisible();
-  await expect(page.getByLabel("Email")).toHaveAttribute("type", "email");
+  await expect(page.getByLabel("Badge name")).toBeVisible();
+  await expect(page.getByLabel("Date of birth")).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
   await page.getByLabel("Full name").fill("Accessibility Attendee");
-  await expect(page.getByLabel("Email")).toHaveValue(attendeeEmail);
+  await page.getByRole("button", { name: "Add attendee", exact: true }).click();
+  await expect(attendees.getByRole("radio", { name: "Accessibility Attendee", exact: true })).toBeChecked();
   await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.locator("dl.vf-review-list")).toContainText("Accessibility Attendee");
   await expect(page.getByRole("button", { name: "Complete registration" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to cart" })).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 
+  await page.goto(`${portalOrigin(orgSlug)}/login`);
+  const signedOut = page.waitForEvent("load");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click({ noWaitAfter: true });
+  await signedOut;
+  await loginAsAttendee(page);
   await page.goto(`${portalOrigin(orgSlug)}/vendor-apply`);
 
   await expect(page.getByRole("heading", { name: "Vendor application" })).toBeVisible();

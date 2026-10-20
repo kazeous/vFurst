@@ -144,6 +144,7 @@ test("recipient accepts once and ownership, add-ons, and invalidated badge move 
   await login(page, recipientEmail);
   await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
   await expect(page.getByRole("heading", { name: "Registration Transfer Event", level: 2 })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Who will attend?" }).getByRole("radio", { name: /Account holder/ })).toBeChecked();
   const acceptedNavigation = page.waitForURL((url) => url.searchParams.get("notice") === "accepted", { waitUntil: "load" });
   await page.getByRole("button", { name: "Accept transfer" }).click({ noWaitAfter: true });
   await acceptedNavigation;

@@ -12,6 +12,7 @@ export default async function AccountRegistrationsPage({ params }: { params: Pro
       event: true,
       org: true,
       type: true,
+      attendeeProfile: { select: { fullName: true, badgeName: true } },
       addOns: true,
       badges: true,
       orderItems: { include: { order: true }, orderBy: { createdAt: "desc" } }
@@ -28,6 +29,8 @@ export default async function AccountRegistrationsPage({ params }: { params: Pro
             <div><p className="vf-label">{registration.org.name}</p><h3>{registration.event.name}</h3><p className="vf-muted">{registration.type.name} · {registration.addOns.length} add-on(s)</p></div>
             <span className="vf-inline-status"><AccountStatus status={registration.status} />{registration.approvalStatus === "PENDING" ? <small>Awaiting approval</small> : null}</span>
           </div>
+          <p>Attendee: {registration.attendeeProfile.fullName}</p>
+          {registration.attendeeProfile.badgeName ? <p>Badge: {registration.attendeeProfile.badgeName}</p> : null}
           <div className="vf-actions">
             <Button label="View registration" href={`/account/registrations/${registration.id}`} variant="primary" size="sm" />
             <Button label="Event portal" href="/register" size="sm" />

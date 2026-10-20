@@ -163,9 +163,17 @@ test("a cashier walk-in can be claimed through sign-up and shows the registratio
 });
 
 test("the same email at two organizations is two independent accounts", async ({ page, context }) => {
-  await Promise.all([{ org: orgA, event: eventA, account: accountA, typeId: typeAId }, { org: orgB, event: eventB, account: accountB, typeId: typeBId }].map(async ({ org, event, account, typeId }) => prisma.registration.create({
-    data: { orgId: org.id, eventId: event.id, portalAccountId: account.id, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId: org.id, portalAccountId: account.id, fullName: "Independent Attendee" })).id, typeId, status: "CONFIRMED" }
-  })));
+  await Promise.all([{ org: orgA, event: eventA, account: accountA, typeId: typeAId }, { org: orgB, event: eventB, account: accountB, typeId: typeBId }].map(async ({ org, event, account, typeId }) => {
+    const activeCount = await prisma.registration.count({ where: {
+      orgId: org.id, eventId: event.id, portalAccountId: account.id, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }
+    } });
+    const profile = await attendeeProfileFixture(prisma, {
+      orgId: org.id, portalAccountId: account.id, fullName: "Independent Attendee", accountHolder: activeCount === 0
+    });
+    return prisma.registration.create({
+      data: { orgId: org.id, eventId: event.id, portalAccountId: account.id, attendeeProfileId: profile.id, typeId, status: "CONFIRMED" }
+    });
+  }));
   expect(accountA.id).not.toBe(accountB.id);
   await loginAsAttendee(page, orgA, email, { returnTo: "/account/registrations" });
   await expect(page.getByRole("heading", { name: eventA.name, exact: true, level: 3 }).first()).toBeVisible();

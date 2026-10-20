@@ -6,6 +6,7 @@ import { SignOutForm } from "../login/sign-out-form";
 
 const navigation = [
   { href: "/account", label: "Overview" },
+  { href: "/account/attendees", label: "Attendees" },
   { href: "/account/registrations", label: "Registrations" },
   { href: "/account/transfers", label: "Transfers" },
   { href: "/account/raffles", label: "Raffles" },

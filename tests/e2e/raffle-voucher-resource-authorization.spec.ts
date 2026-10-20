@@ -429,10 +429,15 @@ test("public registration rejects an internally cross-tenant voucher before crea
   await page.goto(pathname);
   await expect(page.locator('[data-registration-ready="true"]')).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Continue" }).click();
+  const attendees = page.getByRole("group", { name: "Who is attending?" });
+  await expect(attendees.getByRole("radio", { name: /Raffle Buyer.*Account holder/ })).toBeChecked();
+  await page.getByRole("button", { name: "Add another attendee" }).click();
   await page.getByLabel("Full name").fill("Poisoned Voucher Attendee");
-  await expect(page.getByLabel("Email")).toHaveValue(buyerEmail);
+  await page.getByRole("button", { name: "Add attendee", exact: true }).click();
+  await expect(attendees.getByRole("radio", { name: "Poisoned Voucher Attendee", exact: true })).toBeChecked();
   await page.getByLabel("Voucher code").fill("POISON");
   await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.locator("dl.vf-review-list")).toContainText("Poisoned Voucher Attendee");
   const form = page.getByRole("button", { name: "Complete registration" }).locator("xpath=ancestor::form");
   await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === new URL(pathname, "http://localhost:3000").pathname && response.request().method() === "POST"),

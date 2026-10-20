@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { Check, ChevronLeft, ChevronRight, LockKeyhole } from "lucide-react";
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { usePortalGateAccount } from "@/components/account/portal-account-gate";
 import { useActionRedirect } from "@/components/use-action-redirect";
+import { AttendeeStep, type AttendeeChoice } from "./attendee-step";
 
 type AddOn = { id: string; name: string; price: number; isComplimentary: boolean; maxQuantity: number };
 type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; remaining?: number; addOns: AddOn[] };
@@ -24,8 +25,12 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
   const [step, setStep] = useState(0);
   const [isReady, setIsReady] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState(availableTier?.id ?? "");
-  const [attendeeName, setAttendeeName] = useState("");
-  const [attendeeEmail, setAttendeeEmail] = useState("");
+  const [attendee, setAttendee] = useState<AttendeeChoice | null>(null);
+  const [attendeeValid, setAttendeeValid] = useState(false);
+  const selectAttendee = useCallback((selected: AttendeeChoice | null, canContinue: boolean) => {
+    setAttendee(selected);
+    setAttendeeValid(canContinue);
+  }, []);
   const [voucherCode, setVoucherCode] = useState("");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const selectedTier = tiers.find((tier) => tier.id === selectedTierId);
@@ -34,16 +39,10 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
     if (!selectedTier) return 0;
     return selectedTier.currentPrice + selectedAddOns.reduce((sum, addOn) => sum + (addOn.isComplimentary ? 0 : addOn.price) * (quantities[addOn.id] ?? 0), 0);
   }, [quantities, selectedAddOns, selectedTier]);
-  const attendeeValid = attendeeName.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendeeEmail);
 
   useEffect(() => {
     setIsReady(true);
   }, []);
-
-  useEffect(() => {
-    setAttendeeName((current) => current || account.name || "");
-    setAttendeeEmail((current) => current || account.email || "");
-  }, [account.email, account.name]);
 
   return (
     <section className="vf-registration-experience" aria-labelledby="registration-flow-title" data-registration-ready={isReady || undefined}>
@@ -75,11 +74,7 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
 
           {step === 1 ? (
             <div className="vf-stack">
-              <div><p className="vf-label">Step 2 of 3</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">We will use this information for the attendee record and confirmation.</p></div>
-              <div className="vf-form-grid">
-                <label>Full name<input name="attendee-preview-name" autoComplete="name" value={attendeeName} onChange={(event) => setAttendeeName(event.target.value)} required /></label>
-                <label>Email<input name="attendee-preview-email" type="email" autoComplete="email" value={attendeeEmail} readOnly required /></label>
-              </div>
+              <AttendeeStep eventId={eventId} selectedId={attendee?.id ?? null} onSelectionChange={selectAttendee} />
               {selectedTier?.addOns.length ? (
                 <div className="vf-stack"><div><h3>Enhance your ticket</h3><p className="vf-muted">Optional add-ons for {selectedTier.name}.</p></div>
                   <div className="vf-addon-list">{selectedTier.addOns.map((addOn) => (
@@ -100,10 +95,10 @@ export function RegistrationFlow({ eventId, currency, tiers }: { eventId: string
                 </Alert>
               ) : null}
               <input type="hidden" name="eventId" value={eventId} /><input type="hidden" name="typeId" value={selectedTier.id} />
-              <input type="hidden" name="attendeeName" value={attendeeName} /><input type="hidden" name="attendeeEmail" value={attendeeEmail} /><input type="hidden" name="voucherCode" value={voucherCode} />
+              <input type="hidden" name="attendeeProfileId" value={attendee?.id ?? ""} /><input type="hidden" name="voucherCode" value={voucherCode} />
               {selectedTier.addOns.map((addOn) => <input key={addOn.id} type="hidden" name={`addon-${addOn.id}`} value={quantities[addOn.id] ?? 0} />)}
               <div><p className="vf-label">Step 3 of 3</p><h2 id="registration-flow-title">Review registration</h2><p className="vf-muted">Confirm the attendee and ticket before continuing to secure checkout.</p></div>
-              <dl className="vf-review-list"><div><dt>Ticket</dt><dd>{selectedTier.name}</dd></div><div><dt>Attendee</dt><dd>{attendeeName}<small>{attendeeEmail}</small></dd></div>{selectedAddOns.map((addOn) => <div key={addOn.id}><dt>Add-on</dt><dd>{addOn.name} × {quantities[addOn.id]}</dd></div>)}{voucherCode ? <div><dt>Voucher</dt><dd>{voucherCode}</dd></div> : null}</dl>
+              <dl className="vf-review-list"><div><dt>Ticket</dt><dd>{selectedTier.name}</dd></div><div><dt>Attendee</dt><dd>{attendee?.fullName}{attendee?.badgeName ? <small>Badge: {attendee.badgeName}</small> : null}<small>{account.email}</small></dd></div>{selectedAddOns.map((addOn) => <div key={addOn.id}><dt>Add-on</dt><dd>{addOn.name} × {quantities[addOn.id]}</dd></div>)}{voucherCode ? <div><dt>Voucher</dt><dd>{voucherCode}</dd></div> : null}</dl>
               <div className="vf-secure-note"><LockKeyhole size={17} /><span>Payment details are handled securely by Stripe or SePay. vFurst never stores card numbers.</span></div>
               <div className="vf-registration-actions"><Button type="button" onClick={() => setStep(1)} isDisabled={isSubmitPending}><ChevronLeft size={16} />Back</Button><div><Button label="Add to cart" name="checkoutMode" value="cart" type="submit" isDisabled={isSubmitPending} /><Button label={isSubmitPending ? "Submitting..." : estimatedTotal === 0 ? "Complete registration" : "Continue to payment"} name="checkoutMode" value="stripe" type="submit" variant="primary" isDisabled={isSubmitPending} /></div></div>
             </form>
