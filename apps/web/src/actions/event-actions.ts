@@ -217,7 +217,7 @@ async function createEventWithRegistrationTypesInner(formData: FormData) {
       settings: {
         requireApproval: parsed.data.requireApproval ?? false,
         allowTransfers: parsed.data.allowTransfers ?? true,
-        maxRegistrationsPerUser: parsed.data.maxRegistrationsPerUser ?? 1
+        maxRegistrationsPerUser: parsed.data.maxRegistrationsPerUser ?? 4
       },
       registrationTypes: {
         create: tierInputs.map((tier) => ({

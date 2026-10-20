@@ -46,7 +46,7 @@ export function getCoreEventSettings(settings: Prisma.JsonValue): CoreEventSetti
       value.maxRegistrationsPerUser >= 1 &&
       value.maxRegistrationsPerUser <= 20
         ? value.maxRegistrationsPerUser
-        : 1
+        : 4
   };
 }
 

@@ -60,7 +60,11 @@ describe("mergeCoreEventSettings", () => {
 });
 
 describe("getCoreEventSettings", () => {
-  it.each([0, 21, -1])("fails closed to one registration for an invalid stored limit of %s", (maxRegistrationsPerUser) => {
-    expect(getCoreEventSettings({ ...validSettings, maxRegistrationsPerUser }).maxRegistrationsPerUser).toBe(1);
+  it.each([null, {}, { maxRegistrationsPerUser: 0 }, { maxRegistrationsPerUser: 21 }, { maxRegistrationsPerUser: -1 }, { maxRegistrationsPerUser: "4" }, { maxRegistrationsPerUser: 1.5 }])("falls back to 4 attendees per account (%j)", (settings) => {
+    expect(getCoreEventSettings(settings).maxRegistrationsPerUser).toBe(4);
+  });
+
+  it("keeps a stored cap of 1", () => {
+    expect(getCoreEventSettings({ maxRegistrationsPerUser: 1 }).maxRegistrationsPerUser).toBe(1);
   });
 });
