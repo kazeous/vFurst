@@ -298,3 +298,49 @@ test("the organizer detail shows the date of birth as entered", async ({ page })
   await expect(page.getByText("1 May 2010", { exact: true })).toBeVisible();
   expect((await prisma.attendeeProfile.findUniqueOrThrow({ where: { id: attendee.selfId } })).dateOfBirth?.toISOString()).toBe("2010-05-01T00:00:00.000Z");
 });
+
+test("the registration page loads the account and attendees in one request", async ({ page }) => {
+  const attendee = await account("one-request", "One Request Attendee");
+  await loginAsAttendee(page, { subdomain: slug }, attendee.email);
+  const paths: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith("/api/portal/")) paths.push(pathname);
+  });
+  await attendeeStep(page);
+  expect(paths).toEqual(["/api/portal/attendees"]);
+  await expect(page.getByRole("group", { name: "Who is attending?" }).getByRole("radio", { name: /One Request Attendee/ })).toBeChecked();
+});
+
+test("an attendee added in step 2 survives Back and Continue", async ({ page }) => {
+  const attendee = await account("back-forth", "Back Forth Parent");
+  await loginAsAttendee(page, { subdomain: slug }, attendee.email);
+  const paths: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith("/api/portal/")) paths.push(pathname);
+  });
+  await attendeeStep(page);
+  await page.getByRole("button", { name: "Add another attendee", exact: true }).click();
+  await page.getByLabel("Full name", { exact: true }).fill("Back Forth Attendee");
+  await page.getByRole("button", { name: "Add attendee", exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Back Forth Attendee/ })).toBeChecked();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Back Forth Attendee/ })).toBeVisible();
+  expect(paths).toEqual(["/api/portal/attendees", "/api/portal/attendees"]);
+});
+
+test("a signed-out visitor sees the sign-in prompt", async ({ page }) => {
+  const paths: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith("/api/portal/")) paths.push(pathname);
+  });
+  await page.goto(`${origin}/register`);
+  const prompt = page.locator("section").filter({ has: page.getByRole("heading", { name: "Sign in before continuing", exact: true }) });
+  await expect(prompt.getByRole("heading", { name: "Sign in before continuing", exact: true })).toBeVisible();
+  await expect(prompt.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(prompt.getByRole("link", { name: "Create account", exact: true })).toBeVisible();
+  expect(paths).toEqual(["/api/portal/attendees"]);
+});

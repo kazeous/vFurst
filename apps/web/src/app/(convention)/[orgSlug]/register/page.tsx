@@ -49,7 +49,7 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
   if (!data) notFound();
   const { event, org } = data;
   const registration = !event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
-    <PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")}>
+    <PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")} sessionUrl={`/api/portal/attendees?eventId=${encodeURIComponent(event.id)}`}>
       <RegistrationFlow
         eventId={event.id}
         currency={event.currency}

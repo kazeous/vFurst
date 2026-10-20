@@ -1,11 +1,17 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 type PortalGateAccount = { email: string; name: string | null };
 
 const PortalGateAccountContext = createContext<PortalGateAccount | undefined>(undefined);
+type PortalGateSession = { session: unknown; refresh: () => Promise<boolean> };
+const PortalGateSessionContext = createContext<PortalGateSession | undefined>(undefined);
+
+function accountFromSession(session: unknown): PortalGateAccount | null {
+  return (session as { account?: PortalGateAccount | null } | null)?.account ?? null;
+}
 
 export function usePortalGateAccount(): PortalGateAccount {
   const account = useContext(PortalGateAccountContext);
@@ -15,23 +21,51 @@ export function usePortalGateAccount(): PortalGateAccount {
   return account;
 }
 
+export function usePortalGateSession(): PortalGateSession {
+  const session = useContext(PortalGateSessionContext);
+  if (!session) {
+    throw new Error("usePortalGateSession must be used inside a signed-in PortalAccountGate.");
+  }
+  return session;
+}
+
 export function PortalAccountGate({
   loginHref,
   signupHref,
+  sessionUrl = "/api/portal/session",
   children
 }: {
   loginHref: string;
   signupHref: string;
+  sessionUrl?: string;
   children: ReactNode;
 }) {
   const [account, setAccount] = useState<PortalGateAccount | null | undefined>(undefined);
+  const [session, setSession] = useState<unknown>(null);
+  const loadSession = useCallback(async (): Promise<unknown> => {
+    const response = await fetch(sessionUrl, { cache: "no-store" });
+    return response.json();
+  }, [sessionUrl]);
+  const refresh = useCallback(async (): Promise<boolean> => {
+    try {
+      const body = await loadSession();
+      setSession(body);
+      setAccount(accountFromSession(body));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [loadSession]);
+  const sessionContext = useMemo(() => ({ session, refresh }), [session, refresh]);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/portal/session", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : { account: null }))
-      .then((session: { account: PortalGateAccount | null }) => {
-        if (active) setAccount(session.account);
+    loadSession()
+      .then((body) => {
+        if (active) {
+          setSession(body);
+          setAccount(accountFromSession(body));
+        }
       })
       .catch(() => {
         if (active) setAccount(null);
@@ -39,7 +73,7 @@ export function PortalAccountGate({
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadSession]);
 
   if (account === undefined) {
     return (
@@ -66,5 +100,7 @@ export function PortalAccountGate({
     );
   }
 
-  return <PortalGateAccountContext.Provider value={account}>{children}</PortalGateAccountContext.Provider>;
+  return <PortalGateAccountContext.Provider value={account}>
+    <PortalGateSessionContext.Provider value={sessionContext}>{children}</PortalGateSessionContext.Provider>
+  </PortalGateAccountContext.Provider>;
 }

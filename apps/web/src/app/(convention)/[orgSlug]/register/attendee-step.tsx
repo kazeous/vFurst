@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createAttendeeProfile } from "@/actions/attendee-profile-actions";
 import { AttendeeProfileFields } from "@/components/account/attendee-profile-fields";
-import { usePortalGateAccount } from "@/components/account/portal-account-gate";
+import { usePortalGateSession } from "@/components/account/portal-account-gate";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useActionRedirect } from "@/components/use-action-redirect";
@@ -18,43 +18,52 @@ export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
   selectedId: string | null;
   onSelectionChange: (attendee: AttendeeChoice | null, canContinue: boolean) => void;
 }) {
-  const account = usePortalGateAccount();
-  const [list, setList] = useState<AttendeeList | null>(null);
+  const { session, refresh } = usePortalGateSession();
+  const list = useMemo(() => {
+    const payload = session as Partial<AttendeeList> | null;
+    return payload && Array.isArray(payload.attendees) && typeof payload.cap === "number" && typeof payload.used === "number"
+      ? payload as AttendeeList : null;
+  }, [session]);
+  const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [state, action, pending] = useActionState(createAttendeeProfile, initialAttendeeProfileFormState);
   const selectedRef = useRef(selectedId);
+  const refreshedProfileRef = useRef<string | undefined>(undefined);
   selectedRef.current = selectedId;
   useActionRedirect(state.redirectTo);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const requested = state.profileId ?? selectedRef.current ?? new URL(window.location.href).searchParams.get("attendee");
-    setList(null);
+    if (!state.profileId || refreshedProfileRef.current === state.profileId) return;
+    refreshedProfileRef.current = state.profileId;
+    let active = true;
+    setLoading(true);
     setLoadFailed(false);
     onSelectionChange(null, false);
-    fetch(`/api/portal/attendees?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Attendees unavailable");
-        const result = await response.json() as AttendeeList;
-        if (!Array.isArray(result.attendees)) throw new Error("Attendees unavailable");
-        if (controller.signal.aborted) return;
-        const id = pickInitialAttendee(result.attendees, requested);
-        const selected = result.attendees.find((attendee) => attendee.id === id) ?? null;
-        setList(result);
-        onSelectionChange(selected, Boolean(selected) && result.used < result.cap);
-        if (state.profileId) setIsAdding(false);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setLoadFailed(true);
-      });
-    return () => controller.abort();
-  }, [eventId, account.email, state.profileId, onSelectionChange]);
+    void refresh().then((ok) => {
+      if (!active) return;
+      setLoading(false);
+      setLoadFailed(!ok);
+      if (ok) setIsAdding(false);
+    });
+    return () => { active = false; };
+  }, [state.profileId, refresh, onSelectionChange]);
+
+  useEffect(() => {
+    if (!list || loading || loadFailed) {
+      onSelectionChange(null, false);
+      return;
+    }
+    const requested = state.profileId ?? selectedRef.current ?? new URL(window.location.href).searchParams.get("attendee");
+    const id = pickInitialAttendee(list.attendees, requested);
+    const selected = list.attendees.find((attendee) => attendee.id === id) ?? null;
+    onSelectionChange(selected, Boolean(selected) && list.used < list.cap);
+  }, [eventId, list, state.profileId, loading, loadFailed, onSelectionChange]);
 
   return (
     <div className="vf-stack">
       <div><p className="vf-label">Step 2 of 3</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">Choose who is attending, or add another attendee.</p></div>
-      {loadFailed ? <Alert variant="error">Attendees could not be loaded. Refresh the page to try again.</Alert> : !list ? <p role="status">Loading attendees…</p> : <>
+      {loading ? <p role="status">Loading attendees…</p> : loadFailed || !list ? <Alert variant="error">Attendees could not be loaded. Refresh the page to try again.</Alert> : <>
         <p>{list.used} of {list.cap} attendees registered for this event.</p>
         {list.used >= list.cap ? <Alert>This account has registered the maximum number of attendees for this event.</Alert> : null}
         <fieldset className="vf-action-state-fields">
