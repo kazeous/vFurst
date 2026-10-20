@@ -147,6 +147,14 @@ test("two attendees under one account pay together and each gets a badge", async
   expect(new Set(badges.map((badge) => badge.barcodeData)).size).toBe(2);
   expect(new Set(badges.map((badge) => badge.registration.attendeeProfileId)).size).toBe(2);
   expect(badges.every((badge) => badge.pdfUrl && badge.zplData)).toBe(true);
+  // A badge-name-only match must survive both the database query and the browser filter.
+  await page.goto(`/dashboard/events/${eventId}/check-in?q=Little%20Star`);
+  await expect(page.getByRole("heading", { name: "Child Attendee", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Parent Attendee", exact: true })).toHaveCount(0);
+  await page.goto(`/dashboard/events/${eventId}/check-in`);
+  await page.getByLabel("Search or scan", { exact: true }).fill("Little Star");
+  await expect(page.getByRole("heading", { name: "Child Attendee", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Parent Attendee", exact: true })).toHaveCount(0);
 });
 
 test("the cap rejects the next attendee inline", async ({ page }) => {

@@ -182,6 +182,7 @@ export default async function CheckInPage({
         rows={checkInData.registrations.map((registration) => ({
           id: registration.id,
           attendee: registration.attendeeProfile.fullName,
+          badgeName: registration.attendeeProfile.badgeName,
           email: registration.portalAccount.email,
           type: registration.type.name,
           status: registration.status,

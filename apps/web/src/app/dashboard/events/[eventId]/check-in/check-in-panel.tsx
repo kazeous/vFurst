@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 type CheckInRow = {
   id: string;
   attendee: string;
+  badgeName: string | null;
   email: string;
   type: string;
   status: string;
@@ -52,7 +53,7 @@ export function CheckInPanel({
     }
 
     return rows.filter((row) =>
-      [row.attendee, row.email, row.badgeNumber, row.id, row.badge?.barcodeData]
+      [row.attendee, row.badgeName, row.email, row.badgeNumber, row.id, row.badge?.barcodeData]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalized))
     );
