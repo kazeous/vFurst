@@ -102,10 +102,15 @@ function badgeRecord(elements: Array<Record<string, unknown>>) {
         id: "00000000-0000-4000-8000-000000000501",
         name: "Weekend"
       },
+      attendeeProfile: {
+        fullName: "Artifact Attendee",
+        badgeName: "Sam",
+        email: "profile@example.com"
+      },
       portalAccount: {
         id: "00000000-0000-4000-8000-000000000401",
         email: "attendee@example.com",
-        name: "Artifact Attendee"
+        name: "Account Holder"
       }
     },
     template: {
@@ -182,13 +187,41 @@ describe("processGenerateBadges", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
-  it("badge name falls back to the portal account email", async () => {
+  it("renders the attendee profile's full name", async () => {
     const badge = badgeRecord([{ id: "name", type: "text", x: 24, y: 24, w: 240, h: 36, field: "attendee.name" }]);
-    vi.mocked(prisma.badge.findMany).mockResolvedValue([{ ...badge, registration: { ...badge.registration, portalAccount: { ...badge.registration.portalAccount, name: null } } }] as never);
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([{
+      ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, fullName: "Child Attendee" } }
+    }] as never);
 
     const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.zplOutput?.[0]?.zpl).toContain("Child Attendee");
+    expect(result.zplOutput?.[0]?.zpl).not.toContain("Account Holder");
+    expect(prisma.badge.findMany).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({
+      registration: { include: expect.objectContaining({ attendeeProfile: { select: { fullName: true, badgeName: true, email: true } } }) }
+    }) }));
+  });
 
-    expect(result.zplOutput?.[0]?.zpl).toContain("attendee@example.com");
+  it("renders the badge name and falls back to the full name when it is null or blank", async () => {
+    for (const badgeName of [" Sam ", null, "", "   "]) {
+      const badge = badgeRecord([{ id: "name", type: "text", x: 24, y: 24, w: 240, h: 36, field: "attendee.badgeName", value: "SHOULD NOT APPEAR" }]);
+      vi.mocked(prisma.badge.findMany).mockResolvedValue([{
+        ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, badgeName } }
+      }] as never);
+      const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+      expect(result.zplOutput?.[0]?.zpl).toContain(badgeName?.trim() || "Artifact Attendee");
+      expect(result.zplOutput?.[0]?.zpl).not.toContain("SHOULD NOT APPEAR");
+    }
+  });
+
+  it("attendee.email uses the profile email and falls back to the account email", async () => {
+    for (const email of ["contact@example.com", null]) {
+      const badge = badgeRecord([{ id: "email", type: "text", x: 24, y: 24, w: 240, h: 36, field: "attendee.email" }]);
+      vi.mocked(prisma.badge.findMany).mockResolvedValue([{
+        ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, email } }
+      }] as never);
+      const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+      expect(result.zplOutput?.[0]?.zpl).toContain(email ?? "attendee@example.com");
+    }
   });
 
   it("embeds a tenant-owned PNG in PDF and emits a real ZPL graphic", async () => {

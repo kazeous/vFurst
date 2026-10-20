@@ -25,6 +25,7 @@ type BadgeLayout = {
 
 const sampleData: Record<string, string> = {
   "attendee.name": "Sam Rivera",
+  "attendee.badgeName": "Sam",
   "attendee.email": "sam@example.com",
   "registration.type": "Weekend Pass",
   "registration.badgeNumber": "VF-1042",
