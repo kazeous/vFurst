@@ -4,37 +4,15 @@ import { prisma } from "@vfurst/db";
 import bwipjs from "bwip-js/node";
 import type { Job } from "bullmq";
 import jpeg from "jpeg-js";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import { PNG } from "pngjs";
 import { workerEnv } from "../env.js";
 import type { GenerateBadgesJob } from "../queues.js";
-
-type BadgeElement = {
-  id?: string;
-  type: "text" | "image" | "barcode" | "qr";
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  field?: string;
-  value?: string;
-  assetKey?: string;
-};
-
-type BadgeLayout = {
-  width: number;
-  height: number;
-  elements: BadgeElement[];
-};
-
-type RasterImage = {
-  key: string;
-  format: "png" | "jpeg";
-  bytes: Uint8Array;
-  width: number;
-  height: number;
-  rgba: Uint8Array;
-};
+import type { BadgeContent, BadgeElement, BadgeLayout, RasterImage } from "../badges/types.js";
+import { badgeFontkit, loadBadgeFonts, type BadgeFonts } from "../badges/fonts.js";
+import { prepareBadgeText } from "../badges/badge-text.js";
+import { fitBadgeText, measureWith } from "../badges/text-layout.js";
+import { toZpl } from "../badges/zpl.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 4096;
@@ -68,9 +46,11 @@ function parseLayout(value: unknown): BadgeLayout {
 function resolveField(field: string | undefined, badge: Awaited<ReturnType<typeof loadBadges>>[number]) {
   switch (field) {
     case "attendee.name":
-      return badge.registration.portalAccount.name ?? badge.registration.portalAccount.email;
+      return badge.registration.attendeeProfile.fullName;
+    case "attendee.badgeName":
+      return badge.registration.attendeeProfile.badgeName?.trim() || badge.registration.attendeeProfile.fullName;
     case "attendee.email":
-      return badge.registration.portalAccount.email;
+      return badge.registration.attendeeProfile.email ?? badge.registration.portalAccount.email;
     case "registration.type":
       return badge.registration.type.name;
     case "registration.badgeNumber":
@@ -85,6 +65,68 @@ function resolveField(field: string | undefined, badge: Awaited<ReturnType<typeo
 function renderValue(element: BadgeElement, badge: Awaited<ReturnType<typeof loadBadges>>[number]) {
   const fieldValue = resolveField(element.field, badge);
   return fieldValue || element.value?.replace(/\{\{|\}\}/g, "") || "";
+}
+
+export class BadgeRenderError extends Error {
+  constructor(readonly elementId: string, readonly field: string, readonly reason: string) {
+    super(reason);
+    this.name = "BadgeRenderError";
+  }
+}
+
+function asBadgeRenderError(element: BadgeElement, error: unknown): BadgeRenderError {
+  if (error instanceof BadgeRenderError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  return new BadgeRenderError(element.id ?? "(unnamed)", element.field ?? element.type,
+    `${element.field ?? element.type} layer ${element.id ?? "(unnamed)"}: ${message.replace(/\.+$/, "")}.`.slice(0, 500));
+}
+
+function resolveBadgeContent(
+  layout: BadgeLayout,
+  badge: Awaited<ReturnType<typeof loadBadges>>[number],
+  fonts: BadgeFonts,
+  imageAssets: Map<BadgeElement, RasterImage>
+): BadgeContent {
+  const dropped = new Set<string>();
+  const elements: BadgeContent["elements"] = [];
+  const prepare = (value: string) => {
+    const result = prepareBadgeText(value, [fonts.pdf, fonts.zpl]);
+    for (const character of result.dropped) dropped.add(character);
+    return result.text;
+  };
+  for (const element of layout.elements) {
+    try {
+      if (element.type === "image") {
+        const image = imageAssets.get(element);
+        if (!image) throw new Error(`Badge image layer ${element.id ?? "(unnamed)"} was not loaded.`);
+        elements.push({ kind: "image", element, image });
+      } else if (element.type === "barcode" || element.type === "qr") {
+        elements.push({ kind: "code", element, data: renderValue(element, badge) || badge.barcodeData });
+      } else {
+        let source = renderValue(element, badge);
+        let text: string;
+        if (element.field === "attendee.badgeName") {
+          source = badge.registration.attendeeProfile.badgeName?.trim() ?? "";
+          text = prepare(source);
+          if (!text) {
+            source = badge.registration.attendeeProfile.fullName;
+            text = prepare(source);
+          }
+        } else {
+          text = prepare(source);
+        }
+        if (source && !text) {
+          const original = Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(source.normalize("NFC")), ({ segment }) => segment).slice(0, 40).join("");
+          throw new BadgeRenderError(element.id ?? "(unnamed)", element.field ?? "text",
+            `Nothing printable in ${element.field ?? "text"} (${original}).`.slice(0, 500));
+        }
+        elements.push({ kind: "text", element, text });
+      }
+    } catch (error) {
+      throw asBadgeRenderError(element, error);
+    }
+  }
+  return { elements, dropped: [...dropped] };
 }
 
 async function barcodePng(text: string, type: "barcode" | "qr") {
@@ -274,61 +316,6 @@ async function loadBadgeImages(layout: BadgeLayout, orgId: string) {
   return assets;
 }
 
-function toZplGraphic(element: BadgeElement, image: RasterImage) {
-  const width = Math.max(1, Math.round(element.w));
-  const height = Math.max(1, Math.round(element.h));
-  const bytesPerRow = Math.ceil(width / 8);
-  const bitmap = Buffer.alloc(bytesPerRow * height);
-
-  for (let y = 0; y < height; y += 1) {
-    const sourceY = Math.min(image.height - 1, Math.floor((y * image.height) / height));
-    for (let x = 0; x < width; x += 1) {
-      const sourceX = Math.min(image.width - 1, Math.floor((x * image.width) / width));
-      const offset = (sourceY * image.width + sourceX) * 4;
-      const alpha = image.rgba[offset + 3]! / 255;
-      const red = image.rgba[offset]! * alpha + 255 * (1 - alpha);
-      const green = image.rgba[offset + 1]! * alpha + 255 * (1 - alpha);
-      const blue = image.rgba[offset + 2]! * alpha + 255 * (1 - alpha);
-      const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-
-      if (luminance < 180) {
-        bitmap[y * bytesPerRow + Math.floor(x / 8)]! |= 0x80 >> (x % 8);
-      }
-    }
-  }
-
-  return `^GFA,${bitmap.length},${bitmap.length},${bytesPerRow},${bitmap.toString("hex").toUpperCase()}^FS`;
-}
-
-function toZpl(
-  layout: BadgeLayout,
-  badge: Awaited<ReturnType<typeof loadBadges>>[number],
-  imageAssets: Map<BadgeElement, RasterImage>
-) {
-  const commands = ["^XA"];
-
-  for (const element of layout.elements) {
-    const value = renderValue(element, badge);
-    commands.push(`^FO${Math.round(element.x)},${Math.round(element.y)}`);
-
-    if (element.type === "qr") {
-      commands.push(`^BQN,2,5^FDLA,${value}^FS`);
-    } else if (element.type === "barcode") {
-      commands.push(`^BCN,${Math.round(element.h)},Y,N,N^FD${value}^FS`);
-    } else if (element.type === "image") {
-      const image = imageAssets.get(element);
-      if (!image) throw new Error(`Badge image layer ${element.id ?? "(unnamed)"} was not loaded.`);
-      commands.push(toZplGraphic(element, image));
-    } else {
-      commands.push(`^A0N,${Math.max(18, Math.round(element.h * 0.7))},${Math.max(16, Math.round(element.h * 0.5))}`);
-      commands.push(`^FB${Math.round(element.w)},2,0,L^FD${value}^FS`);
-    }
-  }
-
-  commands.push("^XZ");
-  return commands.join("\n");
-}
-
 function publicUrl(key: string) {
   const bucket = workerEnv.S3_BUCKET_NAME;
 
@@ -386,6 +373,7 @@ async function loadBadges(data: GenerateBadgesJob) {
         include: {
           event: true,
           type: true,
+          attendeeProfile: { select: { fullName: true, badgeName: true, email: true } },
           portalAccount: { select: { email: true, name: true } }
         }
       },
@@ -403,76 +391,113 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
   if (badges.length === 0) {
     return {
       generated: 0,
-      pdfUrl: null
+      failed: 0,
+      pdfUrl: null,
+      zplOutput: [],
+      failures: []
     };
   }
 
   const layout = parseLayout(badges[0]!.template.layout);
+  const fonts = await loadBadgeFonts();
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  pdf.registerFontkit(badgeFontkit);
+  const font = await pdf.embedFont(fonts.pdfBytes, { subset: true });
   const imageAssets = await loadBadgeImages(layout, job.data.orgId);
   const embeddedImages = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>();
   const zplOutput: Array<{ badgeId: string; zpl: string }> = [];
+  const notes = new Map<string, string | null>();
+  const failures: Array<{ badgeId: string; reason: string }> = [];
 
-  for (const badge of badges) {
-    const page = pdf.addPage([layout.width, layout.height]);
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: layout.width,
-      height: layout.height,
-      color: rgb(1, 1, 1)
-    });
-
-    for (const element of layout.elements) {
-      const y = layout.height - element.y - element.h;
-      const value = renderValue(element, badge);
-
-      if (element.type === "barcode" || element.type === "qr") {
-        const png = await pdf.embedPng(await barcodePng(value || badge.barcodeData, element.type));
-        page.drawImage(png, {
-          x: element.x,
-          y,
-          width: element.w,
-          height: element.h
-        });
-      } else if (element.type === "image") {
-        const image = imageAssets.get(element);
-        if (!image) throw new Error(`Badge image layer ${element.id ?? "(unnamed)"} was not loaded.`);
-        let embedded = embeddedImages.get(image.key);
-        if (!embedded) {
-          embedded = image.format === "png" ? await pdf.embedPng(image.bytes) : await pdf.embedJpg(image.bytes);
-          embeddedImages.set(image.key, embedded);
-        }
-        page.drawImage(embedded, {
-          x: element.x,
-          y,
-          width: element.w,
-          height: element.h
-        });
-      } else {
-        page.drawText(value, {
-          x: element.x,
-          y: y + Math.max(2, element.h / 4),
-          size: Math.min(22, Math.max(10, element.h * 0.55)),
-          font,
-          color: rgb(0.07, 0.09, 0.12),
-          maxWidth: element.w
-        });
-      }
+  for (const image of imageAssets.values()) {
+    if (!embeddedImages.has(image.key)) {
+      embeddedImages.set(image.key, image.format === "png" ? await pdf.embedPng(image.bytes) : await pdf.embedJpg(image.bytes));
     }
-
-    zplOutput.push({
-      badgeId: badge.id,
-      zpl: toZpl(layout, badge, imageAssets)
-    });
   }
 
-  const pdfUrl = await uploadPdf(job.data.orgId, job.data.eventId, await pdf.save());
+  for (const badge of badges) {
+    const pageIndex = pdf.getPageCount();
+    let activeElement: BadgeElement = { type: "text", x: 0, y: 0, w: 0, h: 0 };
+    try {
+      const content = resolveBadgeContent(layout, badge, fonts, imageAssets);
+      const codeImages = new Map<BadgeElement, Awaited<ReturnType<typeof pdf.embedPng>>>();
+      for (const resolved of content.elements) {
+        if (resolved.kind !== "code") continue;
+        activeElement = resolved.element;
+        try {
+          codeImages.set(resolved.element, await pdf.embedPng(await barcodePng(resolved.data, resolved.element.type as "barcode" | "qr")));
+        } catch (error) {
+          throw asBadgeRenderError(resolved.element, error);
+        }
+      }
+      const page = pdf.addPage([layout.width, layout.height]);
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: layout.width,
+        height: layout.height,
+        color: rgb(1, 1, 1)
+      });
+
+      const zplCommands = ["^XA", "^CI28"];
+      for (const resolved of content.elements) {
+        const { element } = resolved;
+        activeElement = element;
+        const y = layout.height - element.y - element.h;
+        try {
+          if (resolved.kind === "code") {
+            page.drawImage(codeImages.get(element)!, {
+              x: element.x,
+              y,
+              width: element.w,
+              height: element.h
+            });
+          } else if (resolved.kind === "image") {
+            page.drawImage(embeddedImages.get(resolved.image.key)!, {
+              x: element.x,
+              y,
+              width: element.w,
+              height: element.h
+            });
+          } else {
+            const fitted = fitBadgeText(resolved.text, element.w, Math.min(22, Math.max(10, element.h * 0.55)), measureWith(fonts.pdf));
+            if (fitted.text) {
+              page.drawText(fitted.text, {
+                x: element.x,
+                y: y + Math.max(2, element.h / 4),
+                size: fitted.size,
+                font,
+                color: rgb(0.07, 0.09, 0.12)
+              });
+            }
+          }
+          // Keep the element identity available if its ZPL drawing fails.
+          zplCommands.push(...toZpl(layout, { elements: [resolved], dropped: content.dropped }, fonts.zpl).split("\n").slice(2, -1));
+        } catch (error) {
+          throw asBadgeRenderError(element, error);
+        }
+      }
+
+      zplOutput.push({
+        badgeId: badge.id,
+        zpl: [...zplCommands, "^XZ"].join("\n")
+      });
+      notes.set(badge.id, content.dropped.length
+        ? `Printed without: ${content.dropped.slice(0, 10).join(" ")}${content.dropped.length > 10 ? " …" : ""}`
+        : null);
+    } catch (error) {
+      if (pdf.getPageCount() > pageIndex) pdf.removePage(pageIndex);
+      const failure = asBadgeRenderError(activeElement, error);
+      failures.push({ badgeId: badge.id, reason: failure.reason });
+      console.warn(`[worker:badge] badge ${badge.id} not rendered (element ${failure.elementId}, ${failure.field})`);
+    }
+  }
+
+  const pdfUrl = zplOutput.length ? await uploadPdf(job.data.orgId, job.data.eventId, await pdf.save()) : null;
   const generatedAt = new Date();
 
   await prisma.$transaction(
-    zplOutput.map((output) =>
+    [...zplOutput.map((output) =>
       prisma.badge.update({
         where: {
           id: output.badgeId
@@ -480,15 +505,21 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
         data: {
           generatedAt,
           pdfUrl,
-          zplData: output.zpl
+          zplData: output.zpl,
+          renderIssue: notes.get(output.badgeId) ?? null
         }
       })
-    )
+    ), ...failures.map((failure) => prisma.badge.update({
+      where: { id: failure.badgeId },
+      data: { generatedAt: null, pdfUrl: null, zplData: null, renderIssue: failure.reason }
+    }))]
   );
 
   return {
-    generated: badges.length,
+    generated: zplOutput.length,
+    failed: failures.length,
     pdfUrl,
-    zplOutput
+    zplOutput,
+    failures
   };
 }

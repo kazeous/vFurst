@@ -31,6 +31,7 @@ export async function GET(request: Request) {
           }
         },
         type: true,
+        attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
         portalAccount: {
           select: {
             id: true,
@@ -49,5 +50,5 @@ export async function GET(request: Request) {
     })
   ]);
 
-  return withRateHeaders(Response.json(paginated(data.map(({ portalAccountId, portalAccount, ...record }) => ({ ...record, userId: portalAccountId, user: portalAccount })), total, page, pageSize)), context);
+  return withRateHeaders(Response.json(paginated(data.map(({ portalAccountId, portalAccount, attendeeProfile, ...record }) => ({ ...record, userId: portalAccountId, user: portalAccount, attendee: attendeeProfile })), total, page, pageSize)), context);
 }

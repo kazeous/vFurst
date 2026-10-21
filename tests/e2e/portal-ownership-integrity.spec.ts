@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
+import { attendeeProfileFixture } from "./support/portal";
 
 const prisma = new PrismaClient();
 const runId = `${Date.now()}-${process.pid}`;
 const orgIds: string[] = [];
 let requesterUserId: string;
-type TenantFixture = { orgId: string; eventId: string; typeId: string; portalAccountId: string };
+type TenantFixture = { orgId: string; eventId: string; typeId: string; portalAccountId: string; attendeeProfileId: string };
 let tenantA: TenantFixture;
 let tenantB: TenantFixture;
 
@@ -34,7 +35,8 @@ test.describe.serial("portal ownership integrity", () => {
       const account = await prisma.portalAccount.create({
         data: { orgId: organization.id, email: `attendee-${runId}@example.com` }
       });
-      fixtures.push({ orgId: organization.id, eventId: event.id, typeId: registrationType.id, portalAccountId: account.id });
+      const profile = await attendeeProfileFixture(prisma, { orgId: organization.id, portalAccountId: account.id, fullName: account.email });
+      fixtures.push({ orgId: organization.id, eventId: event.id, typeId: registrationType.id, portalAccountId: account.id, attendeeProfileId: profile.id });
     }
     [tenantA, tenantB] = fixtures;
     const requester = await prisma.user.create({ data: { email: `ownership-staff-${runId}@example.com` } });
@@ -52,8 +54,18 @@ test.describe.serial("portal ownership integrity", () => {
 
   test("a registration that points at another organization's portal account is rejected", async () => {
     await expect(prisma.registration.create({
-      data: { ...tenantB, portalAccountId: tenantA.portalAccountId }
+      data: { ...tenantB, portalAccountId: tenantA.portalAccountId, attendeeProfileId: tenantA.attendeeProfileId }
     })).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  test("the composite key rejects a registration whose profile belongs to another account", async () => {
+    const account = await prisma.portalAccount.create({ data: { orgId: tenantA.orgId, email: `other-profile-${runId}@example.com` } });
+    try {
+      const profile = await attendeeProfileFixture(prisma, { orgId: tenantA.orgId, portalAccountId: account.id, fullName: "Other Account Attendee" });
+      await expect(prisma.registration.create({ data: { ...tenantA, attendeeProfileId: profile.id } })).rejects.toMatchObject({ code: "P2003" });
+    } finally {
+      await prisma.portalAccount.delete({ where: { id: account.id } });
+    }
   });
 
   test("an order that points at another organization's portal account is rejected", async () => {

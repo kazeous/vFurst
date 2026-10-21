@@ -18,7 +18,6 @@ import { assertActionRateLimit } from "@/lib/rate-limit";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
-import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-account";
 import {
   assertRegistrationCapacity,
   getRegistrationApprovalStatus,
@@ -103,16 +102,14 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     .object({
       eventId: z.string().uuid(),
       typeId: z.string().uuid(),
-      attendeeName: z.string().trim().min(1),
-      attendeeEmail: z.string().email(),
+      attendeeProfileId: z.string({ error: "Choose who will attend." }).uuid("Choose who will attend."),
       voucherCode: z.string().trim().optional(),
       checkoutMode: z.enum(["stripe", "cart"]).optional()
     })
     .safeParse({
       eventId: formData.get("eventId"),
       typeId: formData.get("typeId"),
-      attendeeName: formData.get("attendeeName"),
-      attendeeEmail: formData.get("attendeeEmail"),
+      attendeeProfileId: formData.get("attendeeProfileId"),
       voucherCode: formData.get("voucherCode") || undefined,
       checkoutMode: formData.get("checkoutMode") || "stripe"
     });
@@ -143,8 +140,11 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
   if (!event) return { error: "Registration is not available for this event." };
   assertPortalResourceOrg(event.orgId, context.org);
   assertOrganizationActive(event.org.status);
-  assertPortalAccountEmail(context.account, parsed.data.attendeeEmail);
-  const account = await syncPortalAccountName(context.account, parsed.data.attendeeName);
+  const account = context.account;
+  const profile = await prisma.attendeeProfile.findFirst({
+    where: { id: parsed.data.attendeeProfileId, orgId: context.org.id, portalAccountId: account.id }
+  });
+  if (!profile) return { error: "That attendee is not available." };
 
   await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${account.id}`);
 
@@ -188,6 +188,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     await assertRegistrationCapacity(tx, {
       eventId: event.id,
       portalAccountId: account.id,
+      attendeeProfileId: profile.id,
       typeId: type.id
     });
 
@@ -196,6 +197,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
         orgId: event.orgId,
         eventId: event.id,
         portalAccountId: account.id,
+        attendeeProfileId: profile.id,
         typeId: type.id,
         status: "PENDING",
         approvalStatus: getRegistrationApprovalStatus(event.settings),
@@ -218,6 +220,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
     data: {
       registrationId: registration.id,
       userId: account.id,
+      attendeeProfileId: profile.id,
       typeId: type.id,
       status: registration.status
     }
@@ -245,7 +248,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
               unitPrice: registrationPrice,
               quantity: 1,
               metadata: {
-                attendeeName: account.name,
+                attendeeName: profile.fullName,
                 attendeeEmail: account.email,
                 registrationType: type.name
               }
@@ -278,7 +281,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
               unitPrice: registrationPrice,
               quantity: 1,
               metadata: {
-                attendeeName: account.name,
+                attendeeName: profile.fullName,
                 attendeeEmail: account.email,
                 registrationType: type.name
               }
@@ -507,13 +510,14 @@ export async function resendRegistrationEmail(formData: FormData) {
     include: {
       event: true,
       org: true,
+      attendeeProfile: { select: { fullName: true } },
       portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
 
   await sendOrgEmail(registration.org, registration.portalAccount.email, "registration-confirmation", {
     eventName: registration.event.name,
-    attendeeName: registration.portalAccount.name
+    attendeeName: registration.attendeeProfile.fullName
   }, registration.event.id);
 
   revalidatePath(`/dashboard/events/${event.id}/registrations/${authorizedRegistration.id}`);
@@ -526,7 +530,7 @@ export async function upgradeTier(formData: FormData) {
   await runRegistrationPolicyTransaction(async (tx) => {
     const current = await tx.registration.findUnique({
       where: { id: registration.id },
-      select: { id: true, eventId: true, orgId: true, portalAccountId: true, status: true }
+      select: { id: true, eventId: true, orgId: true, portalAccountId: true, attendeeProfileId: true, status: true }
     });
 
     if (!current || current.eventId !== event.id || current.orgId !== event.orgId || ["CANCELLED", "TRANSFERRED"].includes(current.status)) {
@@ -536,6 +540,7 @@ export async function upgradeTier(formData: FormData) {
     const targetType = await assertRegistrationCapacity(tx, {
       eventId: event.id,
       portalAccountId: current.portalAccountId,
+      attendeeProfileId: current.attendeeProfileId,
       typeId,
       excludeRegistrationId: current.id,
       enforceUserLimit: false

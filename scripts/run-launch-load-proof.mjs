@@ -4,6 +4,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { PrismaClient } from "@prisma/client";
 import { loginStaffThroughMockOidc } from "./lib/staff-oidc-login.mjs";
+import { ensureNextManifests } from "./ensure-next-manifests.mjs";
 
 const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
@@ -485,6 +486,8 @@ async function main() {
       throw new Error(`Web production build failed with exit code ${build.code}.`);
     }
   }
+
+  ensureNextManifests(webRoot);
 
   const seed = await seedLoadData();
   let leaseTimer;

@@ -6,7 +6,7 @@
   "scripts": {
     "predev": "node ../../scripts/sync-app-env.mjs && node ../../scripts/check-app-env.mjs web",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node ../../scripts/ensure-next-manifests.mjs .",
     "prestart": "node ../../scripts/check-app-env.mjs web && npm run sync --workspace @vfurst/db",
     "start": "next start",
     "lint": "eslint .",

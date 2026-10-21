@@ -11,6 +11,9 @@ import {
 } from "@/lib/registration-transfer";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
+import { listEventAttendees } from "@/lib/attendee-profiles";
+import { pickInitialAttendee } from "../../../register/attendee-selection";
+import { TransferAttendeeSelection } from "../../../register/attendee-step";
 
 const noticeMessages: Record<string, { variant: "success" | "info" | "error"; message: string }> = {
   accepted: { variant: "success", message: "Transfer accepted. The registration now belongs to your account." },
@@ -64,6 +67,8 @@ export default async function AccountTransferDecisionPage({
   }
 
   const status = request.status === "PENDING" && request.expiresAt <= new Date() ? "EXPIRED" : request.status;
+  const { attendees } = await listEventAttendees(prisma, { account: context.account, event: request.event });
+  const initialAttendee = pickInitialAttendee(attendees, null) ?? "new";
 
   return (
     <section className="vf-section vf-stack">
@@ -95,6 +100,7 @@ export default async function AccountTransferDecisionPage({
         <ActionStateForm action={acceptRegistrationTransfer}>
           <input type="hidden" name="requestId" value={request.id} />
           <input type="hidden" name="token" value={token} />
+          <TransferAttendeeSelection attendees={attendees.filter((attendee) => !attendee.registered)} initialId={initialAttendee} />
           {status === "PENDING" ? <Button label="Accept transfer" type="submit" variant="primary" /> : null}
         </ActionStateForm>
         <ActionStateForm action={declineRegistrationTransfer}>

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getRequestPortalOrg: vi.fn(),
+  getCachedRequestPortalOrg: vi.fn(),
   getPortalAccount: vi.fn()
 }));
 
-vi.mock("@/lib/portal-request", () => ({ getRequestPortalOrg: mocks.getRequestPortalOrg }));
+vi.mock("@/lib/portal-request", () => ({ getCachedRequestPortalOrg: mocks.getCachedRequestPortalOrg }));
 vi.mock("@/lib/portal-account", () => ({ getPortalAccount: mocks.getPortalAccount }));
 
 import { GET } from "./route";
@@ -19,7 +19,7 @@ describe("portal session endpoint", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("returns 404 with a null account off a portal host", async () => {
-    mocks.getRequestPortalOrg.mockResolvedValue(null);
+    mocks.getCachedRequestPortalOrg.mockResolvedValue(null);
 
     const response = await GET();
 
@@ -31,7 +31,7 @@ describe("portal session endpoint", () => {
 
   it("returns a null account with private no-store headers when signed out", async () => {
     const org = { id: "org-acme", slug: "acme" };
-    mocks.getRequestPortalOrg.mockResolvedValue(org);
+    mocks.getCachedRequestPortalOrg.mockResolvedValue(org);
     mocks.getPortalAccount.mockResolvedValue(null);
 
     const response = await GET();
@@ -44,7 +44,7 @@ describe("portal session endpoint", () => {
 
   it("returns only the email and name of the signed-in account", async () => {
     const org = { id: "org-acme", slug: "acme" };
-    mocks.getRequestPortalOrg.mockResolvedValue(org);
+    mocks.getCachedRequestPortalOrg.mockResolvedValue(org);
     mocks.getPortalAccount.mockResolvedValue({
       id: "account-private",
       orgId: org.id,

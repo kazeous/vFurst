@@ -100,15 +100,23 @@ export function registrationFlow() {
     "registration page rendered form": (result) => bodyIncludes(result, "Registration")
   });
 
-  const session = http.get(`${baseUrl}/api/portal/session`, {
+  const attendees = http.get(`${baseUrl}/api/portal/attendees?eventId=${eventId}`, {
     headers: { Host: portalHost, Cookie: portalSessionCookie },
-    tags: { flow: "registration", name: "portal session" }
+    tags: { flow: "registration", name: "portal attendees" }
   });
-  registrationDuration.add(session.timings.duration);
+  registrationDuration.add(attendees.timings.duration);
 
-  check(session, {
-    "portal session returned 200": (result) => result.status === 200,
-    "portal session resolved the account": (result) => Boolean(portalAccountEmail(result))
+  check(attendees, {
+    "portal attendees returned 200": (result) => result.status === 200,
+    "portal attendees resolved the account": (result) => Boolean(portalAccountEmail(result)),
+    "portal attendees listed the account": (result) => {
+      try {
+        const listed = result.json("attendees");
+        return Array.isArray(listed) && listed.length >= 1;
+      } catch {
+        return false;
+      }
+    }
   });
 
   sleep(1);

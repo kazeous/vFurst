@@ -110,6 +110,7 @@ RUN groupadd --system --gid 1001 nodejs \
  && useradd  --system --uid 1001 --gid nodejs --create-home --shell /sbin/nologin worker
 
 COPY --from=build --chown=worker:nodejs /repo/apps/worker/dist ./apps/worker/dist
+COPY --from=build --chown=worker:nodejs /repo/apps/worker/assets ./apps/worker/assets
 COPY --from=build --chown=worker:nodejs /repo/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build --chown=worker:nodejs /repo/packages ./packages
 

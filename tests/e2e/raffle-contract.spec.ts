@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { createHmac, randomBytes } from "node:crypto";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -73,7 +73,7 @@ test.beforeAll(async () => {
   productId = product.id;
 
   await prisma.registration.create({
-    data: { orgId, eventId, portalAccountId: attendeeId, typeId: tierId, status: "CONFIRMED", approvalStatus: "APPROVED" }
+    data: { orgId, eventId, portalAccountId: attendeeId, attendeeProfileId: (await attendeeProfileFixture(prisma, { orgId, portalAccountId: attendeeId, fullName: "Raffle Attendee" })).id, typeId: tierId, status: "CONFIRMED", approvalStatus: "APPROVED" }
   });
   const [purchaseRaffle, confirmedRaffle] = await Promise.all([
     prisma.raffle.create({

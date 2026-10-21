@@ -60,6 +60,7 @@ describe("registration confirmation", () => {
       approvalStatus: "APPROVED",
       event: { name: "Convention" },
       type: { name: "Weekend" },
+      attendeeProfile: { id: "profile-owner", fullName: "Owner", badgeName: null },
       portalAccount: { name: account.name, email: account.email }
     });
     await expectResponse(await GET(request()), 200, {
@@ -68,6 +69,21 @@ describe("registration confirmation", () => {
     expect(mocks.getPortalAccount).toHaveBeenCalledExactlyOnceWith(org);
     expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: registrationId, orgId: org.id, portalAccountId: account.id }
+    }));
+  });
+
+  it("reports the attendee profile's name", async () => {
+    mocks.findFirst.mockResolvedValue({
+      approvalStatus: "APPROVED", event: { name: "Convention" }, type: { name: "Weekend" },
+      portalAccount: { name: account.name, email: account.email },
+      attendeeProfile: { id: "profile-child", fullName: "Child Attendee", badgeName: "Sam" }
+    });
+    await expectResponse(await GET(request()), 200, {
+      attendee: "Child Attendee", approvalStatus: "APPROVED", confirmed: true, event: "Convention", tier: "Weekend"
+    });
+    expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: registrationId, orgId: org.id, portalAccountId: account.id },
+      select: expect.objectContaining({ attendeeProfile: { select: { id: true, fullName: true, badgeName: true } } })
     }));
   });
 });

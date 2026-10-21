@@ -49,19 +49,14 @@ export async function GET(request: NextRequest) {
           name: true
         }
       },
-      portalAccount: {
-        select: {
-          email: true,
-          name: true
-        }
-      }
+      attendeeProfile: { select: { id: true, fullName: true, badgeName: true } }
     }
   });
 
   return NextResponse.json(
     registration
       ? {
-          attendee: registration.portalAccount.name ?? registration.portalAccount.email,
+          attendee: registration.attendeeProfile.fullName,
           approvalStatus: registration.approvalStatus,
           confirmed: true,
           event: registration.event.name,

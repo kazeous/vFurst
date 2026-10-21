@@ -32,7 +32,7 @@
     "test:load": "node scripts/run-load-test.mjs",
     "test:load:launch": "node scripts/run-launch-load-proof.mjs",
     "test:load:smoke": "node scripts/run-load-test.mjs -e VFURST_LOAD_PROFILE=smoke",
-    "test:load-harness": "node --test scripts/lib/staff-oidc-login.test.mjs",
+    "test:load-harness": "node --test scripts/lib/staff-oidc-login.test.mjs scripts/ensure-next-manifests.test.mjs",
     "seed:load": "node scripts/seed-load-test.mjs",
     "fixtures:cleanup": "npm run cleanup:test-fixtures --workspace @vfurst/db",
     "fixtures:cleanup:dry-run": "node packages/db/scripts/cleanup-test-fixtures.mjs",

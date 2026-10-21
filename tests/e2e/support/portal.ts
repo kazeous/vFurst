@@ -8,6 +8,28 @@ export function portalOrigin(subdomain: string): string {
   return `http://${subdomain}.localhost:3000`;
 }
 
+export async function attendeeProfileFixture(
+  prisma: PrismaClient,
+  input: { orgId: string; portalAccountId: string; fullName: string; badgeName?: string; accountHolder?: boolean }
+): Promise<{ id: string }> {
+  const data = {
+    orgId: input.orgId,
+    portalAccountId: input.portalAccountId,
+    fullName: input.fullName,
+    badgeName: input.badgeName ?? null,
+    accountHolderOf: input.accountHolder === false ? null : input.portalAccountId
+  };
+  if (input.accountHolder === false) {
+    return prisma.attendeeProfile.create({ data, select: { id: true } });
+  }
+  return prisma.attendeeProfile.upsert({
+    where: { accountHolderOf: input.portalAccountId, orgId: input.orgId, portalAccountId: input.portalAccountId },
+    update: {},
+    create: data,
+    select: { id: true }
+  });
+}
+
 export async function createPortalAccountFixture(
   prisma: PrismaClient,
   input: { orgId: string; email: string; name?: string; password?: string }

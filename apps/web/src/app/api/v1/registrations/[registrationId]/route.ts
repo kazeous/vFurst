@@ -17,6 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ regi
     include: {
       event: true,
       type: true,
+      attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
       portalAccount: {
         select: {
           id: true,
@@ -33,6 +34,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ regi
     return jsonError("Registration not found.", 404, "not_found");
   }
 
-  const { portalAccountId, portalAccount, ...record } = registration;
-  return withRateHeaders(Response.json({ ...record, userId: portalAccountId, user: portalAccount }), context);
+  const { portalAccountId, portalAccount, attendeeProfile, ...record } = registration;
+  return withRateHeaders(Response.json({ ...record, userId: portalAccountId, user: portalAccount, attendee: attendeeProfile }), context);
 }

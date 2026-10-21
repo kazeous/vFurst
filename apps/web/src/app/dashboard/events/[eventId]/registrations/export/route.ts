@@ -16,6 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     },
     include: {
       type: true,
+      attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
       portalAccount: { select: { id: true, email: true, name: true } }
     },
     orderBy: {
@@ -24,9 +25,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   });
 
   const rows = [
-    ["Name", "Email", "Type", "Status", "Approval", "Badge Number", "Created"],
+    ["Name", "Badge name", "Email", "Type", "Status", "Approval", "Badge Number", "Created"],
     ...registrations.map((registration) => [
-      registration.portalAccount.name ?? "",
+      registration.attendeeProfile.fullName,
+      registration.attendeeProfile.badgeName ?? "",
       registration.portalAccount.email,
       registration.type.name,
       registration.status,

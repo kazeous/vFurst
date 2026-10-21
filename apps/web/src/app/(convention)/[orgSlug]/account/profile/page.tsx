@@ -2,6 +2,7 @@ import { updatePortalProfile } from "@/actions/account-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { Button } from "@/components/ui/button";
 import { requirePortalPageContext } from "@/lib/portal-context";
+import Link from "next/link";
 
 export default async function AccountProfilePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
@@ -12,6 +13,7 @@ export default async function AccountProfilePage({ params }: { params: Promise<{
       <p className="vf-label">Identity</p>
       <h2>Profile</h2>
       <p className="vf-muted">This identity owns your public registrations, orders, bookings, and applications.</p>
+      <p>Attendee names, badge names, and dates of birth are managed under <Link href="/account/attendees">Attendees</Link>.</p>
       <ActionStateForm action={updatePortalProfile} className="vf-form">
         <label>Display name<input name="name" defaultValue={context.account.name ?? ""} required maxLength={120} /></label>
         <p>Email: {context.account.email}</p>

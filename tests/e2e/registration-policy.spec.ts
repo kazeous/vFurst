@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -20,6 +20,7 @@ let approvalEventId: string;
 let approvalTierId: string;
 let capEventId: string;
 let capTierId: string;
+let capProfileIds: string[];
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(150_000);
@@ -80,6 +81,10 @@ test.beforeAll(async () => {
   });
   capEventId = capOrg.events[0]!.id;
   capAttendeeId = (await createPortalAccountFixture(prisma, { orgId: capOrg.id, email: attendeeEmail, name: "Registration Policy Attendee", password })).id;
+  capProfileIds = (await Promise.all([
+    attendeeProfileFixture(prisma, { orgId: capOrg.id, portalAccountId: capAttendeeId, fullName: "Registration Policy Attendee" }),
+    attendeeProfileFixture(prisma, { orgId: capOrg.id, portalAccountId: capAttendeeId, fullName: "Second Registration Policy Attendee", accountHolder: false })
+  ])).map((profile) => profile.id);
 
   const [approvalTier, capTier] = await Promise.all([
     prisma.registrationType.create({ data: { orgId: org.id, eventId: approvalEvent.id, name: "Approval Ticket", price: 0 } }),
@@ -103,8 +108,8 @@ async function login(page: Page, email: string) {
   }
 }
 
-async function prepareRegistration(page: Page, targetOrgSlug: string) {
-  await page.goto(`${portalOrigin(targetOrgSlug)}/register`);
+async function prepareRegistration(page: Page, targetOrgSlug: string, attendeeProfileId?: string) {
+  await page.goto(`${portalOrigin(targetOrgSlug)}/register${attendeeProfileId ? `?attendee=${attendeeProfileId}` : ""}`);
   await expect(page.getByRole("heading", { name: "Registration" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Review" }).click();
@@ -154,12 +159,14 @@ test("the per-account cap survives concurrent submissions", async ({ browser }) 
 
   try {
     await Promise.all(pages.map((page) => loginAsAttendee(page, { subdomain: capOrgSlug }, attendeeEmail, { password })));
-    await Promise.all(pages.map((page) => prepareRegistration(page, capOrgSlug)));
+    await Promise.all(pages.map((page, index) => prepareRegistration(page, capOrgSlug, capProfileIds[index])));
     // One submission takes the account's only slot and the other is rejected
     // inline. Waiting for both also keeps afterAll from deleting the
     // organizations while the losing action is still running.
     const outcomes = await Promise.all(pages.map((page) => submitRegistration(page)));
+    const rejectedPage = pages[outcomes.indexOf("rejected")]!;
     expect(outcomes.sort()).toEqual(["registered", "rejected"]);
+    await expect(rejectedPage.getByTestId("registration-error")).toContainText("This event allows at most 1 attendee per account.");
 
     await expect.poll(async () => prisma.registration.count({ where: { eventId: capEventId, portalAccountId: capAttendeeId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } } })).toBe(1);
   } finally {

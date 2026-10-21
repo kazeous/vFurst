@@ -42,6 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
       },
       include: {
         type: true,
+        attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
         portalAccount: { select: { id: true, email: true, name: true } }
       },
       orderBy: {
@@ -85,10 +86,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
     ["Checked in", registrations.filter((registration) => registration.status === "CHECKED_IN").length],
     ...moneyRows,
     [],
-    ["Registration ID", "Attendee", "Email", "Type", "Status", "Created", "Checked in"],
+    ["Registration ID", "Attendee", "Badge name", "Email", "Type", "Status", "Created", "Checked in"],
     ...registrations.map((registration) => [
       registration.id,
-      registration.portalAccount.name ?? "",
+      registration.attendeeProfile.fullName,
+      registration.attendeeProfile.badgeName ?? "",
       registration.portalAccount.email,
       registration.type.name,
       registration.status,

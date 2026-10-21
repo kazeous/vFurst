@@ -114,7 +114,7 @@ export function EventWizard({ organizations }: { organizations: OrgOption[] }) {
         </label>
         <label>
           Max registrations per user
-          <input name="maxRegistrationsPerUser" type="number" min="1" max="20" defaultValue="1" />
+          <input name="maxRegistrationsPerUser" type="number" min="1" max="20" defaultValue="4" />
         </label>
         <label className="vf-check">
           <input name="publishNow" type="checkbox" />

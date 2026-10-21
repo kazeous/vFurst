@@ -33,6 +33,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
             take: 1
           },
           type: true,
+          attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
           portalAccount: { select: { id: true, email: true, name: true } }
         },
         orderBy: {
@@ -114,16 +115,17 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
 
               return (
                 <div key={registration.id} className="vf-list-row">
-                  <span>{registration.portalAccount.name ?? registration.portalAccount.email}</span>
+                  <span>{registration.attendeeProfile.fullName}</span>
                   <small>
                     {registration.type.name} - {registration.status}
                   </small>
                   {badge ? (
                     <BadgePrintControls
                       badgeId={badge.id}
-                      label={registration.portalAccount.name ?? registration.portalAccount.email}
+                      label={registration.attendeeProfile.fullName}
                       pdfUrl={badge.pdfUrl}
                       zplData={badge.zplData}
+                      renderIssue={badge.renderIssue}
                       generatedAt={badge.generatedAt?.toISOString() ?? null}
                       printedAt={badge.printedAt?.toISOString() ?? null}
                     />

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPortalAccount } from "@/lib/portal-account";
-import { getRequestPortalOrg } from "@/lib/portal-request";
+import { getCachedRequestPortalOrg } from "@/lib/portal-request";
 
 const responseHeaders = {
   "cache-control": "private, no-store, max-age=0",
@@ -8,7 +8,7 @@ const responseHeaders = {
 };
 
 export async function GET() {
-  const org = await getRequestPortalOrg();
+  const org = await getCachedRequestPortalOrg();
   if (!org) {
     return NextResponse.json({ account: null }, { status: 404, headers: responseHeaders });
   }

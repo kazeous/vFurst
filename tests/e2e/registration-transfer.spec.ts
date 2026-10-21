@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
-import { createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
+import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { staffIdentityData } from "./support/staff";
 
 const prisma = new PrismaClient();
@@ -90,11 +90,18 @@ async function login(page: Page, email: string) {
 async function createTransferRequest(input: { recipient: string; expiresAt?: Date; withArtifacts?: boolean }) {
   const suffix = randomBytes(6).toString("hex");
   const rawToken = randomBytes(32).toString("base64url");
+  const activeCount = await prisma.registration.count({
+    where: { orgId, eventId, portalAccountId: sourceAccountId, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] } }
+  });
+  const profile = await attendeeProfileFixture(prisma, {
+    orgId, portalAccountId: sourceAccountId, fullName: "Source Attendee", accountHolder: activeCount === 0
+  });
   const source = await prisma.registration.create({
     data: {
       orgId,
       eventId,
       portalAccountId: sourceAccountId,
+      attendeeProfileId: profile.id,
       typeId,
       status: "CONFIRMED",
       approvalStatus: "APPROVED",
@@ -137,6 +144,7 @@ test("recipient accepts once and ownership, add-ons, and invalidated badge move 
   await login(page, recipientEmail);
   await page.goto(`${portalOrigin(orgSlug)}/account/transfers/${created.request.id}?token=${created.rawToken}`);
   await expect(page.getByRole("heading", { name: "Registration Transfer Event", level: 2 })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Who will attend?" }).getByRole("radio", { name: /Account holder/ })).toBeChecked();
   const acceptedNavigation = page.waitForURL((url) => url.searchParams.get("notice") === "accepted", { waitUntil: "load" });
   await page.getByRole("button", { name: "Accept transfer" }).click({ noWaitAfter: true });
   await acceptedNavigation;

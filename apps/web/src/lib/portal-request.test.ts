@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
-  getConventionOrg: vi.fn()
+  getConventionOrg: vi.fn(),
+  lookupPortalHostOrganization: vi.fn()
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("@/lib/convention", () => ({ getConventionOrg: mocks.getConventionOrg }));
+vi.mock("@/lib/portal-host-directory", () => ({ lookupPortalHostOrganization: mocks.lookupPortalHostOrganization }));
 
-import { getRequestPortalOrg, isSecureRequest } from "./portal-request";
+import { getCachedRequestPortalOrg, getRequestPortalOrg, isSecureRequest } from "./portal-request";
 
 describe("portal request helpers", () => {
   beforeEach(() => vi.resetAllMocks());
@@ -35,6 +37,21 @@ describe("portal request helpers", () => {
     mocks.headers.mockResolvedValue(new Headers());
 
     await expect(getRequestPortalOrg()).resolves.toBeNull();
+    expect(mocks.getConventionOrg).not.toHaveBeenCalled();
+  });
+
+  it("returns null from the cached helper without a portal slug header", async () => {
+    mocks.headers.mockResolvedValue(new Headers());
+    await expect(getCachedRequestPortalOrg()).resolves.toBeNull();
+    expect(mocks.lookupPortalHostOrganization).not.toHaveBeenCalled();
+  });
+
+  it("delegates the cached helper to the portal host directory", async () => {
+    const org = { id: "org-acme", subdomain: "acme" };
+    mocks.headers.mockResolvedValue(new Headers({ "x-vfurst-org-slug": "acme" }));
+    mocks.lookupPortalHostOrganization.mockResolvedValue(org);
+    await expect(getCachedRequestPortalOrg()).resolves.toBe(org);
+    expect(mocks.lookupPortalHostOrganization).toHaveBeenCalledExactlyOnceWith("acme");
     expect(mocks.getConventionOrg).not.toHaveBeenCalled();
   });
 });
