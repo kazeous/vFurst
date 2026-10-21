@@ -5,6 +5,7 @@ import http from "node:http";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseWorkerCount, checkConnectionBudget } from "./web-cluster.mjs";
+import * as launcher from "./web-cluster.mjs";
 
 const launcherPath = resolve("scripts/web-cluster.mjs");
 const fixturePath = resolve("scripts/web-cluster.fixture.mjs");
@@ -139,4 +140,91 @@ test("serves through three workers in round robin", { timeout: 15_000 }, async (
   assert.ok(!pids.has(handle.child.pid));
   await delay(1_000);
   assert.equal(handle.stdout().match(/\[web-cluster\] 3\/3 workers listening on \d+/g)?.length, 1);
+});
+
+async function exitWithin(handle, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      handle.exited,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Launcher did not exit in time")), timeoutMs); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function workerPids(handle, count) {
+  await waitForOutput(handle, new RegExp(`\\[web-cluster\\] ${count}/${count} workers listening`));
+  const pids = new Set();
+  for (let i = 0; i < 30; i++) pids.add(await getPid(handle.port));
+  assert.equal(pids.size, count);
+  return pids;
+}
+
+test("replaces a killed worker", { timeout: 15_000 }, async (t) => {
+  const handle = await startLauncher(t, { replicas: 3 });
+  const original = await workerPids(handle, 3);
+  process.kill([...original][0], "SIGKILL");
+  await waitForOutput(handle, /worker \d+ \(pid \d+\) exited with \S+; restarting in 1s/);
+  const deadline = Date.now() + 5_000;
+  let replacement;
+  while (Date.now() < deadline) {
+    try {
+      const pid = await new Promise((done, reject) => {
+        const request = http.get({ hostname: "127.0.0.1", port: handle.port, path: "/", agent: false }, (response) => {
+          let body = "";
+          response.on("data", (chunk) => { body += chunk; });
+          response.on("end", () => {
+            try { assert.equal(response.statusCode, 200); done(JSON.parse(body).pid); } catch (error) { reject(error); }
+          });
+          response.on("error", reject);
+        });
+        request.setTimeout(1_000, () => request.destroy(new Error("Request timed out")));
+        request.on("error", reject);
+      });
+      if (!original.has(pid)) { replacement = pid; break; }
+    } catch {
+      // A connection handed to the dying worker may fail before its replacement is ready.
+    }
+    await delay(50);
+  }
+  assert.ok(replacement, "A replacement worker must serve within 5 s");
+  assert.match(handle.stderr(), /worker \d+ \(pid \d+\) exited with \S+; restarting in 1s/);
+  assert.equal(handle.child.exitCode, null);
+});
+test("gives up after the sixth unexpected exit", { timeout: 20_000 }, async (t) => {
+  const handle = await startLauncher(t, { replicas: 2, mode: "crash" });
+  assert.equal((await exitWithin(handle, 15_000)).code, 1);
+  assert.match(handle.stderr(), /\[web-cluster\] \d+ worker exits in 60s; giving up/);
+});
+test("workers exit when the primary is killed", { timeout: 15_000 }, async (t) => {
+  const handle = await startLauncher(t, { replicas: 2 });
+  const pids = await workerPids(handle, 2);
+  handle.child.kill("SIGKILL");
+  await handle.exited;
+  const isGone = (pid) => {
+    try { process.kill(pid, 0); return false; } catch (error) { assert.equal(error.code, "ESRCH"); return true; }
+  };
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline && ![...pids].every(isGone)) await delay(50);
+  for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+});
+test("drains in-flight requests on SIGTERM", { skip: process.platform === "win32", timeout: 15_000 }, async (t) => {
+  const handle = await startLauncher(t, { replicas: 2 });
+  const pids = await workerPids(handle, 2);
+  const slow = getPid(handle.port, "/slow");
+  await delay(200);
+  handle.child.kill("SIGTERM");
+  assert.ok(pids.has(await slow));
+  assert.equal((await exitWithin(handle, 5_000)).code, 0);
+  assert.ok(handle.stdout().includes("[web-cluster] SIGTERM: stopping 2 workers"));
+  assert.ok(handle.stdout().includes("[web-cluster] all workers exited"));
+});
+test("kills workers that ignore SIGTERM after the deadline", { skip: process.platform === "win32", timeout: 40_000 }, async (t) => {
+  const handle = await startLauncher(t, { replicas: 2, mode: "ignore-sigterm" });
+  await workerPids(handle, 2);
+  handle.child.kill("SIGTERM");
+  assert.equal((await exitWithin(handle, launcher.SHUTDOWN_TIMEOUT_MS + 5_000)).code, 1);
+  assert.ok(handle.stderr().includes("shutdown deadline reached; killed 2 workers"));
 });
