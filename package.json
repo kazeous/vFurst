@@ -26,6 +26,7 @@
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
     "test:compose": "node --test scripts/validate-compose.test.mjs",
+    "test:web-cluster": "node --test scripts/web-cluster.test.mjs",
     "compose:validate": "node scripts/validate-compose.mjs",
     "test:boot-config": "node scripts/smoke-web-boot.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
