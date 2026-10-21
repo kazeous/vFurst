@@ -8,3 +8,15 @@ export function pickInitialAttendee(
     ?? free[0]?.id
     ?? null;
 }
+
+export type AttendeeRefreshResult = { profileId: string; ok: boolean };
+
+export function attendeeRefreshState(
+  profileId: string | undefined,
+  result: AttendeeRefreshResult | null
+): { loading: boolean; loadFailed: boolean } {
+  return {
+    loading: Boolean(profileId) && result?.profileId !== profileId,
+    loadFailed: Boolean(profileId) && result?.profileId === profileId && !result?.ok
+  };
+}

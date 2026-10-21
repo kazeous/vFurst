@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialAttendeeProfileFormState } from "@/lib/attendee-profile-form-state";
-import { pickInitialAttendee } from "./attendee-selection";
+import { attendeeRefreshState, pickInitialAttendee, type AttendeeRefreshResult } from "./attendee-selection";
 
 export type AttendeeChoice = { id: string; fullName: string; badgeName: string | null; isAccountHolder: boolean; registered: boolean };
 type AttendeeList = { cap: number; used: number; attendees: AttendeeChoice[] };
@@ -24,29 +24,24 @@ export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
     return payload && Array.isArray(payload.attendees) && typeof payload.cap === "number" && typeof payload.used === "number"
       ? payload as AttendeeList : null;
   }, [session]);
-  const [loading, setLoading] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<AttendeeRefreshResult | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [state, action, pending] = useActionState(createAttendeeProfile, initialAttendeeProfileFormState);
+  const { loading, loadFailed } = attendeeRefreshState(state.profileId, refreshResult);
   const selectedRef = useRef(selectedId);
-  const refreshedProfileRef = useRef<string | undefined>(undefined);
+  const requestedProfileRef = useRef<string | undefined>(undefined);
   selectedRef.current = selectedId;
   useActionRedirect(state.redirectTo);
 
   useEffect(() => {
-    if (!state.profileId || refreshedProfileRef.current === state.profileId) return;
-    refreshedProfileRef.current = state.profileId;
-    let active = true;
-    setLoading(true);
-    setLoadFailed(false);
+    if (!state.profileId || requestedProfileRef.current === state.profileId) return;
+    const profileId = state.profileId;
+    requestedProfileRef.current = profileId;
     onSelectionChange(null, false);
-    void refresh().then((ok) => {
-      if (!active) return;
-      setLoading(false);
-      setLoadFailed(!ok);
+    void refresh().catch(() => false).then((ok) => {
+      setRefreshResult({ profileId, ok });
       if (ok) setIsAdding(false);
     });
-    return () => { active = false; };
   }, [state.profileId, refresh, onSelectionChange]);
 
   useEffect(() => {
