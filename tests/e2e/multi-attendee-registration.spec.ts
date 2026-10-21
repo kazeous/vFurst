@@ -253,12 +253,15 @@ test("editing a profile re-queues only its unprinted badge", async ({ page }) =>
     await page.getByLabel(/Badge name/).fill("Fresh Badge Name");
     await page.getByRole("button", { name: "Save attendee", exact: true }).click();
     await page.waitForURL(`${origin}/account/attendees?notice=saved`, { waitUntil: "load" });
-    expect(await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } })).toMatchObject({ pdfUrl: null, zplData: null, generatedAt: null });
+    expect(await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } })).toMatchObject({ pdfUrl: null, zplData: null, generatedAt: null, renderIssue: null });
     expect(await prisma.badge.findUniqueOrThrow({ where: { id: printed.id } })).toEqual(printed);
     expect(await prisma.badge.findUniqueOrThrow({ where: { id: inactive.id } })).toEqual(inactive);
     await queue.resume();
-    await expect.poll(async () => (await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } })).zplData, { timeout: 30_000 }).toContain("Fresh Badge Name");
-    expect((await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } })).generatedAt).not.toBeNull();
+    await expect.poll(async () => (await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } })).generatedAt, { timeout: 30_000 }).not.toBeNull();
+    const rendered = await prisma.badge.findUniqueOrThrow({ where: { id: editable.id } });
+    expect(rendered.zplData).toContain("^CI28");
+    expect(rendered.zplData).not.toBe("OLD");
+    expect(rendered.renderIssue).toBeNull();
     expect(await prisma.badge.findUniqueOrThrow({ where: { id: printed.id } })).toEqual(printed);
     expect(await prisma.badge.findUniqueOrThrow({ where: { id: inactive.id } })).toEqual(inactive);
   } finally { if (wasPaused) await queue.pause(); else await queue.resume(); await queue.close(); }
@@ -285,9 +288,17 @@ test("a cashier walk-in for a different name under an existing email adds a seco
 
 test("a walk-in for the same name in other Unicode spacing reuses the free profile", async ({ page }) => {
   const attendee = await account("multi-unicode", "Nguyễn Văn An");
+  await template("Unicode walk-in badge");
   await walkIn(page, attendee.email, "Nguyễn  Văn An".normalize("NFD"));
   expect(await prisma.attendeeProfile.count({ where: { orgId, portalAccountId: attendee.id } })).toBe(1);
   expect((await prisma.registration.findFirstOrThrow({ where: { orgId, portalAccountId: attendee.id } })).attendeeProfileId).toBe(attendee.selfId);
+  const walkInBadge = () => prisma.badge.findFirst({ where: { orgId, registration: { portalAccountId: attendee.id } } });
+  await expect.poll(async () => (await walkInBadge())?.generatedAt ?? null, { timeout: 30_000 }).not.toBeNull();
+  const rendered = await walkInBadge();
+  expect(rendered?.renderIssue).toBeNull();
+  expect(rendered?.pdfUrl).toEqual(expect.any(String));
+  expect(rendered?.zplData).toContain("^CI28");
+  expect(rendered?.zplData).toContain("^GFA");
 });
 
 test("the organizer detail shows the date of birth as entered", async ({ page }) => {
