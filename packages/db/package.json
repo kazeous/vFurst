@@ -16,7 +16,7 @@
     "prepare:payment-attempt-locks": "node scripts/prepare-payment-attempt-locks.mjs",
     "prepare:attendee-profiles": "node scripts/prepare-attendee-profiles.mjs",
     "push": "prisma db push --skip-generate",
-    "sync": "npm run prepare:payment-attempt-locks && npm run prepare:attendee-profiles && npm run push && npm run backfill:managed-tenancy && npm run backfill:payment-attempt-locks",
+    "sync": "npm run prepare:payment-attempt-locks && node scripts/push-schema.mjs && npm run backfill:managed-tenancy && npm run backfill:payment-attempt-locks",
     "pretype-check": "prisma generate",
     "type-check": "tsc --noEmit",
     "test": "prisma generate && vitest run --passWithNoTests",

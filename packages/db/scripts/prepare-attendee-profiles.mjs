@@ -74,14 +74,18 @@ export async function prepareAttendeeProfiles(client = prisma) {
   }, { maxWait: 10_000, timeout: 120_000 });
 }
 
+export function formatPreparationResult(result) {
+  return result.skipped
+    ? `Attendee-profile preparation skipped: ${result.reason}`
+    : `Attendee-profile preparation complete: ${result.profilesCreated} profiles created, ${result.registrationsAssigned} registrations assigned.`;
+}
+
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isDirectRun) {
   try {
     const result = await prepareAttendeeProfiles();
-    log(result.skipped
-      ? `Attendee-profile preparation skipped: ${result.reason}`
-      : `Attendee-profile preparation complete: ${result.profilesCreated} profiles created, ${result.registrationsAssigned} registrations assigned.`);
+    log(formatPreparationResult(result));
   } finally {
     await prisma.$disconnect();
   }
