@@ -21,6 +21,7 @@ import { processSendEmail } from "./jobs/send-email.js";
 import { processSendWebhook } from "./jobs/send-webhook.js";
 import { processRecoverEmailDeliveries } from "./jobs/recover-email-deliveries.js";
 import { processCleanupIdentityProtocolRecords } from "./jobs/cleanup-identity-protocol-records.js";
+import { loadBadgeFonts } from "./badges/fonts.js";
 
 const controlPlaneRedis = new Redis(workerEnv.REDIS_URL, {
   lazyConnect: true,
@@ -248,6 +249,7 @@ async function scheduleRecurringJobs() {
 
 async function start() {
   console.info(`Worker runtime environment validated. Required variables: ${requiredWorkerRuntimeVariables.join(", ")}.`);
+  await loadBadgeFonts();
 
   await withTimeout(
     Promise.all([prisma.$connect(), controlPlaneRedis.connect()]),
