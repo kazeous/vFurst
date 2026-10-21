@@ -3,6 +3,8 @@ import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFPage, PDFRawStrea
 import { PNG } from "pngjs";
 import bwipjs from "bwip-js/node";
 import fontkit, { type Path } from "@pdf-lib/fontkit";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 
@@ -411,6 +413,60 @@ describe("processGenerateBadges", () => {
     expect(prisma.badge.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
       renderIssue: "Printed without: " + emoji.slice(0, 10).join(" ") + " …"
     }) }));
+  });
+
+  it.runIf(Boolean(process.env.BADGE_SAMPLES_DIR))("writes visual samples to BADGE_SAMPLES_DIR", async () => {
+    const directory = process.env.BADGE_SAMPLES_DIR!;
+    await mkdir(directory, { recursive: true });
+    const elements = [
+      { id: "event", type: "text", x: 24, y: 22, w: 312, h: 30, field: "event.name" },
+      { id: "name", type: "text", x: 24, y: 82, w: 220, h: 36, field: "attendee.name" },
+      { id: "badge", type: "text", x: 24, y: 126, w: 220, h: 30, field: "attendee.badgeName" },
+      { id: "qr", type: "qr", x: 252, y: 78, w: 72, h: 72, field: "attendee.badgeName" }
+    ];
+    const names = [
+      ["Nguyễn Thị Ánh Tuyết", "Ếch Xanh"],
+      ["Trần Quốc Bảo Long Nguyễn Hoàng Phương Thảo", null],
+      ["Aurora Fox", "Aurora 🦊★"],
+      ["Zoë Ångström-Łukasz", "Đức"],
+      ["Injector", "^XA^FO0,0^FDx^FS~JR_"]
+    ] as const;
+    vi.mocked(prisma.badge.findMany).mockResolvedValue(names.map(([fullName, badgeName], index) => badgeRecord(elements, {
+      id: `00000000-0000-4000-8000-${String(101 + index).padStart(12, "0")}`,
+      barcodeData: `VF-SAMPLE-${index + 1}`, fullName, badgeName
+    })) as never);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.generated).toBe(5);
+    expect(result.failed).toBe(0);
+    const uploadedPdf = (send.mock.calls[0]![0] as { input: { Body: Buffer } }).input.Body;
+    await writeFile(join(directory, "badges.pdf"), uploadedPdf);
+    for (const [index, output] of result.zplOutput.entries()) {
+      await writeFile(join(directory, `badge-${index + 1}.zpl`), output.zpl, "utf8");
+      const image = new PNG({ width: 360, height: 240 });
+      image.data.fill(255);
+      const graphics = output.zpl.matchAll(/\^FO(\d+),(\d+)\n\^GFA,\d+,\d+,(\d+),([0-9A-F]+)\^FS/g);
+      for (const graphic of graphics) {
+        const x = Number(graphic[1]);
+        const y = Number(graphic[2]);
+        const bytesPerRow = Number(graphic[3]);
+        const bitmap = Buffer.from(graphic[4]!, "hex");
+        for (let byte = 0; byte < bitmap.length; byte += 1) {
+          const row = y + Math.floor(byte / bytesPerRow);
+          if (row >= image.height) continue;
+          for (let bit = 0; bit < 8; bit += 1) {
+            const column = x + (byte % bytesPerRow) * 8 + bit;
+            if (column >= image.width || !(bitmap[byte]! & (0x80 >> bit))) continue;
+            const offset = (row * image.width + column) * 4;
+            image.data[offset] = image.data[offset + 1] = image.data[offset + 2] = 0;
+          }
+        }
+      }
+      await writeFile(join(directory, `label-${index + 1}.png`), PNG.sync.write(image));
+    }
+    const results = vi.mocked(prisma.badge.update).mock.calls.map(([update]) => ({
+      badgeId: update.where.id, renderIssue: update.data.renderIssue
+    }));
+    await writeFile(join(directory, "results.json"), JSON.stringify(results, null, 2) + "\n", "utf8");
   });
 
   it("embeds a tenant-owned PNG in PDF and emits a real ZPL graphic", async () => {
