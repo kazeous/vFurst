@@ -8,33 +8,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PNG } from "pngjs";
 import { workerEnv } from "../env.js";
 import type { GenerateBadgesJob } from "../queues.js";
-
-type BadgeElement = {
-  id?: string;
-  type: "text" | "image" | "barcode" | "qr";
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  field?: string;
-  value?: string;
-  assetKey?: string;
-};
-
-type BadgeLayout = {
-  width: number;
-  height: number;
-  elements: BadgeElement[];
-};
-
-type RasterImage = {
-  key: string;
-  format: "png" | "jpeg";
-  bytes: Uint8Array;
-  width: number;
-  height: number;
-  rgba: Uint8Array;
-};
+import type { BadgeElement, BadgeLayout, RasterImage } from "../badges/types.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 4096;
