@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { performance } from "node:perf_hooks";
 import { planAttendeeProfileBackfill } from "./attendee-profile-backfill-plan.mjs";
 
 const account = { id: "a1", orgId: "o1", name: "Mai Le", email: "mai@example.com" };
