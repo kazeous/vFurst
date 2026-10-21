@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { FONT_DIRECTORY, loadBadgeFonts, readBadgeFonts, type BadgeFonts } from "./fonts.js";
+import fontkit, { type Path } from "@pdf-lib/fontkit";
+import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
+import { badgeFontkit, FONT_DIRECTORY, loadBadgeFonts, readBadgeFonts, type BadgeFonts } from "./fonts.js";
 
 let fonts: BadgeFonts;
 
@@ -43,6 +45,30 @@ describe("badge fonts", () => {
     expect(fonts.zpl.unitsPerEm).toBeGreaterThan(0);
     expect(fonts.zpl.ascent).toBeGreaterThan(0);
     expect(fonts.zpl.descent).toBeLessThan(0);
+  });
+
+  it("subset fonts embed every glyph outline unchanged", async () => {
+    const sample = "Artifact Event Nguyễn Thị Ánh Tuyết Ếch Xanh Zoë Ångström-Łukasz Đức ^XA~JR_ Injector… Привет Γειά Ỹỹ Ựự";
+    const pdf = await PDFDocument.create();
+    pdf.registerFontkit(badgeFontkit);
+    const font = await pdf.embedFont(fonts.pdfBytes, { subset: true });
+    pdf.addPage().drawText(sample, { font, size: 10 });
+    const doc = await PDFDocument.load(await pdf.save());
+    const descriptors = doc.context.enumerateIndirectObjects().map(([, object]) => object)
+      .filter((object): object is PDFDict => object instanceof PDFDict && object.get(PDFName.of("Type")) === PDFName.of("FontDescriptor"));
+    expect(descriptors).toHaveLength(1);
+    const stream = doc.context.lookup(descriptors[0]!.get(PDFName.of("FontFile2")));
+    if (!(stream instanceof PDFRawStream)) throw new Error("Expected an embedded font stream.");
+    const embedded = fontkit.create(Buffer.from(decodePDFRawStream(stream).decode()));
+    for (let gid = 0; gid < embedded.numGlyphs; gid += 1) {
+      expect(() => (embedded.getGlyph(gid).path as Path & { commands: unknown[] }).commands, `embedded glyph ${gid}`).not.toThrow();
+    }
+    const mirror = fonts.pdf.createSubset();
+    const mapping = new Map(fonts.pdf.layout(sample).glyphs.map((glyph) => [glyph.id, mirror.includeGlyph(glyph.id)]));
+    for (const [original, subset] of mapping) {
+      expect(embedded.getGlyph(subset).path.toSVG(), `original glyph ${original}, subset glyph ${subset}`)
+        .toBe(fonts.pdf.getGlyph(original).path.toSVG());
+    }
   });
 
   it("reports a missing font directory", async () => {

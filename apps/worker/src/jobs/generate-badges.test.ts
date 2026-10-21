@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFPage, PDFRawStream } from "pdf-lib";
 import { PNG } from "pngjs";
 import bwipjs from "bwip-js/node";
+import fontkit, { type Path } from "@pdf-lib/fontkit";
 
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 
@@ -265,6 +266,10 @@ describe("processGenerateBadges", () => {
       const stream = doc.context.lookup(fontFile);
       if (!(stream instanceof PDFRawStream)) throw new Error("Expected an embedded font stream.");
       expect(decodePDFRawStream(stream).decode().length).toBeLessThan(100_000);
+      const embedded = fontkit.create(Buffer.from(decodePDFRawStream(stream).decode()));
+      for (let gid = 0; gid < embedded.numGlyphs; gid += 1) {
+        expect(() => (embedded.getGlyph(gid).path as Path & { commands: unknown[] }).commands, `embedded glyph ${gid}`).not.toThrow();
+      }
     }
     expect(result.zplOutput?.[0]?.zpl.startsWith("^XA\n^CI28\n")).toBe(true);
     expect(result.zplOutput?.[0]?.zpl.match(/\^GFA,/g)).toHaveLength(2);
