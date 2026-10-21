@@ -4,6 +4,7 @@ import { checkInRegistration } from "@/actions/phase5-actions";
 import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { useServiceWorker } from "@/hooks/use-service-worker";
 import { Button } from "@/components/ui/button";
+import { badgeOutputStatus } from "@/lib/badge-output-status";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { useMemo, useState } from "react";
 
@@ -17,6 +18,7 @@ type ExpressRow = {
     id: string;
     pdfUrl: string | null;
     zplData: string | null;
+    renderIssue: string | null;
     generatedAt: string | null;
     printedAt: string | null;
   } | null;
@@ -65,7 +67,7 @@ export function ExpressKiosk({ rows }: { rows: ExpressRow[] }) {
           <h2>{match.attendee}</h2>
           <p>{match.email}</p>
           <p className="vf-muted">
-            Badge {match.badge?.printedAt ? "printed" : match.badge?.generatedAt ? "output ready" : "not ready"} - {match.status}
+            Badge {match.badge ? { printed: "printed", ready: "output ready", failed: "render failed", queued: "not ready" }[badgeOutputStatus(match.badge)] : "not ready"} - {match.status}
           </p>
           <form action={checkInRegistration}>
             <input type="hidden" name="registrationId" value={match.id} />
@@ -77,6 +79,7 @@ export function ExpressKiosk({ rows }: { rows: ExpressRow[] }) {
               label={match.attendee}
               pdfUrl={match.badge.pdfUrl}
               zplData={match.badge.zplData}
+              renderIssue={match.badge.renderIssue}
               generatedAt={match.badge.generatedAt}
               printedAt={match.badge.printedAt}
             />

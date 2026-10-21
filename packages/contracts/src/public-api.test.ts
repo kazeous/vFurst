@@ -71,6 +71,7 @@ const badge = {
   nfcTag: null,
   pdfUrl: null,
   zplData: null,
+  renderIssue: null,
   generatedAt: null,
   printedAt: null,
   createdAt: timestamp,
@@ -244,6 +245,16 @@ describe("public API v1 contracts", () => {
     });
 
     expect(result.registration.user.email).toBe("attendee@example.test");
+  });
+
+  it("accepts a badge render issue", () => {
+    const result = publicApiBadgeListItemV1Schema.parse({
+      ...badge,
+      renderIssue: "Printed without: 🦊",
+      template: { id: ids.template, name: "Default badge" },
+      registration: { ...registrationFields, event: { id: event.id, name: event.name }, user }
+    });
+    expect(result.renderIssue).toBe("Printed without: 🦊");
   });
 
   it("matches the current nested error envelope and pagination bounds", () => {

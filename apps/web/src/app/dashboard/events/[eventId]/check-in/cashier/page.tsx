@@ -125,6 +125,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
                       label={registration.attendeeProfile.fullName}
                       pdfUrl={badge.pdfUrl}
                       zplData={badge.zplData}
+                      renderIssue={badge.renderIssue}
                       generatedAt={badge.generatedAt?.toISOString() ?? null}
                       printedAt={badge.printedAt?.toISOString() ?? null}
                     />

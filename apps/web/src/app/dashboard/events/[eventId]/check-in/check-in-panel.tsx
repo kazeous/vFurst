@@ -4,6 +4,7 @@ import { checkInRegistration } from "@/actions/phase5-actions";
 import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { useServiceWorker } from "@/hooks/use-service-worker";
 import { Button } from "@/components/ui/button";
+import { badgeOutputStatus } from "@/lib/badge-output-status";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { useMemo, useState } from "react";
 
@@ -23,6 +24,7 @@ type CheckInRow = {
     barcodeData: string;
     pdfUrl: string | null;
     zplData: string | null;
+    renderIssue: string | null;
     generatedAt: string | null;
     printedAt: string | null;
   } | null;
@@ -116,13 +118,9 @@ export function CheckInPanel({
                 </p>
                 <p className="vf-muted">
                   Payment {row.paid ? "paid" : "unpaid"} - Badge{" "}
-                  {row.badge?.printedAt
-                    ? "printed"
-                    : row.badge?.generatedAt
-                      ? "output ready"
-                      : row.badge
-                        ? "render queued"
-                        : "not generated"}
+                  {row.badge
+                    ? { printed: "printed", ready: "output ready", failed: "render failed", queued: "render queued" }[badgeOutputStatus(row.badge)]
+                    : "not generated"}
                 </p>
                 {row.addOns.length > 0 ? <p className="vf-muted">Add-ons: {row.addOns.join(", ")}</p> : null}
               </div>
@@ -137,6 +135,7 @@ export function CheckInPanel({
                     label={row.attendee}
                     pdfUrl={row.badge.pdfUrl}
                     zplData={row.badge.zplData}
+                    renderIssue={row.badge.renderIssue}
                     generatedAt={row.badge.generatedAt}
                     printedAt={row.badge.printedAt}
                   />

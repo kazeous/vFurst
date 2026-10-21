@@ -3,6 +3,7 @@
 import { confirmBadgePrinted, queueBadgeRender } from "@/actions/phase5-actions";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/i18n";
+import { badgeOutputMessage } from "@/lib/badge-output-status";
 import { getWebUsbSupport, printZplQueue, type PrintJob } from "@/lib/webusb-printer";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -14,6 +15,7 @@ type BadgePrintControlsProps = {
   zplData: string | null;
   generatedAt: string | null;
   printedAt: string | null;
+  renderIssue: string | null;
 };
 
 export function BadgePrintControls({
@@ -22,13 +24,14 @@ export function BadgePrintControls({
   pdfUrl,
   zplData,
   generatedAt,
-  printedAt
+  printedAt,
+  renderIssue
 }: BadgePrintControlsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [usbSupported, setUsbSupported] = useState(false);
   const [message, setMessage] = useState(
-    generatedAt ? "Badge output is ready." : "Badge output is waiting for the render worker."
+    badgeOutputMessage({ generatedAt, printedAt, renderIssue })
   );
 
   useEffect(() => {

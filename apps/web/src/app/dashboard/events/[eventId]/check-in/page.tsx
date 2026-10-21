@@ -106,6 +106,7 @@ const getCheckInData = unstable_cache(
               barcodeData: true,
               pdfUrl: true,
               zplData: true,
+              renderIssue: true,
               generatedAt: true,
               printedAt: true
             }
@@ -196,6 +197,7 @@ export default async function CheckInPage({
                 barcodeData: registration.badges[0].barcodeData,
                 pdfUrl: registration.badges[0].pdfUrl,
                 zplData: registration.badges[0].zplData,
+                renderIssue: registration.badges[0].renderIssue,
                 generatedAt: registration.badges[0].generatedAt
                   ? new Date(registration.badges[0].generatedAt).toISOString()
                   : null,

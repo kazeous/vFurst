@@ -4,6 +4,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/i18n";
+import { badgeOutputStatus } from "@/lib/badge-output-status";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -101,6 +102,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
           </div>
           {event.registrations.map((registration) => {
             const badge = registration.badges[0];
+            const outputStatus = badge ? badgeOutputStatus(badge) : null;
 
             return (
               <div key={registration.id} className="vf-table-row vf-five-col">
@@ -108,13 +110,13 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
                 <span>{registration.type.name}</span>
                 <span>{badge?.barcodeData ?? "Not generated"}</span>
                 <span>
-                  {badge?.printedAt
-                    ? `Printed ${formatDate(badge.printedAt, { dateStyle: "medium", timeStyle: "short" })}`
-                    : badge?.generatedAt
+                  {outputStatus === "printed"
+                    ? `Printed ${formatDate(badge!.printedAt!, { dateStyle: "medium", timeStyle: "short" })}`
+                    : outputStatus === "ready"
                       ? "Output ready"
-                      : badge
-                        ? "Render queued"
-                        : "Missing"}
+                      : outputStatus === "failed"
+                        ? "Render failed"
+                        : badge ? "Render queued" : "Missing"}
                 </span>
                 <div>
                   {badge ? (
@@ -123,6 +125,7 @@ export default async function BadgesPage({ params }: { params: Promise<{ eventId
                       label={registration.attendeeProfile.fullName}
                       pdfUrl={badge.pdfUrl}
                       zplData={badge.zplData}
+                      renderIssue={badge.renderIssue}
                       generatedAt={badge.generatedAt?.toISOString() ?? null}
                       printedAt={badge.printedAt?.toISOString() ?? null}
                     />

@@ -144,7 +144,7 @@ describe("attendee profile actions", () => {
     expect(mocks.tx.badge.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: eligible }));
     expect(mocks.tx.badge.updateMany).toHaveBeenCalledWith({
       where: { ...eligible, id: { in: badges.map((badge) => badge.id) } },
-      data: { pdfUrl: null, zplData: null, generatedAt: null }
+      data: { pdfUrl: null, zplData: null, generatedAt: null, renderIssue: null }
     });
     expect(mocks.tx.attendeeProfile.update).toHaveBeenCalledWith(expect.objectContaining({ where: ownerWhere }));
     expect(mocks.queue.mock.calls).toEqual([
@@ -160,7 +160,7 @@ describe("attendee profile actions", () => {
     await expect(updateAttendeeProfile({}, form())).resolves.toEqual({ redirectTo: "/account/attendees?notice=saved" });
     expect(mocks.committed).toBe(true);
     expect(mocks.tx.attendeeProfile.update).toHaveBeenCalledOnce();
-    expect(mocks.tx.badge.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { pdfUrl: null, zplData: null, generatedAt: null } }));
+    expect(mocks.tx.badge.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { pdfUrl: null, zplData: null, generatedAt: null, renderIssue: null } }));
   });
 
   it("rethrows framework control flow before mapping expected errors", async () => {

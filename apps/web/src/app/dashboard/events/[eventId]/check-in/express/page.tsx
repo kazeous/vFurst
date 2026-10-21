@@ -58,6 +58,7 @@ export default async function ExpressPage({ params }: { params: Promise<{ eventI
                 id: registration.badges[0].id,
                 pdfUrl: registration.badges[0].pdfUrl,
                 zplData: registration.badges[0].zplData,
+                renderIssue: registration.badges[0].renderIssue,
                 generatedAt: registration.badges[0].generatedAt?.toISOString() ?? null,
                 printedAt: registration.badges[0].printedAt?.toISOString() ?? null
               }

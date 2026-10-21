@@ -101,7 +101,7 @@ async function updateAttendeeProfileInner(formData: FormData): Promise<AttendeeP
     if (badges.length) {
       await tx.badge.updateMany({
         where: { ...eligible, id: { in: badges.map((badge) => badge.id) } },
-        data: { pdfUrl: null, zplData: null, generatedAt: null }
+        data: { pdfUrl: null, zplData: null, generatedAt: null, renderIssue: null }
       });
     }
     const grouped = new Map<string, GenerateBadgesJob & { badgeIds: string[] }>();

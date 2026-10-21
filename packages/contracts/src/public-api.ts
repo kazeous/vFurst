@@ -79,6 +79,7 @@ export const publicApiBadgeV1Schema = z.object({
   nfcTag: z.string().nullable(),
   pdfUrl: z.string().nullable(),
   zplData: z.string().nullable(),
+  renderIssue: z.string().nullable(),
   generatedAt: timestampSchema.nullable(),
   printedAt: timestampSchema.nullable(),
   createdAt: timestampSchema,

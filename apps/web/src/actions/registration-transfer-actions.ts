@@ -286,6 +286,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
           nfcTag: null,
           pdfUrl: null,
           zplData: null,
+          renderIssue: null,
           generatedAt: null,
           printedAt: null
         },

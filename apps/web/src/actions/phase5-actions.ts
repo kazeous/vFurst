@@ -677,6 +677,7 @@ export async function adminTransferRegistration(formData: FormData) {
           nfcTag: null,
           pdfUrl: null,
           zplData: null,
+          renderIssue: null,
           generatedAt: null,
           printedAt: null
         },

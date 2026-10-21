@@ -35,3 +35,5 @@ Registration list and detail responses also include `attendeeProfileId` and
 `attendee: { id, fullName, badgeName }`, identifying the person attending. The
 existing `userId` and `user` fields still identify the owning portal account.
 Attendee date of birth, contact email, and phone are never included in API responses.
+
+Badge objects include `renderIssue`. It is `null` after a clean render. When `generatedAt` is set, it notes characters the badge font could not print, for example `Printed without: 🦊`. When `generatedAt` is `null`, it says why the badge could not be rendered.
