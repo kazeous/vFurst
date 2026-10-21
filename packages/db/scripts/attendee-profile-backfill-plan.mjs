@@ -3,9 +3,15 @@ export function planAttendeeProfileBackfill({ accounts, registrations, existingS
   const assignments = [];
   const selfProfiles = new Map(existingSelfProfiles.map((profile) => [profile.portalAccountId, profile.id]));
   const activeStatuses = new Set(["PENDING", "CONFIRMED", "CHECKED_IN"]);
+  const byAccount = new Map();
+  for (const registration of registrations) {
+    const ownedRegistrations = byAccount.get(registration.portalAccountId) ?? [];
+    ownedRegistrations.push(registration);
+    byAccount.set(registration.portalAccountId, ownedRegistrations);
+  }
 
   for (const account of accounts) {
-    const ownedRegistrations = registrations.filter((registration) => registration.portalAccountId === account.id);
+    const ownedRegistrations = byAccount.get(account.id) ?? [];
     if (ownedRegistrations.length === 0) continue;
 
     const base = (account.name?.normalize("NFC").trim().replace(/\s+/g, " ") || account.email).slice(0, 120);

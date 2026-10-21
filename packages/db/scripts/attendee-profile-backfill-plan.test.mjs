@@ -61,4 +61,18 @@ describe("attendee-profile backfill planner", () => {
     expect(result.profiles).toEqual([]);
     expect(result.assignments).toEqual([{ registrationId: "r1", attendeeProfileId: "existing" }]);
   });
+
+  it("plans 50,000 single-registration accounts in linear time", () => {
+    const accounts = Array.from({ length: 50_000 }, (_, index) => ({ id: `a${index}`, orgId: "o1", name: `Name ${index}`, email: `e${index}@example.com` }));
+    const registrations = accounts.map((account, index) => ({
+      id: `r${index}`, portalAccountId: account.id, eventId: "e1", status: "CONFIRMED", createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index))
+    }));
+    let next = 0;
+    const started = performance.now();
+    const plan = planAttendeeProfileBackfill({ accounts, registrations, existingSelfProfiles: [], newId: () => `p${next++}` });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(plan.profiles).toHaveLength(50_000);
+    expect(plan.assignments).toHaveLength(50_000);
+    expect(plan.assignments[49_999]).toEqual({ registrationId: "r49999", attendeeProfileId: "p49999" });
+  }, 60_000);
 });
