@@ -392,7 +392,10 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
   if (badges.length === 0) {
     return {
       generated: 0,
-      pdfUrl: null
+      failed: 0,
+      pdfUrl: null,
+      zplOutput: [],
+      failures: []
     };
   }
 
@@ -404,6 +407,8 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
   const imageAssets = await loadBadgeImages(layout, job.data.orgId);
   const embeddedImages = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>();
   const zplOutput: Array<{ badgeId: string; zpl: string }> = [];
+  const notes = new Map<string, string | null>();
+  const failures: Array<{ badgeId: string; reason: string }> = [];
 
   for (const image of imageAssets.values()) {
     if (!embeddedImages.has(image.key)) {
@@ -412,70 +417,88 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
   }
 
   for (const badge of badges) {
-    const content = resolveBadgeContent(layout, badge, fonts, imageAssets);
-    const codeImages = new Map<BadgeElement, Awaited<ReturnType<typeof pdf.embedPng>>>();
-    for (const resolved of content.elements) {
-      if (resolved.kind !== "code") continue;
-      try {
-        codeImages.set(resolved.element, await pdf.embedPng(await barcodePng(resolved.data, resolved.element.type as "barcode" | "qr")));
-      } catch (error) {
-        throw asBadgeRenderError(resolved.element, error);
+    const pageIndex = pdf.getPageCount();
+    let activeElement: BadgeElement = { type: "text", x: 0, y: 0, w: 0, h: 0 };
+    try {
+      const content = resolveBadgeContent(layout, badge, fonts, imageAssets);
+      const codeImages = new Map<BadgeElement, Awaited<ReturnType<typeof pdf.embedPng>>>();
+      for (const resolved of content.elements) {
+        if (resolved.kind !== "code") continue;
+        activeElement = resolved.element;
+        try {
+          codeImages.set(resolved.element, await pdf.embedPng(await barcodePng(resolved.data, resolved.element.type as "barcode" | "qr")));
+        } catch (error) {
+          throw asBadgeRenderError(resolved.element, error);
+        }
       }
-    }
-    const page = pdf.addPage([layout.width, layout.height]);
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: layout.width,
-      height: layout.height,
-      color: rgb(1, 1, 1)
-    });
+      const page = pdf.addPage([layout.width, layout.height]);
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: layout.width,
+        height: layout.height,
+        color: rgb(1, 1, 1)
+      });
 
-    for (const resolved of content.elements) {
-      const { element } = resolved;
-      const y = layout.height - element.y - element.h;
-      try {
-      if (resolved.kind === "code") {
-        page.drawImage(codeImages.get(element)!, {
-          x: element.x,
-          y,
-          width: element.w,
-          height: element.h
-        });
-      } else if (resolved.kind === "image") {
-        page.drawImage(embeddedImages.get(resolved.image.key)!, {
-          x: element.x,
-          y,
-          width: element.w,
-          height: element.h
-        });
-      } else {
-        const fitted = fitBadgeText(resolved.text, element.w, Math.min(22, Math.max(10, element.h * 0.55)), measureWith(fonts.pdf));
-        if (!fitted.text) continue;
-        page.drawText(fitted.text, {
-          x: element.x,
-          y: y + Math.max(2, element.h / 4),
-          size: fitted.size,
-          font,
-          color: rgb(0.07, 0.09, 0.12)
-        });
+      const zplCommands = ["^XA", "^CI28"];
+      for (const resolved of content.elements) {
+        const { element } = resolved;
+        activeElement = element;
+        const y = layout.height - element.y - element.h;
+        try {
+          if (resolved.kind === "code") {
+            page.drawImage(codeImages.get(element)!, {
+              x: element.x,
+              y,
+              width: element.w,
+              height: element.h
+            });
+          } else if (resolved.kind === "image") {
+            page.drawImage(embeddedImages.get(resolved.image.key)!, {
+              x: element.x,
+              y,
+              width: element.w,
+              height: element.h
+            });
+          } else {
+            const fitted = fitBadgeText(resolved.text, element.w, Math.min(22, Math.max(10, element.h * 0.55)), measureWith(fonts.pdf));
+            if (fitted.text) {
+              page.drawText(fitted.text, {
+                x: element.x,
+                y: y + Math.max(2, element.h / 4),
+                size: fitted.size,
+                font,
+                color: rgb(0.07, 0.09, 0.12)
+              });
+            }
+          }
+          // Keep the element identity available if its ZPL drawing fails.
+          zplCommands.push(...toZpl(layout, { elements: [resolved], dropped: content.dropped }, fonts.zpl).split("\n").slice(2, -1));
+        } catch (error) {
+          throw asBadgeRenderError(element, error);
+        }
       }
-      } catch (error) {
-        throw asBadgeRenderError(element, error);
-      }
-    }
 
-    zplOutput.push({
-      badgeId: badge.id,
-      zpl: toZpl(layout, content, fonts.zpl)
-    });
+      zplOutput.push({
+        badgeId: badge.id,
+        zpl: [...zplCommands, "^XZ"].join("\n")
+      });
+      notes.set(badge.id, content.dropped.length
+        ? `Printed without: ${content.dropped.slice(0, 10).join(" ")}${content.dropped.length > 10 ? " …" : ""}`
+        : null);
+    } catch (error) {
+      if (pdf.getPageCount() > pageIndex) pdf.removePage(pageIndex);
+      const failure = asBadgeRenderError(activeElement, error);
+      failures.push({ badgeId: badge.id, reason: failure.reason });
+      console.warn(`[worker:badge] badge ${badge.id} not rendered (element ${failure.elementId}, ${failure.field})`);
+    }
   }
 
-  const pdfUrl = await uploadPdf(job.data.orgId, job.data.eventId, await pdf.save());
+  const pdfUrl = zplOutput.length ? await uploadPdf(job.data.orgId, job.data.eventId, await pdf.save()) : null;
   const generatedAt = new Date();
 
   await prisma.$transaction(
-    zplOutput.map((output) =>
+    [...zplOutput.map((output) =>
       prisma.badge.update({
         where: {
           id: output.badgeId
@@ -483,15 +506,21 @@ export async function processGenerateBadges(job: Job<GenerateBadgesJob>) {
         data: {
           generatedAt,
           pdfUrl,
-          zplData: output.zpl
+          zplData: output.zpl,
+          renderIssue: notes.get(output.badgeId) ?? null
         }
       })
-    )
+    ), ...failures.map((failure) => prisma.badge.update({
+      where: { id: failure.badgeId },
+      data: { generatedAt: null, pdfUrl: null, zplData: null, renderIssue: failure.reason }
+    }))]
   );
 
   return {
-    generated: badges.length,
+    generated: zplOutput.length,
+    failed: failures.length,
     pdfUrl,
-    zplOutput
+    zplOutput,
+    failures
   };
 }

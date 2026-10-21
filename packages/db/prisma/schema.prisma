@@ -826,6 +826,7 @@ model Badge {
   nfcTag         String?       @unique
   pdfUrl         String?       @db.Text
   zplData        String?       @db.Text
+  renderIssue    String?       @db.Text
   generatedAt    DateTime?
   printedAt      DateTime?
   createdAt      DateTime      @default(now())

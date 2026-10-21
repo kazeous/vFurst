@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFPage, PDFRawStream } from "pdf-lib";
 import { PNG } from "pngjs";
+import bwipjs from "bwip-js/node";
 
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 
@@ -50,6 +51,11 @@ const REGISTRATION_ID = "00000000-0000-4000-8000-000000000201";
 const TEMPLATE_ID = "00000000-0000-4000-8000-000000000301";
 const drawText = vi.spyOn(PDFPage.prototype, "drawText");
 const drawnTexts = () => drawText.mock.calls.map(([text]) => text);
+const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+const nameElements = [
+  { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.name" },
+  { id: "badge", type: "text", x: 24, y: 80, w: 300, h: 36, field: "attendee.badgeName" }
+];
 
 const data: GenerateBadgesJob = {
   orgId: ORG_ID,
@@ -70,7 +76,7 @@ function testPng() {
 }
 
 function badgeRecord(elements: Array<Record<string, unknown>>, overrides: {
-  fullName?: string; badgeName?: string | null; barcodeData?: string; id?: string;
+  fullName?: string; badgeName?: string | null; barcodeData?: string; id?: string; renderIssue?: string | null;
 } = {}) {
   return {
     id: overrides.id ?? BADGE_ID,
@@ -81,6 +87,7 @@ function badgeRecord(elements: Array<Record<string, unknown>>, overrides: {
     nfcTag: null,
     pdfUrl: null,
     zplData: null,
+    renderIssue: overrides.renderIssue ?? null,
     generatedAt: null,
     printedAt: null,
     createdAt: new Date(),
@@ -187,7 +194,8 @@ describe("processGenerateBadges", () => {
       data: {
         generatedAt: expect.any(Date),
         pdfUrl: result.pdfUrl,
-        zplData: result.zplOutput[0]!.zpl
+        zplData: result.zplOutput[0]!.zpl,
+        renderIssue: null
       }
     });
     expect(send).toHaveBeenCalledOnce();
@@ -313,6 +321,91 @@ describe("processGenerateBadges", () => {
     await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
     expect(drawnTexts()[0]?.endsWith("…")).toBe(true);
     expect(drawText.mock.calls[0]?.[1]?.size).toEqual(expect.closeTo(11.88, 5));
+  });
+
+  it("isolates a badge with nothing printable and saves the rest", async () => {
+    const ids = [BADGE_ID, "00000000-0000-4000-8000-000000000102", "00000000-0000-4000-8000-000000000103"];
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([
+      badgeRecord(nameElements, { id: ids[0], barcodeData: "VF-A", fullName: "Nguyễn Văn An", badgeName: "An" }),
+      badgeRecord(nameElements, { id: ids[1], barcodeData: "VF-B", fullName: "Aurora Fox", badgeName: "🦊🦊" }),
+      badgeRecord(nameElements, { id: ids[2], barcodeData: "VF-C", fullName: "山田太郎", badgeName: null })
+    ] as never);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    const reason = "Nothing printable in attendee.name (山田太郎).";
+    expect(result.generated).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.failures).toEqual([{ badgeId: ids[2], reason }]);
+    const uploadedPdf = (send.mock.calls[0]![0] as { input: { Body: Buffer } }).input.Body;
+    expect((await PDFDocument.load(uploadedPdf)).getPageCount()).toBe(2);
+    for (const [index, renderIssue] of [[0, null], [1, "Printed without: 🦊"]] as const) {
+      expect(prisma.badge.update).toHaveBeenCalledWith({ where: { id: ids[index] }, data: {
+        generatedAt: expect.any(Date), pdfUrl: result.pdfUrl, zplData: expect.any(String), renderIssue
+      } });
+    }
+    expect(prisma.badge.update).toHaveBeenCalledWith({ where: { id: ids[2] }, data: {
+      generatedAt: null, pdfUrl: null, zplData: null, renderIssue: reason
+    } });
+    expect(warn).toHaveBeenCalledExactlyOnceWith(`[worker:badge] badge ${ids[2]} not rendered (element name, attendee.name)`);
+    expect(warn.mock.calls.flat().join(" ")).not.toContain("山");
+  });
+
+  it("isolates a barcode the encoder rejects", async () => {
+    const elements = [{ id: "code", type: "barcode", field: "registration.badgeNumber", x: 32, y: 160, w: 180, h: 42 }];
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([
+      badgeRecord(elements, { barcodeData: "VF-A" }),
+      badgeRecord(elements, { id: "00000000-0000-4000-8000-000000000102", barcodeData: "VF-B" })
+    ] as never);
+    vi.spyOn(bwipjs, "toBuffer").mockRejectedValueOnce(new Error("bwipp.code128badCharacter."));
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.generated).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.failures).toEqual([{ badgeId: BADGE_ID, reason: "registration.badgeNumber layer code: bwipp.code128badCharacter." }]);
+    const uploadedPdf = (send.mock.calls[0]![0] as { input: { Body: Buffer } }).input.Body;
+    expect((await PDFDocument.load(uploadedPdf)).getPageCount()).toBe(1);
+  });
+
+  it("cuts the original text in a reason to 40 graphemes", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord(nameElements, { fullName: "山".repeat(50) })] as never);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.failures).toEqual([{ badgeId: BADGE_ID, reason: `Nothing printable in attendee.name (${"山".repeat(40)}).` }]);
+  });
+
+  it("completes without uploading when every badge fails", async () => {
+    const badges = [badgeRecord(nameElements, { fullName: "山田太郎", barcodeData: "VF-A" }),
+      badgeRecord(nameElements, { id: "00000000-0000-4000-8000-000000000102", fullName: "山田花子", barcodeData: "VF-B" })];
+    vi.mocked(prisma.badge.findMany).mockResolvedValue(badges as never);
+    await expect(processGenerateBadges({ data } as Job<GenerateBadgesJob>)).resolves.toEqual(expect.objectContaining({
+      generated: 0, failed: 2, pdfUrl: null, zplOutput: []
+    }));
+    expect(send).not.toHaveBeenCalled();
+    for (const badge of badges) {
+      expect(prisma.badge.update).toHaveBeenCalledWith({ where: { id: badge.id }, data: {
+        generatedAt: null, pdfUrl: null, zplData: null, renderIssue: `Nothing printable in attendee.name (${badge.registration.attendeeProfile.fullName}).`
+      } });
+    }
+  });
+
+  it("clears an earlier issue when a badge renders cleanly", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord(nameElements, { renderIssue: "Nothing printable in attendee.name (x)." })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(prisma.badge.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ renderIssue: null }) }));
+  });
+
+  it("cuts long reasons to 500 characters", async () => {
+    mockBadges([{ id: "code", type: "barcode", field: "registration.badgeNumber", x: 32, y: 160, w: 180, h: 42 }]);
+    vi.spyOn(bwipjs, "toBuffer").mockRejectedValueOnce(new Error("x".repeat(600)));
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.failures[0]?.reason).toHaveLength(500);
+    expect(vi.mocked(prisma.badge.update).mock.calls[0]?.[0].data.renderIssue).toHaveLength(500);
+  });
+
+  it("lists at most ten dropped characters", async () => {
+    const emoji = ["🦊", "🐱", "🐶", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵"];
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord(nameElements, { badgeName: emoji.join("") + " Sam" })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(prisma.badge.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      renderIssue: "Printed without: " + emoji.slice(0, 10).join(" ") + " …"
+    }) }));
   });
 
   it("embeds a tenant-owned PNG in PDF and emits a real ZPL graphic", async () => {
