@@ -54,7 +54,28 @@ describe("private portal attendees", () => {
     mocks.account.mockResolvedValue(null);
     await expectPrivate(await GET(request()), 401, { account: null, attendees: null });
     expect(mocks.account).toHaveBeenCalledWith(org);
-    expect(mocks.event).not.toHaveBeenCalled();
+    expect(mocks.profiles).not.toHaveBeenCalled();
+    expect(mocks.registrations).not.toHaveBeenCalled();
+  });
+
+  it("starts the event lookup before the session resolves", async () => {
+    let resolveAccount!: (value: typeof account) => void;
+    mocks.account.mockReturnValue(new Promise<typeof account>((resolve) => {
+      resolveAccount = resolve;
+    }));
+    const response = GET(request());
+    try {
+      await vi.waitFor(() => expect(mocks.event).toHaveBeenCalledTimes(1));
+    } finally {
+      resolveAccount(account);
+    }
+    await expectPrivate(await response, 200, {
+      account: { email: "owner@example.com", name: "Owner" },
+      cap: 4, used: 1, attendees: [
+        { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false },
+        { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true }
+      ]
+    });
   });
 
   it.each(["unknown", "unpublished", "foreign"])("returns 404 for an %s event", async () => {
