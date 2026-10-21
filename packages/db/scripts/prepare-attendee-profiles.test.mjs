@@ -40,12 +40,23 @@ describe("attendee-profile schema preparation", () => {
       'CREATE INDEX IF NOT EXISTS "attendee_profiles_portalAccountId_idx"',
       'ADD COLUMN IF NOT EXISTS "attendeeProfileId"'
     ].forEach((fragment, index) => expect(statements[index]).toContain(fragment));
-    expect(statements.slice(7, 9).every((sql) => sql.includes('INSERT INTO "attendee_profiles"'))).toBe(true);
-    expect(statements.slice(9).every((sql) => sql.includes('UPDATE "registrations"') && sql.includes('"attendeeProfileId" IS NULL'))).toBe(true);
-    expect(client.$transaction).toHaveBeenCalledOnce();
-    const inserts = client.$executeRaw.mock.calls.slice(7, 9);
-    expect(inserts[0].slice(2)).toEqual(["o1", "a1", "a1", "Mai Le"]);
-    expect(inserts[1].slice(2)).toEqual(["o1", "a1", null, "Mai Le (2)"]);
+    expect(statements).toHaveLength(9);
+    expect(statements[7]).toContain('INSERT INTO "attendee_profiles"');
+    expect(statements[7]).toContain("jsonb_to_recordset");
+    expect(statements[8]).toContain('UPDATE "registrations"');
+    expect(statements[8]).toContain('"attendeeProfileId" IS NULL');
+    expect(statements[8]).toContain("jsonb_to_recordset");
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), { maxWait: 10_000, timeout: 120_000 });
+    const [insertCall, updateCall] = client.$executeRaw.mock.calls.slice(7);
+    const profiles = JSON.parse(insertCall[1]);
+    expect(profiles).toEqual([
+      { id: expect.any(String), orgId: "o1", portalAccountId: "a1", accountHolderOf: "a1", fullName: "Mai Le" },
+      { id: expect.any(String), orgId: "o1", portalAccountId: "a1", accountHolderOf: null, fullName: "Mai Le (2)" }
+    ]);
+    expect(JSON.parse(updateCall[1])).toEqual([
+      { registrationId: "r1", attendeeProfileId: profiles[0].id },
+      { registrationId: "r2", attendeeProfileId: profiles[1].id }
+    ]);
   });
 
   it("is a no-op when no registration lacks a profile", async () => {
@@ -53,5 +64,38 @@ describe("attendee-profile schema preparation", () => {
     await expect(prepareAttendeeProfiles(client)).resolves.toEqual({ skipped: false, profilesCreated: 0, registrationsAssigned: 0 });
     expect(statements).toHaveLength(7);
     expect(statements.some((sql) => /\b(INSERT|UPDATE)\b/.test(sql))).toBe(false);
+  });
+
+  it("writes 5,000 registrations in two statements", async () => {
+    const accounts = Array.from({ length: 5_000 }, (_, index) => ({
+      id: `a${index}`, orgId: "o1", name: `Nguyễn Văn ${index}`, email: `e${index}@example.com`
+    }));
+    const registrations = accounts.map((account, index) => ({
+      id: `r${index}`, portalAccountId: account.id, eventId: "e1", status: "CONFIRMED", createdAt: new Date("2026-01-01")
+    }));
+    const { client, statements } = mockClient(registrations, accounts);
+    await expect(prepareAttendeeProfiles(client)).resolves.toEqual({ skipped: false, profilesCreated: 5000, registrationsAssigned: 5000 });
+    expect(statements).toHaveLength(9);
+    const [insertCall, updateCall] = client.$executeRaw.mock.calls.slice(7);
+    expect(JSON.parse(insertCall[1])).toHaveLength(5_000);
+    expect(JSON.parse(updateCall[1])).toHaveLength(5_000);
+  });
+
+  it("reuses existing self profiles without an INSERT", async () => {
+    const { client, statements } = mockClient([
+      { id: "r1", portalAccountId: "a1", eventId: "e1", status: "CONFIRMED", createdAt: new Date("2026-01-01") }
+    ], [{ id: "a1", orgId: "o1", name: "Mai Le", email: "mai@example.com" }], [{ id: "p1", portalAccountId: "a1" }]);
+    await expect(prepareAttendeeProfiles(client)).resolves.toEqual({ skipped: false, profilesCreated: 0, registrationsAssigned: 1 });
+    expect(statements).toHaveLength(8);
+    expect(statements[7]).toContain('UPDATE "registrations"');
+    expect(JSON.parse(client.$executeRaw.mock.calls[7][1])).toEqual([{ registrationId: "r1", attendeeProfileId: "p1" }]);
+  });
+
+  it("passes unusual names through the payload unchanged", async () => {
+    const { client } = mockClient([
+      { id: "r1", portalAccountId: "a1", eventId: "e1", status: "CONFIRMED", createdAt: new Date("2026-01-01") }
+    ], [{ id: "a1", orgId: "o1", name: '  Lê   "Bé"  O\'Brien\\Ánh ', email: "mai@example.com" }]);
+    await prepareAttendeeProfiles(client);
+    expect(JSON.parse(client.$executeRaw.mock.calls[7][1])[0].fullName).toBe('Lê "Bé" O\'Brien\\Ánh');
   });
 });

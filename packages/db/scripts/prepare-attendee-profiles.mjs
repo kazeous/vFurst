@@ -55,21 +55,23 @@ export async function prepareAttendeeProfiles(client = prisma) {
       SELECT "id", "portalAccountId" FROM "attendee_profiles" WHERE "accountHolderOf" IS NOT NULL
     `;
     const { profiles, assignments } = planAttendeeProfileBackfill({ accounts, registrations, existingSelfProfiles, newId: randomUUID });
-    for (const profile of profiles) {
+    if (profiles.length > 0) {
       await tx.$executeRaw`
         INSERT INTO "attendee_profiles" ("id", "orgId", "portalAccountId", "accountHolderOf", "fullName", "createdAt", "updatedAt")
-        VALUES (${profile.id}::uuid, ${profile.orgId}::uuid, ${profile.portalAccountId}::uuid,
-          ${profile.accountHolderOf}::uuid, ${profile.fullName}, NOW(), NOW())
+        SELECT p."id", p."orgId", p."portalAccountId", p."accountHolderOf", p."fullName", NOW(), NOW()
+        FROM jsonb_to_recordset(${JSON.stringify(profiles)}::jsonb)
+          AS p("id" uuid, "orgId" uuid, "portalAccountId" uuid, "accountHolderOf" uuid, "fullName" text)
       `;
     }
-    for (const assignment of assignments) {
+    if (assignments.length > 0) {
       await tx.$executeRaw`
-        UPDATE "registrations" SET "attendeeProfileId" = ${assignment.attendeeProfileId}::uuid
-        WHERE "id" = ${assignment.registrationId}::uuid AND "attendeeProfileId" IS NULL
+        UPDATE "registrations" AS r SET "attendeeProfileId" = a."attendeeProfileId"
+        FROM jsonb_to_recordset(${JSON.stringify(assignments)}::jsonb) AS a("registrationId" uuid, "attendeeProfileId" uuid)
+        WHERE r."id" = a."registrationId" AND r."attendeeProfileId" IS NULL
       `;
     }
     return { skipped: false, profilesCreated: profiles.length, registrationsAssigned: assignments.length };
-  });
+  }, { maxWait: 10_000, timeout: 120_000 });
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
