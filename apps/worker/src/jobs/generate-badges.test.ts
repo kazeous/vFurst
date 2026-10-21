@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PDFDocument } from "pdf-lib";
+import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFPage, PDFRawStream } from "pdf-lib";
 import { PNG } from "pngjs";
 
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
@@ -48,6 +48,8 @@ const EVENT_ID = "00000000-0000-4000-8000-000000000002";
 const BADGE_ID = "00000000-0000-4000-8000-000000000101";
 const REGISTRATION_ID = "00000000-0000-4000-8000-000000000201";
 const TEMPLATE_ID = "00000000-0000-4000-8000-000000000301";
+const drawText = vi.spyOn(PDFPage.prototype, "drawText");
+const drawnTexts = () => drawText.mock.calls.map(([text]) => text);
 
 const data: GenerateBadgesJob = {
   orgId: ORG_ID,
@@ -67,13 +69,15 @@ function testPng() {
   return PNG.sync.write(png);
 }
 
-function badgeRecord(elements: Array<Record<string, unknown>>) {
+function badgeRecord(elements: Array<Record<string, unknown>>, overrides: {
+  fullName?: string; badgeName?: string | null; barcodeData?: string; id?: string;
+} = {}) {
   return {
-    id: BADGE_ID,
+    id: overrides.id ?? BADGE_ID,
     orgId: ORG_ID,
     registrationId: REGISTRATION_ID,
     templateId: TEMPLATE_ID,
-    barcodeData: "VF-TEST",
+    barcodeData: overrides.barcodeData ?? "VF-TEST",
     nfcTag: null,
     pdfUrl: null,
     zplData: null,
@@ -103,8 +107,8 @@ function badgeRecord(elements: Array<Record<string, unknown>>) {
         name: "Weekend"
       },
       attendeeProfile: {
-        fullName: "Artifact Attendee",
-        badgeName: "Sam",
+        fullName: overrides.fullName ?? "Artifact Attendee",
+        badgeName: overrides.badgeName === undefined ? "Sam" : overrides.badgeName,
         email: "profile@example.com"
       },
       portalAccount: {
@@ -173,9 +177,11 @@ describe("processGenerateBadges", () => {
     expect(result.zplOutput[0]).toEqual(
       expect.objectContaining({
         badgeId: BADGE_ID,
-        zpl: expect.stringContaining("Artifact Attendee")
+        zpl: expect.stringMatching(/^\^XA\n\^CI28\n/)
       })
     );
+    expect(drawnTexts()).toContain("Artifact Attendee");
+    expect(result.zplOutput[0]!.zpl).not.toContain("Artifact Attendee");
     expect(prisma.badge.update).toHaveBeenCalledWith({
       where: { id: BADGE_ID },
       data: {
@@ -193,9 +199,9 @@ describe("processGenerateBadges", () => {
       ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, fullName: "Child Attendee" } }
     }] as never);
 
-    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
-    expect(result.zplOutput?.[0]?.zpl).toContain("Child Attendee");
-    expect(result.zplOutput?.[0]?.zpl).not.toContain("Account Holder");
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawnTexts()).toContain("Child Attendee");
+    expect(drawnTexts()).not.toContain("Account Holder");
     expect(prisma.badge.findMany).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({
       registration: { include: expect.objectContaining({ attendeeProfile: { select: { fullName: true, badgeName: true, email: true } } }) }
     }) }));
@@ -203,13 +209,14 @@ describe("processGenerateBadges", () => {
 
   it("renders the badge name and falls back to the full name when it is null or blank", async () => {
     for (const badgeName of [" Sam ", null, "", "   "]) {
+      drawText.mockClear();
       const badge = badgeRecord([{ id: "name", type: "text", x: 24, y: 24, w: 240, h: 36, field: "attendee.badgeName", value: "SHOULD NOT APPEAR" }]);
       vi.mocked(prisma.badge.findMany).mockResolvedValue([{
         ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, badgeName } }
       }] as never);
-      const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
-      expect(result.zplOutput?.[0]?.zpl).toContain(badgeName?.trim() || "Artifact Attendee");
-      expect(result.zplOutput?.[0]?.zpl).not.toContain("SHOULD NOT APPEAR");
+      await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+      expect(drawnTexts()).toContain(badgeName?.trim() || "Artifact Attendee");
+      expect(drawnTexts()).not.toContain("SHOULD NOT APPEAR");
     }
   });
 
@@ -219,9 +226,93 @@ describe("processGenerateBadges", () => {
       vi.mocked(prisma.badge.findMany).mockResolvedValue([{
         ...badge, registration: { ...badge.registration, attendeeProfile: { ...badge.registration.attendeeProfile, email } }
       }] as never);
-      const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
-      expect(result.zplOutput?.[0]?.zpl).toContain(email ?? "attendee@example.com");
+      await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+      expect(drawnTexts()).toContain(email ?? "attendee@example.com");
     }
+  });
+
+  it("renders a Vietnamese full name and badge name", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord([
+      { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.name" },
+      { id: "badge", type: "text", x: 24, y: 80, w: 300, h: 36, field: "attendee.badgeName" }
+    ], { fullName: "Nguyễn Thị Ánh Tuyết", badgeName: "Ếch Xanh" })] as never);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.generated).toBe(1);
+    expect(drawnTexts()).toEqual(["Nguyễn Thị Ánh Tuyết", "Ếch Xanh"]);
+    const uploadedPdf = (send.mock.calls[0]![0] as { input: { Body: Buffer } }).input.Body;
+    const doc = await PDFDocument.load(uploadedPdf);
+    const dictionaries = doc.context.enumerateIndirectObjects().map(([, object]) => object)
+      .filter((object): object is PDFDict => object instanceof PDFDict);
+    const fontDictionaries = dictionaries.filter((object) => object.get(PDFName.of("Type")) === PDFName.of("Font"));
+    expect(fontDictionaries.length).toBeGreaterThan(0);
+    for (const dictionary of fontDictionaries) {
+      const baseFont = dictionary.get(PDFName.of("BaseFont"))!.toString();
+      expect(baseFont).toMatch(/^\/NotoSans-Regular-\d+$/);
+      expect(baseFont).not.toContain("Helvetica");
+    }
+    const fontFiles = dictionaries.filter((object) => object.get(PDFName.of("Type")) === PDFName.of("FontDescriptor"))
+      .map((object) => object.get(PDFName.of("FontFile2"))).filter((object) => object !== undefined);
+    expect(fontFiles.length).toBeGreaterThan(0);
+    for (const fontFile of fontFiles) {
+      const stream = doc.context.lookup(fontFile);
+      if (!(stream instanceof PDFRawStream)) throw new Error("Expected an embedded font stream.");
+      expect(decodePDFRawStream(stream).decode().length).toBeLessThan(100_000);
+    }
+    expect(result.zplOutput?.[0]?.zpl.startsWith("^XA\n^CI28\n")).toBe(true);
+    expect(result.zplOutput?.[0]?.zpl.match(/\^GFA,/g)).toHaveLength(2);
+  });
+
+  it("draws NFC text for decomposed input", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord([
+      { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.name" }
+    ], { fullName: "Nguyễn Thị Ánh Tuyết".normalize("NFD") })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawnTexts()).toEqual(["Nguyễn Thị Ánh Tuyết"]);
+  });
+
+  it("keeps the starter template's positions and sizes", async () => {
+    mockBadges([
+      { id: "event", type: "text", x: 24, y: 22, w: 312, h: 30, field: "event.name" },
+      { id: "name", type: "text", x: 24, y: 82, w: 220, h: 36, field: "attendee.name" },
+      { id: "type", type: "text", x: 24, y: 126, w: 180, h: 24, field: "registration.type" },
+      { id: "qr", type: "qr", x: 252, y: 78, w: 72, h: 72, field: "registration.badgeNumber" }
+    ]);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawText).toHaveBeenCalledWith("Artifact Event", expect.objectContaining({ x: 24, y: 195.5, size: expect.closeTo(16.5, 5) }));
+    expect(drawText).toHaveBeenCalledWith("Artifact Attendee", expect.objectContaining({ x: 24, y: 131, size: expect.closeTo(19.8, 5) }));
+    expect(drawText).toHaveBeenCalledWith("Weekend", expect.objectContaining({ x: 24, y: 96, size: expect.closeTo(13.2, 5) }));
+    for (const origin of ["^FO24,22\n", "^FO24,82\n", "^FO24,126\n", "^FO252,78\n^BQN,2,5^FH^FDLA,VF-TEST^FS"]) expect(result.zplOutput?.[0]?.zpl).toContain(origin);
+  });
+
+  it("uses barcodeData for an empty barcode value in both outputs", async () => {
+    mockBadges([{ id: "bc", type: "barcode", x: 32, y: 160, w: 180, h: 42 }]);
+    const result = await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(result.zplOutput?.[0]?.zpl).toContain("^BCN,42,Y,N,N^FH^FDVF-TEST^FS");
+  });
+
+  it("falls back to the full name when the badge name has nothing printable", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord([
+      { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.badgeName" }
+    ], { badgeName: "🦊🦊" })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawnTexts()).toEqual(["Artifact Attendee"]);
+  });
+
+  it("falls back to the full name for an invisible-only badge name", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord([
+      { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.badgeName" }
+    ], { badgeName: "​ " })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawnTexts()).toEqual(["Artifact Attendee"]);
+  });
+
+  it("cuts a long unbroken name with an ellipsis", async () => {
+    vi.mocked(prisma.badge.findMany).mockResolvedValue([badgeRecord([
+      { id: "name", type: "text", x: 24, y: 24, w: 300, h: 36, field: "attendee.name" }
+    ], { fullName: "W".repeat(120) })] as never);
+    await processGenerateBadges({ data } as Job<GenerateBadgesJob>);
+    expect(drawnTexts()[0]?.endsWith("…")).toBe(true);
+    expect(drawText.mock.calls[0]?.[1]?.size).toEqual(expect.closeTo(11.88, 5));
   });
 
   it("embeds a tenant-owned PNG in PDF and emits a real ZPL graphic", async () => {
