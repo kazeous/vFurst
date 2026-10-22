@@ -26,6 +26,7 @@
     "start": "npm run start --workspace @vfurst/web",
     "test": "turbo run test",
     "test:compose": "node --test scripts/validate-compose.test.mjs",
+    "test:web-cluster": "node --test scripts/web-cluster.test.mjs",
     "compose:validate": "node scripts/validate-compose.mjs",
     "test:boot-config": "node scripts/smoke-web-boot.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
@@ -49,7 +50,7 @@
     "turbo": "^2.6.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

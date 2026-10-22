@@ -10,6 +10,7 @@ const explicitEnv = new Set(Object.keys(process.env));
 const root = process.cwd();
 const webRoot = join(root, "apps", "web");
 const nextBin = join(root, "node_modules", "next", "dist", "bin", "next");
+const clusterBin = join(root, "scripts", "web-cluster.mjs");
 const loadProxyBin = join(root, "scripts", "load-balance-next.mjs");
 const k6Args = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["--quiet"];
 const ignoredDotEnvNames = new Set(["NODE_ENV"]);
@@ -174,7 +175,7 @@ async function inspectDatabaseCapacity(policy) {
 
     console.log(
       `Database capacity: ${maxConnections} max - ${reservedConnections} reserved = ${usableConnections} usable; ` +
-        `${config.serverReplicas} web replicas x ${policy.limit} connections = ${policy.maximumWebDemand} ` +
+        `${config.serverReplicas} web processes x ${policy.limit} connections = ${policy.maximumWebDemand} ` +
         `within application budget ${policy.budget}; pool timeout ${policy.poolTimeout}s.`
     );
   } finally {
@@ -301,6 +302,17 @@ async function waitForApp(url = config.baseUrl) {
   throw new Error(`Timed out waiting for ${url}.${tail ? `\n${tail}` : ""}`);
 }
 
+async function waitForServerOutput(pattern, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (pattern.test(serverStdout)) return;
+    if (hasServerExited()) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const tail = serverLogTail();
+  throw new Error(`Timed out waiting for ${pattern}.${tail ? `\n${tail}` : ""}`);
+}
+
 function trackServerProcess(label, child) {
   serverProcesses.push({ label, process: child });
   startedServer = true;
@@ -341,17 +353,21 @@ async function startServer() {
   }
 
   const basePort = Number(config.port) + 1;
-  const targets = [];
-
-  for (let index = 0; index < config.serverReplicas; index += 1) {
-    const port = basePort + index;
-    startNextServer(port, `next-${index + 1}`);
-    targets.push(`http://${config.appHost}:${port}`);
-  }
-
-  for (const target of targets) {
-    await waitForApp(target);
-  }
+  console.log(`Starting ${config.serverReplicas} web workers in one cluster behind the load proxy.`);
+  const child = spawn(
+    process.execPath,
+    [clusterBin, nextBin, "start", "--hostname", config.serverHost, "--port", String(basePort)],
+    {
+      cwd: webRoot,
+      env: { ...process.env, VFURST_WEB_REPLICAS: String(config.serverReplicas) },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true
+    }
+  );
+  trackServerProcess("next-cluster", child);
+  await waitForServerOutput(new RegExp(`\\[web-cluster\\] ${config.serverReplicas}/${config.serverReplicas} workers listening`));
+  const targets = [`http://${config.appHost}:${basePort}`];
+  await waitForApp(targets[0]);
 
   const proxy = spawn(process.execPath, [loadProxyBin, config.serverHost, config.port, ...targets], {
     cwd: root,

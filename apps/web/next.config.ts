@@ -8,7 +8,9 @@ const sentryRelease =
 const nextConfig: NextConfig = {
   output: "standalone",
   experimental: {
-    authInterrupts: true
+    authInterrupts: true,
+    // Each process keeps ISR/data cache in memory: plain writeFile writes could expose partly written pages in shared .next.
+    isrFlushToDisk: false
   },
   eslint: {
     ignoreDuringBuilds: true

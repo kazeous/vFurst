@@ -91,13 +91,14 @@ COPY --from=build --chown=nextjs:nodejs /repo/apps/web/public        ./apps/web/
 COPY --from=build --chown=nextjs:nodejs /repo/apps/web/package.json ./apps/web/package.json
 COPY --from=build --chown=nextjs:nodejs /repo/scripts/check-app-env.mjs ./scripts/check-app-env.mjs
 COPY --from=build --chown=nextjs:nodejs /repo/scripts/lib/env-file.mjs ./scripts/lib/env-file.mjs
+COPY --from=build --chown=nextjs:nodejs /repo/scripts/web-cluster.mjs ./scripts/web-cluster.mjs
 
 USER nextjs
 EXPOSE 3000
 
-# The standalone bundle writes the entrypoint at apps/web/server.js. Validate
-# the same runtime contract as `npm start` before accepting traffic.
-CMD ["sh", "-c", "node scripts/check-app-env.mjs web && exec node apps/web/server.js"]
+# Validate the runtime contract, then launch VFURST_WEB_REPLICAS server processes.
+# exec keeps the launcher as PID 1 so it receives Docker's shutdown signal.
+CMD ["sh", "-c", "node scripts/check-app-env.mjs web && exec node scripts/web-cluster.mjs apps/web/server.js"]
 
 FROM base AS worker
 ARG SOURCE_COMMIT=unknown

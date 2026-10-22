@@ -47,6 +47,9 @@ jobs:
       - name: Compose validator tests
         run: npm run test:compose
 
+      - name: Web cluster launcher tests
+        run: npm run test:web-cluster
+
       - name: Validate production Compose
         run: npm run compose:validate
 
