@@ -46,7 +46,10 @@ export default async function EventSettingsPage({
           <h1>{event.name}</h1>
           <p className="vf-muted">Update public event details and registration behavior.</p>
         </div>
-        <Button label="Email templates" href={`/dashboard/events/${event.id}/settings/emails`} />
+        <div className="vf-actions">
+          <Button label="Registration form" href={`/dashboard/events/${event.id}/settings/registration-form`} />
+          <Button label="Email templates" href={`/dashboard/events/${event.id}/settings/emails`} />
+        </div>
       </header>
 
       {saved === "1" ? <div className="vf-banner vf-banner-success">Event settings saved.</div> : null}
