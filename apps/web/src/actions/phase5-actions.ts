@@ -20,6 +20,7 @@ import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { parseMoney } from "@/lib/registration/pricing";
 import { ExpectedActionError } from "@/lib/public-action-error";
+import { assertStaffAttestation, getCurrentPolicyVersions, writeAgreements } from "@/lib/policy-documents";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -439,7 +440,11 @@ export async function checkInRegistration(formData: FormData) {
   revalidatePath(`/dashboard/events/${event.id}/registrations`);
 }
 
-export async function createWalkInRegistration(formData: FormData) {
+export async function createWalkInRegistration(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  return runActionWithState(() => createWalkInRegistrationInner(formData), "Walk-in registration completed.");
+}
+
+async function createWalkInRegistrationInner(formData: FormData) {
   const parsed = z
     .object({
       eventId: z.string().uuid(),
@@ -457,10 +462,10 @@ export async function createWalkInRegistration(formData: FormData) {
     });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid walk-in registration.");
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid walk-in registration.");
   }
 
-  const [{ event: authorizedEvent }, { registrationType }] = await Promise.all([
+  const [{ userId, event: authorizedEvent }, { registrationType }] = await Promise.all([
     requireStoredEventAccess(parsed.data.eventId),
     requireRegistrationTypeAccess(parsed.data.typeId)
   ]);
@@ -506,6 +511,8 @@ export async function createWalkInRegistration(formData: FormData) {
       attendeeProfileId: profile.id,
       typeId: registrationType.id
     });
+    const current = await getCurrentPolicyVersions(tx, { orgId: event.orgId, eventId: event.id });
+    assertStaffAttestation(current, formData);
 
     const registration = await tx.registration.create({
       data: {
@@ -518,6 +525,11 @@ export async function createWalkInRegistration(formData: FormData) {
         approvalStatus: getRegistrationApprovalStatus(event.settings, "CASHIER"),
         checkedInAt
       }
+    });
+
+    await writeAgreements(tx, {
+      orgId: event.orgId, eventId: event.id, registrationId: registration.id, current,
+      actor: { source: "STAFF", attestedByUserId: userId }
     });
 
     const order = await tx.order.create({
@@ -607,11 +619,25 @@ export async function requestRegistrationTransfer(formData: FormData) {
   await createRegistrationTransferRequest(formData);
 }
 
-export async function adminTransferRegistration(formData: FormData) {
-  const registrationId = z.string().uuid().parse(formData.get("registrationId"));
-  const attendeeName = z.string().trim().min(1).parse(formData.get("attendeeName"));
-  const attendeeEmail = z.string().email().parse(formData.get("attendeeEmail"));
-  const { registration: source, event } = await requireRegistrationAccess(registrationId);
+export async function adminTransferRegistration(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
+  return runActionWithState(() => adminTransferRegistrationInner(formData), "Registration transferred.");
+}
+
+async function adminTransferRegistrationInner(formData: FormData) {
+  const parsed = z.object({
+    registrationId: z.string().uuid(),
+    attendeeName: z.string().trim().min(1),
+    attendeeEmail: z.string().email()
+  }).safeParse({
+    registrationId: formData.get("registrationId"),
+    attendeeName: formData.get("attendeeName"),
+    attendeeEmail: formData.get("attendeeEmail")
+  });
+  if (!parsed.success) {
+    throw new ExpectedActionError(parsed.error.issues[0]?.message ?? "Invalid registration transfer.");
+  }
+  const { registrationId, attendeeName, attendeeEmail } = parsed.data;
+  const { userId, registration: source, event } = await requireRegistrationAccess(registrationId);
   assertTransfersAllowed(event.settings);
 
   const result = await runRegistrationPolicyTransaction(async (tx) => {
@@ -633,6 +659,8 @@ export async function adminTransferRegistration(formData: FormData) {
       typeId: current.typeId,
       excludeRegistrationId: current.id
     });
+    const policies = await getCurrentPolicyVersions(tx, { orgId: event.orgId, eventId: event.id });
+    assertStaffAttestation(policies, formData);
 
     const moved = await tx.registration.updateMany({
       where: {
@@ -660,6 +688,11 @@ export async function adminTransferRegistration(formData: FormData) {
         badgeNumber: current.badgeNumber,
         transferredFromId: current.id
       }
+    });
+
+    await writeAgreements(tx, {
+      orgId: event.orgId, eventId: event.id, registrationId: registration.id, current: policies,
+      actor: { source: "STAFF", attestedByUserId: userId }
     });
 
     await tx.registrationAddOn.updateMany({

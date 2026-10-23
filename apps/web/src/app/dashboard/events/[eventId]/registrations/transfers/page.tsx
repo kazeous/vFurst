@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { getCoreEventSettings } from "@/lib/event-settings";
 import { formatDate } from "@/lib/i18n";
 import { cancelRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
+import { ActionStateForm } from "@/components/action-state-form";
+import { StaffPolicyAttestation } from "@/components/policies/staff-policy-attestation";
+import { getCurrentPolicyVersions } from "@/lib/policy-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
   if (!event) {
     notFound();
   }
+  const policies = await getCurrentPolicyVersions(prisma, { orgId: event.orgId, eventId: event.id });
 
   const transferable = event.registrations.filter((registration) => registration.status !== "TRANSFERRED" && registration.status !== "CANCELLED");
   const transferred = event.registrations.filter((registration) => registration.status === "TRANSFERRED" || registration.transferredFromId);
@@ -85,7 +89,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
           <Button label="Send transfer email" type="submit" variant="primary" />
         </form>
 
-        <form action={adminTransferRegistration} className="vf-section vf-form">
+        <ActionStateForm action={adminTransferRegistration} className="vf-section vf-form" resetOnSuccess>
           <h2>Admin override</h2>
           <p className="vf-muted">Use only when support must complete a transfer without recipient self-service.</p>
           <label>
@@ -106,8 +110,9 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
             New attendee email
             <input type="email" name="attendeeEmail" required />
           </label>
+          <StaffPolicyAttestation policies={policies} />
           <Button label="Transfer registration" type="submit" />
-        </form>
+        </ActionStateForm>
       </section> : <section className="vf-section"><h2>Transfers disabled</h2><p className="vf-muted">Enable transfers in event settings before sending or completing a transfer.</p></section>}
 
       <section className="vf-section">

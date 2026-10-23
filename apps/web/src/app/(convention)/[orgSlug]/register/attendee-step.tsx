@@ -7,7 +7,10 @@ import { usePortalGateSession } from "@/components/account/portal-account-gate";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useActionRedirect } from "@/components/use-action-redirect";
-import type { EmergencyContact } from "@/lib/emergency-contacts";
+import { EmergencyContactRows } from "@/components/forms/emergency-contact-rows";
+import { FormFieldInputs } from "@/components/forms/form-field-inputs";
+import { contactDrafts, type EmergencyContact } from "@/lib/emergency-contacts";
+import type { RegistrationForm } from "@/lib/registration-form";
 import { initialAttendeeProfileFormState } from "@/lib/attendee-profile-form-state";
 import { attendeeRefreshState, pickInitialAttendee, type AttendeeRefreshResult } from "./attendee-selection";
 
@@ -89,8 +92,9 @@ export function AttendeeStep({ eventId, stepLabel, selectedId, onSelectionChange
   );
 }
 
-export function TransferAttendeeSelection({ attendees, initialId }: { attendees: AttendeeChoice[]; initialId: string }) {
+export function TransferAttendeeSelection({ attendees, initialId, form }: { attendees: AttendeeChoice[]; initialId: string; form: RegistrationForm }) {
   const [selected, setSelected] = useState(initialId);
+  const attendee = attendees.find((choice) => choice.id === selected);
   return (
     <div className="vf-stack">
       <fieldset className="vf-action-state-fields">
@@ -105,6 +109,10 @@ export function TransferAttendeeSelection({ attendees, initialId }: { attendees:
         <p id="new-attendee-note" className="vf-muted">Used only when New attendee is selected.</p>
         <AttendeeProfileFields compact />
       </fieldset>
+      <EmergencyContactRows key={selected} requirement={form.contacts}
+        legend={attendee ? `Emergency contacts for ${attendee.fullName}` : "Emergency contacts for the new attendee"}
+        drafts={contactDrafts(attendee?.emergencyContacts ?? [], form.contacts.count)} />
+      <FormFieldInputs fields={form.questions} />
     </div>
   );
 }
