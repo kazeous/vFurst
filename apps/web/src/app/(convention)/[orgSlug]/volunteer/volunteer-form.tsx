@@ -3,13 +3,14 @@
 import { submitVolunteerApplication } from "@/actions/staff-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { FormFieldInputs } from "@/components/forms/form-field-inputs";
+import type { FormField, FormResponses } from "@/lib/form-fields";
 import { DateField } from "@/components/ui/date-field";
 import { useActionRedirect } from "@/components/use-action-redirect";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { useActionState, useState } from "react";
 
 type Department = { id: string; name: string };
-type FormField = { id: string; type: "text" | "select" | "checkbox" | "textarea"; label: string; required: boolean; options?: string[] };
 type AvailabilityRow = { date: string; slots: string };
 
 export function VolunteerForm({
@@ -33,8 +34,7 @@ export function VolunteerForm({
   useActionRedirect(state.redirectTo);
   const busy = isPending || Boolean(state.redirectTo);
   const [applicantName, setApplicantName] = useState(defaultApplicantName);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [fieldChecks, setFieldChecks] = useState<Record<string, boolean>>({});
+  const [responses, setResponses] = useState<FormResponses>({});
   const [availability, setAvailability] = useState<AvailabilityRow[]>([
     { date: "", slots: "" },
     { date: "", slots: "" },
@@ -102,70 +102,7 @@ export function VolunteerForm({
           </select>
         </label>
       </div>
-      {fields.map((field) => {
-        if (field.type === "checkbox") {
-          return (
-            <label key={field.id} className="vf-check">
-              <input
-                name={`field-${field.id}`}
-                type="checkbox"
-                value="true"
-                checked={fieldChecks[field.id] ?? false}
-                onChange={(event) => setFieldChecks((checks) => ({ ...checks, [field.id]: event.target.checked }))}
-              />
-              {field.label}
-            </label>
-          );
-        }
-
-        if (field.type === "textarea") {
-          return (
-            <label key={field.id}>
-              {field.label}
-              <textarea
-                name={`field-${field.id}`}
-                rows={4}
-                required={field.required}
-                value={fieldValues[field.id] ?? ""}
-                onChange={(event) => setFieldValues((values) => ({ ...values, [field.id]: event.target.value }))}
-              />
-            </label>
-          );
-        }
-
-        if (field.type === "select") {
-          return (
-            <label key={field.id}>
-              {field.label}
-              <select
-                name={`field-${field.id}`}
-                required={field.required}
-                value={fieldValues[field.id] ?? ""}
-                onChange={(event) => setFieldValues((values) => ({ ...values, [field.id]: event.target.value }))}
-              >
-                <option value="">Choose one</option>
-                {(field.options ?? []).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        }
-
-        return (
-          <label key={field.id}>
-            {field.label}
-            <input
-              name={`field-${field.id}`}
-              required={field.required}
-              value={fieldValues[field.id] ?? ""}
-              onChange={(event) => setFieldValues((values) => ({ ...values, [field.id]: event.target.value }))}
-            />
-          </label>
-        );
-      })}
+      <FormFieldInputs fields={fields} values={responses} onValueChange={(id, value) => setResponses((current) => ({ ...current, [id]: value }))} />
       <section className="vf-stack">
         <h2>Availability</h2>
         {availability.map((row, index) => (

@@ -7,14 +7,16 @@ import { usePortalGateSession } from "@/components/account/portal-account-gate";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useActionRedirect } from "@/components/use-action-redirect";
+import type { EmergencyContact } from "@/lib/emergency-contacts";
 import { initialAttendeeProfileFormState } from "@/lib/attendee-profile-form-state";
 import { attendeeRefreshState, pickInitialAttendee, type AttendeeRefreshResult } from "./attendee-selection";
 
-export type AttendeeChoice = { id: string; fullName: string; badgeName: string | null; isAccountHolder: boolean; registered: boolean };
+export type AttendeeChoice = { id: string; fullName: string; badgeName: string | null; isAccountHolder: boolean; registered: boolean; emergencyContacts: EmergencyContact[] };
 type AttendeeList = { cap: number; used: number; attendees: AttendeeChoice[] };
 
-export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
+export function AttendeeStep({ eventId, stepLabel, selectedId, onSelectionChange }: {
   eventId: string;
+  stepLabel: string;
   selectedId: string | null;
   onSelectionChange: (attendee: AttendeeChoice | null, canContinue: boolean) => void;
 }) {
@@ -57,7 +59,7 @@ export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
 
   return (
     <div className="vf-stack">
-      <div><p className="vf-label">Step 2 of 3</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">Choose who is attending, or add another attendee.</p></div>
+      <div><p className="vf-label">{stepLabel}</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">Choose who is attending, or add another attendee.</p></div>
       {loading ? <p role="status">Loading attendees…</p> : loadFailed || !list ? <Alert variant="error">Attendees could not be loaded. Refresh the page to try again.</Alert> : <>
         <p>{list.used} of {list.cap} attendees registered for this event.</p>
         {list.used >= list.cap ? <Alert>This account has registered the maximum number of attendees for this event.</Alert> : null}

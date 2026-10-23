@@ -1,3 +1,6 @@
+import { ConstrainedMarkdown } from "@/components/constrained-markdown";
+import { getRegistrationForm } from "@/lib/registration-form";
+import { getCurrentPolicyVersions } from "@/lib/policy-documents";
 import { RegistrationFlow } from "@/app/(convention)/[orgSlug]/register/registration-flow";
 import { RegistrationOutcome } from "@/app/(convention)/[orgSlug]/register/registration-outcome";
 import { PortalAccountGate } from "@/components/account/portal-account-gate";
@@ -26,7 +29,7 @@ const getPublicRegistrationData = unstable_cache(
       where: { orgId: org.id, status: "PUBLISHED" },
       orderBy: { startDate: "asc" },
       select: {
-        id: true, description: true, currency: true, name: true,
+        id: true, description: true, currency: true, name: true, registrationForm: true,
         registrationTypes: {
           orderBy: { sortOrder: "asc" },
           select: {
@@ -37,9 +40,10 @@ const getPublicRegistrationData = unstable_cache(
         }
       }
     });
-    return { event, org };
+    const policies = event ? await getCurrentPolicyVersions(prisma, { orgId: org.id, eventId: event.id }) : [];
+    return { event, org, policies };
   },
-  ["public-registration-page-v2"],
+  ["public-registration-page-v3"],
   { revalidate: 15 }
 );
 
@@ -47,10 +51,12 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
   const { orgSlug } = await params;
   const data = await getPublicRegistrationData(orgSlug);
   if (!data) notFound();
-  const { event, org } = data;
+  const { event, org, policies } = data;
   const registration = !event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
     <PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")} sessionUrl={`/api/portal/attendees?eventId=${encodeURIComponent(event.id)}`}>
       <RegistrationFlow
+        form={getRegistrationForm(event.registrationForm)}
+        policies={policies.map(({ body, ...policy }) => ({ ...policy, content: <ConstrainedMarkdown source={body} baseLevel={4} /> }))}
         eventId={event.id}
         currency={event.currency}
         tiers={event.registrationTypes.map((type) => ({
