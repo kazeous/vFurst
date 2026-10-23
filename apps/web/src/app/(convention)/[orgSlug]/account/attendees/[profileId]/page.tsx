@@ -1,8 +1,10 @@
 import { deleteAttendeeProfile, updateAttendeeProfile } from "@/actions/attendee-profile-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { AttendeeProfileFields } from "@/components/account/attendee-profile-fields";
+import { EmergencyContactRows } from "@/components/forms/emergency-contact-rows";
 import { Button } from "@/components/ui/button";
 import { requirePortalPageContext } from "@/lib/portal-context";
+import { contactDrafts, parseStoredEmergencyContacts } from "@/lib/emergency-contacts";
 import { prisma } from "@vfurst/db";
 import { notFound } from "next/navigation";
 import { z } from "zod";
@@ -23,6 +25,10 @@ export default async function EditAttendeePage({ params }: { params: Promise<{ o
       <ActionStateForm action={updateAttendeeProfile} className="vf-form">
         <input type="hidden" name="profileId" value={profile.id} />
         <AttendeeProfileFields defaults={{ ...profile, dateOfBirth: profile.dateOfBirth?.toISOString().slice(0, 10) }} />
+        <input type="hidden" name="withEmergencyContacts" value="1" />
+        <p className="vf-muted">Used when an event asks for emergency contacts.</p>
+        <EmergencyContactRows legend="Emergency contacts" requirement={{ mode: "optional", count: 2 }}
+          drafts={contactDrafts(parseStoredEmergencyContacts(profile.emergencyContacts), 2)} />
         <Button label="Save attendee" type="submit" variant="primary" />
       </ActionStateForm>
       {!profile._count.registrations ? <ActionStateForm action={deleteAttendeeProfile}>

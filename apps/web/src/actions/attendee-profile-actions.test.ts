@@ -169,4 +169,35 @@ describe("attendee profile actions", () => {
     mocks.rethrow.mockImplementation(() => { throw redirect; });
     await expect(createAttendeeProfile({}, form())).rejects.toBe(redirect);
   });
+
+  it("saves contacts only with the marker", async () => {
+    const data = form();
+    data.set("contact-0-name", "  Emergency   Person ");
+    data.set("contact-0-country", "VN");
+    data.set("contact-0-number", "0901234567");
+    await updateAttendeeProfile({}, data);
+    expect(mocks.tx.attendeeProfile.update.mock.calls[0][0].data).not.toHaveProperty("emergencyContacts");
+    data.set("withEmergencyContacts", "1");
+    await updateAttendeeProfile({}, data);
+    expect(mocks.tx.attendeeProfile.update.mock.calls[1][0].data.emergencyContacts).toEqual([
+      { name: "Emergency Person", country: "VN", phone: "+84901234567" }
+    ]);
+    data.set("contact-0-number", "invalid");
+    await expect(updateAttendeeProfile({}, data)).resolves.toEqual({ error: "Enter a valid phone number for contact 1." });
+    expect(mocks.tx.attendeeProfile.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("a contacts-only edit queues no badge render", async () => {
+    mocks.tx.attendeeProfile.findFirst.mockResolvedValue({ id: profileId, fullName: "Child Attendee", badgeName: "Sam", email: null });
+    const data = form();
+    data.set("withEmergencyContacts", "1");
+    data.set("contact-0-name", "Emergency Person");
+    data.set("contact-0-country", "VN");
+    data.set("contact-0-number", "0901234567");
+    await expect(updateAttendeeProfile({}, data)).resolves.toEqual({ redirectTo: "/account/attendees?notice=saved" });
+    expect(mocks.tx.attendeeProfile.update).toHaveBeenCalledOnce();
+    expect(mocks.tx.badge.findMany).not.toHaveBeenCalled();
+    expect(mocks.tx.badge.updateMany).not.toHaveBeenCalled();
+    expect(mocks.queue).not.toHaveBeenCalled();
+  });
 });

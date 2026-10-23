@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { AttendeeProfileFormState } from "@/lib/attendee-profile-form-state";
 import { assertAttendeeProfileCeiling, parseAttendeeProfileForm } from "@/lib/attendee-profiles";
 import { badgeQueue, type GenerateBadgesJob } from "@/lib/badge-queue";
+import { readEmergencyContacts } from "@/lib/emergency-contacts";
 import { getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import { assertActionRateLimit } from "@/lib/rate-limit";
@@ -81,11 +82,17 @@ async function updateAttendeeProfileInner(formData: FormData): Promise<AttendeeP
   const parsed = parseAttendeeProfileForm(formData);
   if (!parsed.ok) return { error: parsed.error };
   const where = { id, orgId: org.id, portalAccountId: account.id };
+  const contacts = formData.get("withEmergencyContacts") === "1"
+    ? readEmergencyContacts(formData, { mode: "optional", count: 2 }) : null;
+  if (contacts && !contacts.ok) return { error: contacts.error };
 
   const jobs = await runRegistrationPolicyTransaction(async (tx) => {
-    const profile = await tx.attendeeProfile.findFirst({ where, select: { id: true } });
+    const profile = await tx.attendeeProfile.findFirst({ where, select: { id: true, fullName: true, badgeName: true, email: true } });
     if (!profile) throw new PublicActionError("Attendee not found.");
-    await tx.attendeeProfile.update({ where, data: parsed.data });
+    await tx.attendeeProfile.update({ where, data: {
+      ...parsed.data, ...(contacts?.ok ? { emergencyContacts: contacts.contacts } : {})
+    } });
+    if (profile.fullName === parsed.data.fullName && profile.badgeName === parsed.data.badgeName && profile.email === parsed.data.email) return [];
     const eligible = {
       orgId: org.id,
       printedAt: null,
