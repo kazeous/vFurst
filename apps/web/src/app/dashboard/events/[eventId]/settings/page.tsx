@@ -48,6 +48,7 @@ export default async function EventSettingsPage({
         </div>
         <div className="vf-actions">
           <Button label="Registration form" href={`/dashboard/events/${event.id}/settings/registration-form`} />
+          <Button label="Policies" href={`/dashboard/events/${event.id}/settings/policies`} />
           <Button label="Email templates" href={`/dashboard/events/${event.id}/settings/emails`} />
         </div>
       </header>
