@@ -42,3 +42,29 @@ export function buildAgreementRows(
       .map((agreement) => row(agreement.documentId, agreement.version.title, null))
   ];
 }
+
+export function registrationExportHeader(
+  questions: FormField[], current: Array<{ documentId: string; title: string }>
+): string[] {
+  return [
+    ...questions.map((question) => question.label),
+    ...current.flatMap((policy) => [`${policy.title} version`, `${policy.title} accepted at`])
+  ];
+}
+
+export function registrationExportCells(
+  questions: FormField[], current: Array<{ documentId: string; title: string }>,
+  registration: {
+    formResponses: unknown;
+    agreements: Array<{ documentId: string; acceptedAt: Date; version: { version: number } }>;
+  }
+): Array<string | number> {
+  const byDocument = new Map(registration.agreements.map((agreement) => [agreement.documentId, agreement]));
+  return [
+    ...buildAnswerRows(questions, registration.formResponses).map((answer) => answer.value ?? ""),
+    ...current.flatMap((policy): Array<string | number> => {
+      const agreement = byDocument.get(policy.documentId);
+      return agreement ? [agreement.version.version, agreement.acceptedAt.toISOString()] : ["", ""];
+    })
+  ];
+}

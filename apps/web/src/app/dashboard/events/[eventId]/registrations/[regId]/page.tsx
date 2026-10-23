@@ -10,17 +10,25 @@ import {
 } from "@/actions/registration-actions";
 import { formatCurrency } from "@/lib/registration/pricing";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { requireEventPageAccess } from "@/lib/dashboard-access";
+import { parseStoredEmergencyContacts } from "@/lib/emergency-contacts";
 import { formatDate } from "@/lib/i18n";
+import { formatPhone } from "@/lib/phone";
+import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { buildAgreementRows, buildAnswerRows } from "@/lib/registration-details";
+import { getRegistrationForm } from "@/lib/registration-form";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 export default async function RegistrationDetailPage({ params }: { params: Promise<{ eventId: string; regId: string }> }) {
   const { eventId, regId } = await params;
+  const { event: authorizedEvent } = await requireEventPageAccess(eventId);
   const registration = await prisma.registration.findFirst({
     where: {
       id: regId,
-      eventId
+      eventId: authorizedEvent.id,
+      orgId: authorizedEvent.orgId
     },
     include: {
       addOns: {
@@ -52,7 +60,11 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         }
       },
       type: true,
-      attendeeProfile: { select: { id: true, fullName: true, badgeName: true, dateOfBirth: true, email: true, phone: true } },
+      attendeeProfile: { select: { id: true, fullName: true, badgeName: true, dateOfBirth: true, email: true, phone: true, emergencyContacts: true } },
+      agreements: {
+        where: { orgId: authorizedEvent.orgId, eventId: authorizedEvent.id },
+        include: { version: { select: { id: true, version: true, title: true } }, attestedBy: { select: { name: true, email: true } } }
+      },
       portalAccount: { select: { id: true, email: true, name: true } }
     }
   });
@@ -63,6 +75,11 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
 
   const order = registration.orderItems[0]?.order;
   const transfersAllowed = getCoreEventSettings(registration.event.settings).allowTransfers;
+  const form = getRegistrationForm(registration.event.registrationForm);
+  const contacts = parseStoredEmergencyContacts(registration.attendeeProfile.emergencyContacts);
+  const answers = buildAnswerRows(form.questions, registration.formResponses);
+  const current = await getCurrentPolicyVersions(prisma, { orgId: registration.orgId, eventId: registration.eventId });
+  const agreements = buildAgreementRows(current, registration.agreements);
 
   return (
     <div className="vf-page">
@@ -175,6 +192,22 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
             <Button label="Approve registration" type="submit" size="sm" />
           </form>
         </div>
+      </section>
+      {form.contacts.mode !== "off" || contacts.length ? <section className="vf-section">
+        <h2>Emergency contacts</h2>
+        {contacts.length ? <ul>{contacts.map((contact, index) => <li key={index}>{contact.name} · {formatPhone(contact)}</li>)}</ul> : <p>Not provided</p>}
+      </section> : null}
+      <section className="vf-section">
+        <h2>Answers</h2>
+        <dl className="vf-review-list">{answers.map((answer) => <div key={answer.questionId}><dt>{answer.label}</dt><dd>{answer.value ?? "Not answered"}</dd></div>)}</dl>
+      </section>
+      <section className="vf-section">
+        <h2>Agreements</h2>
+        {agreements.length ? <ul>{agreements.map((agreement) => <li key={agreement.documentId}>
+          {agreement.acceptedAt ? <>
+            {`${agreement.title} — v${agreement.acceptedVersion}${agreement.currentVersion !== null && agreement.acceptedVersion !== agreement.currentVersion ? ` (current v${agreement.currentVersion})` : ""}, ${formatDate(agreement.acceptedAt, { dateStyle: "medium", timeStyle: "short" })}, ${agreement.source === "STAFF" ? `attested by ${agreement.staffName}` : "by attendee"}`}
+          </> : <>{agreement.title} — Not recorded</>}
+        </li>)}</ul> : <p>Not recorded</p>}
       </section>
       <section className="vf-section">
         <h2>Staff notes</h2>
