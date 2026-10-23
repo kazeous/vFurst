@@ -10,12 +10,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ regi
 
   const { registrationId } = await params;
   const registration = await prisma.registration.findFirst({
+    omit: { formResponses: true },
     where: {
       id: registrationId,
       orgId: context.apiKey.orgId
     },
     include: {
-      event: true,
+      event: { omit: { registrationForm: true } },
       type: true,
       attendeeProfile: { select: { id: true, fullName: true, badgeName: true } },
       portalAccount: {

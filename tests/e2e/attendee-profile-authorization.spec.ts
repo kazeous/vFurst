@@ -111,6 +111,7 @@ test("API v1 and both exports omit profile DOB and contact details", async ({ pa
     expect(response.status()).toBe(200);
     const body = await response.json();
     const row = Array.isArray(body.data) ? body.data[0] : body.data ?? body;
+    expect(row).not.toHaveProperty("formResponses");
     expect(Object.keys(row.attendee).sort()).toEqual(["badgeName", "fullName", "id"]);
     expect(row.user.email).toBe(mine.email);
     expect(JSON.stringify(body)).not.toContain("dateOfBirth");

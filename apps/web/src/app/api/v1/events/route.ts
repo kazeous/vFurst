@@ -37,6 +37,7 @@ export async function GET(request: Request) {
 
   const [data, total] = await Promise.all([
     prisma.event.findMany({
+      omit: { registrationForm: true },
       where,
       skip,
       take,
