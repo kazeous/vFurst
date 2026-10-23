@@ -2,6 +2,7 @@ import { normalizeIdentityEmail } from "@vfurst/auth/core";
 import type { prisma, Prisma } from "@vfurst/db";
 import { z } from "zod";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { parseStoredEmergencyContacts, type EmergencyContact } from "@/lib/emergency-contacts";
 import type { PortalAccountSummary } from "@/lib/portal-session";
 import { PublicActionError } from "@/lib/public-action-error";
 import { registrationReservationStatuses } from "@/lib/registration-policy";
@@ -26,6 +27,7 @@ export type EventAttendee = {
   badgeName: string | null;
   isAccountHolder: boolean;
   registered: boolean;
+  emergencyContacts: EmergencyContact[];
 };
 export type EventAttendeeList = { cap: number; used: number; attendees: EventAttendee[] };
 
@@ -136,6 +138,7 @@ export async function listEventAttendees(
     used: registrations.length,
     attendees: profiles.map((profile) => ({
       id: profile.id, fullName: profile.fullName, badgeName: profile.badgeName,
+      emergencyContacts: parseStoredEmergencyContacts(profile.emergencyContacts),
       isAccountHolder: profile.accountHolderOf === input.account.id, registered: registered.has(profile.id)
     }))
   };
