@@ -60,16 +60,17 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.2",
     "ioredis": "^5.11.1",
-    "next": "15.5.27",
+    "next": "15.5.28",
     "next-auth": "^5.0.0-beta.32",
     "stripe": "^22.3.0",
-    "zod": "^4.4.3"
+    "zod": "4.6.6"
   },
   "overrides": {
     "postcss": "8.5.30",
     "sharp": "0.35.5",
     "brace-expansion@>=5.0.0 <=5.0.11": "5.0.12",
-    "fast-uri@>=3.0.0 <=3.1.7": "3.1.8",
-    "deepmerge-ts": "8.0.2"
+    "deepmerge-ts": "8.0.2",
+    "fast-uri@>=3.0.0 <=3.1.8": "3.1.9",
+    "zod": "4.6.6"
   }
 }
