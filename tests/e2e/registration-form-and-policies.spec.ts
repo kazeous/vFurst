@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { attendeeProfileFixture, createPortalAccountFixture, loginAsAttendee, portalOrigin } from "./support/portal";
 import { loginAsStaffEmail, staffIdentityData } from "./support/staff";
 
@@ -193,10 +194,18 @@ test("agreement gating blocks registration until every policy is ticked", async 
   await expect(page.getByText(/by attendee/)).toHaveCount(2);
   await expect(page.getByText("Emergency Person · +84 812205668", { exact: true })).toBeVisible();
   await expect(page.getByText("M", { exact: true })).toBeVisible();
-  const response = await page.request.get(`/dashboard/events/${eventId}/registrations/export`);
-  expect(response.ok()).toBe(true);
-  const csv = await response.text();
+  await page.goto(`/dashboard/events/${eventId}/registrations`);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Export CSV", exact: true }).click();
+  const download = await downloadPromise;
+  expect(await download.failure()).toBeNull();
+  expect(download.suggestedFilename()).toBe(`registrations-${eventId}.csv`);
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error("Expected the organizer CSV download file.");
+  const csv = await readFile(downloadPath, "utf8");
   for (const header of ["T-shirt size", "Code of Conduct version", "Code of Conduct accepted at"]) expect(csv).toContain(header);
+  expect(csv).toContain(',"M",');
+  expect(csv).not.toContain("Emergency Person");
   expect(csv).not.toContain("+84812205668");
 });
 
