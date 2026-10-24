@@ -3,10 +3,12 @@
 import { createRegistration } from "@/actions/registration-actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PolicyAgreementFields, type AgreementPolicy } from "@/components/policies/policy-agreement-fields";
+import { ConstrainedMarkdown } from "@/components/constrained-markdown";
+import { PolicyAgreementFields, type AgreementPolicySummary } from "@/components/policies/policy-agreement-fields";
 import { contactDrafts, type ContactDraft } from "@/lib/emergency-contacts";
 import type { FormResponses } from "@/lib/form-fields";
 import { formatPhone } from "@/lib/phone";
+import { buildAnswerRows } from "@/lib/registration-details";
 import { hasRegistrationDetails, type RegistrationDetails, type RegistrationForm } from "@/lib/registration-form";
 import { initialPublicFormState } from "@/lib/public-form-state";
 import { formatCurrency } from "@/lib/registration/pricing";
@@ -20,7 +22,7 @@ import { DetailsStep } from "./details-step";
 type AddOn = { id: string; name: string; price: number; isComplimentary: boolean; maxQuantity: number };
 type Tier = { id: string; name: string; currentPrice: number; soldOut: boolean; remaining?: number; addOns: AddOn[] };
 
-export function RegistrationFlow({ eventId, currency, tiers, form, policies }: { eventId: string; currency: "USD" | "VND"; tiers: Tier[]; form: RegistrationForm; policies: AgreementPolicy[] }) {
+export function RegistrationFlow({ eventId, currency, tiers, form, formVersion, policies }: { eventId: string; currency: "USD" | "VND"; tiers: Tier[]; form: RegistrationForm; formVersion: string; policies: AgreementPolicySummary[] }) {
   const hasDetails = hasRegistrationDetails(form);
   const stepLabels = hasDetails ? ["Ticket", "Attendee", "Details", "Review"] : ["Ticket", "Attendee", "Review"];
   const reviewStep = stepLabels.length - 1;
@@ -41,6 +43,9 @@ export function RegistrationFlow({ eventId, currency, tiers, form, policies }: {
   const [details, setDetails] = useState<RegistrationDetails | null>(null);
   const [agreed, setAgreed] = useState<Record<string, boolean>>({});
   const allPoliciesAgreed = policies.every((policy) => agreed[policy.documentId]);
+  // Policy text is loaded on Review only, so the cached registration page carries titles and versions, not bodies.
+  const [policyBodies, setPolicyBodies] = useState<Record<string, string> | null>(policies.length ? null : {});
+  const [policyLoadFailed, setPolicyLoadFailed] = useState(false);
   const selectAttendee = useCallback((selected: AttendeeChoice | null, canContinue: boolean) => {
     if (selectedAttendeeId.current !== (selected?.id ?? null)) {
       selectedAttendeeId.current = selected?.id ?? null;
@@ -63,6 +68,23 @@ export function RegistrationFlow({ eventId, currency, tiers, form, policies }: {
   useEffect(() => {
     setIsReady(true);
   }, []);
+
+  useEffect(() => {
+    if (step !== reviewStep || policyBodies) return;
+    const controller = new AbortController();
+    const ids = policies.map((policy) => policy.versionId).join(",");
+    fetch(`/api/portal/policy-versions?ids=${encodeURIComponent(ids)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ versions: Array<{ id: string; body: string }> }> : Promise.reject(new Error("Policies unavailable")))
+      .then(({ versions }) => {
+        const bodies = Object.fromEntries(versions.map((version) => [version.id, version.body]));
+        if (policies.some((policy) => typeof bodies[policy.versionId] !== "string")) throw new Error("Policies unavailable");
+        setPolicyBodies(bodies);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPolicyLoadFailed(true);
+      });
+    return () => controller.abort();
+  }, [step, reviewStep, policies, policyBodies]);
 
   return (
     <section className="vf-registration-experience" aria-labelledby="registration-flow-title" data-registration-ready={isReady || undefined}>
@@ -133,11 +155,16 @@ export function RegistrationFlow({ eventId, currency, tiers, form, policies }: {
               {hasDetails ? <>
                 <dl className="vf-review-list">
                   {form.contacts.mode !== "off" ? <div><dt>Emergency contacts</dt><dd>{details?.contacts?.map((contact, index) => <div key={index}>{contact.name} · {formatPhone(contact)}</div>)}</dd></div> : null}
-                  {form.questions.length > 0 ? <div><dt>Answers</dt><dd>{form.questions.map((field) => <div key={field.id}>{field.label}: {String(details?.responses?.[field.id] ?? "")}</div>)}</dd></div> : null}
+                  {form.questions.length > 0 ? <div><dt>Answers</dt><dd>{buildAnswerRows(form.questions, details?.responses ?? {}).map((answer) => <div key={answer.questionId}>{answer.label}: {answer.value ?? ""}</div>)}</dd></div> : null}
                 </dl>
                 <Button type="button" onClick={() => setStep(2)} isDisabled={isSubmitPending}>Edit details</Button>
               </> : null}
-              <PolicyAgreementFields policies={policies} agreed={agreed} onAgreedChange={(id, checked) => setAgreed((current) => ({ ...current, [id]: checked }))} />
+              <input type="hidden" name="registrationFormVersion" value={formVersion} />
+              {policyBodies ? <PolicyAgreementFields
+                policies={policies.map((policy) => ({ ...policy, content: <ConstrainedMarkdown source={policyBodies[policy.versionId] ?? ""} baseLevel={4} /> }))}
+                agreed={agreed} onAgreedChange={(id, checked) => setAgreed((current) => ({ ...current, [id]: checked }))} />
+                : policyLoadFailed ? <Alert variant="error">Policies could not be loaded. Refresh the page to try again.</Alert>
+                : <p role="status">Loading policies…</p>}
               <div className="vf-secure-note"><LockKeyhole size={17} /><span>Payment details are handled securely by Stripe or SePay. vFurst never stores card numbers.</span></div>
               <div className="vf-registration-actions"><Button type="button" onClick={() => setStep(reviewStep - 1)} isDisabled={isSubmitPending}><ChevronLeft size={16} />Back</Button><div><Button label="Add to cart" name="checkoutMode" value="cart" type="submit" isDisabled={isSubmitPending || !allPoliciesAgreed} /><Button label={isSubmitPending ? "Submitting..." : estimatedTotal === 0 ? "Complete registration" : "Continue to payment"} name="checkoutMode" value="stripe" type="submit" variant="primary" isDisabled={isSubmitPending || !allPoliciesAgreed} /></div></div>
             </form>

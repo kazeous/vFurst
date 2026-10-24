@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/i18n";
 import { cancelRegistrationTransferRequest } from "@/actions/registration-transfer-actions";
 import { ActionStateForm } from "@/components/action-state-form";
 import { StaffPolicyAttestation } from "@/components/policies/staff-policy-attestation";
-import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function TransfersPage({ params }: { params: Promise<{ even
   if (!event) {
     notFound();
   }
-  const policies = await getCurrentPolicyVersions(prisma, { orgId: event.orgId, eventId: event.id });
+  const policies = await getCurrentPolicySummaries(prisma, { orgId: event.orgId, eventId: event.id });
 
   const transferable = event.registrations.filter((registration) => registration.status !== "TRANSFERRED" && registration.status !== "CANCELLED");
   const transferred = event.registrations.filter((registration) => registration.status === "TRANSFERRED" || registration.transferredFromId);

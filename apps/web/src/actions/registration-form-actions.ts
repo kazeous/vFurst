@@ -3,6 +3,7 @@
 import type { ActionFormState } from "@/lib/action-form-state";
 import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess } from "@/lib/dashboard-access";
+import { revalidatePublicRegistration } from "@/lib/public-registration";
 import { parseRegistrationFormInput, toStoredRegistrationForm } from "@/lib/registration-form";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
@@ -23,5 +24,6 @@ export async function saveRegistrationForm(
     });
 
     revalidatePath(`/dashboard/events/${event.id}/settings/registration-form`);
+    revalidatePublicRegistration();
   }, "Registration form saved.");
 }

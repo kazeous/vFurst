@@ -14,7 +14,7 @@ import { requireEventPageAccess } from "@/lib/dashboard-access";
 import { parseStoredEmergencyContacts } from "@/lib/emergency-contacts";
 import { formatDate } from "@/lib/i18n";
 import { formatPhone } from "@/lib/phone";
-import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
 import { buildAgreementRows, buildAnswerRows } from "@/lib/registration-details";
 import { getRegistrationForm } from "@/lib/registration-form";
 import { prisma } from "@vfurst/db";
@@ -78,7 +78,7 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
   const form = getRegistrationForm(registration.event.registrationForm);
   const contacts = parseStoredEmergencyContacts(registration.attendeeProfile.emergencyContacts);
   const answers = buildAnswerRows(form.questions, registration.formResponses);
-  const current = await getCurrentPolicyVersions(prisma, { orgId: registration.orgId, eventId: registration.eventId });
+  const current = await getCurrentPolicySummaries(prisma, { orgId: registration.orgId, eventId: registration.eventId });
   const agreements = buildAgreementRows(current, registration.agreements);
 
   return (
@@ -197,18 +197,18 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
         <h2>Emergency contacts</h2>
         {contacts.length ? <ul>{contacts.map((contact, index) => <li key={index}>{contact.name} · {formatPhone(contact)}</li>)}</ul> : <p>Not provided</p>}
       </section> : null}
-      <section className="vf-section">
+      {answers.length ? <section className="vf-section">
         <h2>Answers</h2>
         <dl className="vf-review-list">{answers.map((answer) => <div key={answer.questionId}><dt>{answer.label}</dt><dd>{answer.value ?? "Not answered"}</dd></div>)}</dl>
-      </section>
-      <section className="vf-section">
+      </section> : null}
+      {agreements.length ? <section className="vf-section">
         <h2>Agreements</h2>
-        {agreements.length ? <ul>{agreements.map((agreement) => <li key={agreement.documentId}>
+        <ul>{agreements.map((agreement) => <li key={agreement.documentId}>
           {agreement.acceptedAt ? <>
             {`${agreement.title} — v${agreement.acceptedVersion}${agreement.currentVersion !== null && agreement.acceptedVersion !== agreement.currentVersion ? ` (current v${agreement.currentVersion})` : ""}, ${formatDate(agreement.acceptedAt, { dateStyle: "medium", timeStyle: "short" })}, ${agreement.source === "STAFF" ? `attested by ${agreement.staffName}` : "by attendee"}`}
           </> : <>{agreement.title} — Not recorded</>}
-        </li>)}</ul> : <p>Not recorded</p>}
-      </section>
+        </li>)}</ul>
+      </section> : null}
       <section className="vf-section">
         <h2>Staff notes</h2>
         <form action={createAttendeeNote} className="vf-form">

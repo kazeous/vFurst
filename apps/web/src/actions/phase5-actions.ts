@@ -20,7 +20,7 @@ import { getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS } from "@/lib/payments/stripe";
 import { parseMoney } from "@/lib/registration/pricing";
 import { ExpectedActionError } from "@/lib/public-action-error";
-import { assertStaffAttestation, getCurrentPolicyVersions, writeAgreements } from "@/lib/policy-documents";
+import { assertStaffAttestation, getCurrentPolicySummaries, writeAgreements } from "@/lib/policy-documents";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -511,7 +511,7 @@ async function createWalkInRegistrationInner(formData: FormData) {
       attendeeProfileId: profile.id,
       typeId: registrationType.id
     });
-    const current = await getCurrentPolicyVersions(tx, { orgId: event.orgId, eventId: event.id });
+    const current = await getCurrentPolicySummaries(tx, { orgId: event.orgId, eventId: event.id });
     assertStaffAttestation(current, formData);
 
     const registration = await tx.registration.create({
@@ -659,7 +659,7 @@ async function adminTransferRegistrationInner(formData: FormData) {
       typeId: current.typeId,
       excludeRegistrationId: current.id
     });
-    const policies = await getCurrentPolicyVersions(tx, { orgId: event.orgId, eventId: event.id });
+    const policies = await getCurrentPolicySummaries(tx, { orgId: event.orgId, eventId: event.id });
     assertStaffAttestation(policies, formData);
 
     const moved = await tx.registration.updateMany({

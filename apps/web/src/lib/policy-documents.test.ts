@@ -5,7 +5,7 @@ import { ExpectedActionError, PublicActionError, publicActionErrorMessage } from
 import {
   POLICY_BODY_MAX, POLICY_TITLE_MAX, PolicyChangedError,
   assertAttendeeAgreements, assertStaffAttestation,
-  checkAttendeeAgreements, checkStaffAttestation, getCurrentPolicyVersions,
+  checkAttendeeAgreements, checkStaffAttestation, getCurrentPolicySummaries, getCurrentPolicyVersions,
   parsePolicyVersionInput, readAttendeeAgreements, readStaffAttestation, writeAgreements,
   type CurrentPolicyVersion
 } from "./policy-documents";
@@ -45,6 +45,19 @@ describe("current policy versions", () => {
         versions: { orderBy: { version: "desc" }, take: 1, select: { id: true, version: true, title: true, body: true } }
       }
     });
+  });
+});
+
+describe("current policy summaries", () => {
+  it("returns the same current versions without loading their text", async () => {
+    const findMany = vi.fn().mockResolvedValue(policies.map((policy) => ({
+      id: policy.documentId,
+      versions: [{ id: policy.versionId, version: policy.version, title: policy.title }]
+    })));
+    const client = { policyDocument: { findMany } } as unknown as Pick<Prisma.TransactionClient, "policyDocument">;
+    await expect(getCurrentPolicySummaries(client, { orgId: "org", eventId: "event" }))
+      .resolves.toEqual(policies.map(({ documentId, versionId, version, title }) => ({ documentId, versionId, version, title })));
+    expect(findMany.mock.calls[0][0].select.versions.select).toEqual({ id: true, version: true, title: true, body: false });
   });
 });
 

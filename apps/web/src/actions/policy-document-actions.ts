@@ -5,6 +5,7 @@ import { runActionWithState } from "@/lib/action-state";
 import { requireEventAccess, requirePolicyDocumentAccess } from "@/lib/dashboard-access";
 import { parsePolicyVersionInput } from "@/lib/policy-documents";
 import { ExpectedActionError } from "@/lib/public-action-error";
+import { revalidatePublicRegistration } from "@/lib/public-registration";
 import { prisma } from "@vfurst/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -34,6 +35,7 @@ export async function createPolicyDocument(_state: ActionFormState, formData: Fo
       return created;
     }, { isolationLevel: "ReadCommitted" });
     revalidatePath(policiesPath(event.id));
+    revalidatePublicRegistration();
     redirect(`${policiesPath(event.id)}/${document.id}?published=1`);
   });
 }
@@ -65,6 +67,7 @@ export async function publishPolicyVersion(_state: ActionFormState, formData: Fo
       throw error;
     }
     revalidatePath(policiesPath(event.id));
+    revalidatePublicRegistration();
     revalidatePath(`${policiesPath(event.id)}/${document.id}`);
     redirect(`${policiesPath(event.id)}/${document.id}?published=${version}`);
   });
@@ -75,6 +78,7 @@ async function setArchived(formData: FormData, archivedAt: Date | null) {
   const { document, event } = await requirePolicyDocumentAccess(documentId);
   await prisma.policyDocument.update({ where: { id: document.id }, data: { archivedAt } });
   revalidatePath(policiesPath(event.id));
+  revalidatePublicRegistration();
 }
 
 export async function archivePolicyDocument(_state: ActionFormState, formData: FormData): Promise<ActionFormState> {
@@ -106,5 +110,6 @@ export async function movePolicyDocument(_state: ActionFormState, formData: Form
       await tx.policyDocument.update({ where: { id: neighbor.id }, data: { sortOrder: current.sortOrder } });
     }, { isolationLevel: "ReadCommitted" });
     revalidatePath(policiesPath(event.id));
+    revalidatePublicRegistration();
   });
 }

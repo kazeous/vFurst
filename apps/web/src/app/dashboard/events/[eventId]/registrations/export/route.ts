@@ -1,6 +1,6 @@
 import { csvDownload } from "@/lib/csv";
 import { requireEventPageAccess } from "@/lib/dashboard-access";
-import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
 import { registrationExportCells, registrationExportHeader } from "@/lib/registration-details";
 import { getRegistrationForm } from "@/lib/registration-form";
 import { prisma } from "@vfurst/db";
@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   });
   if (!storedEvent) notFound();
   const { questions } = getRegistrationForm(storedEvent.registrationForm);
-  const current = await getCurrentPolicyVersions(prisma, { orgId: event.orgId, eventId: event.id });
+  const current = await getCurrentPolicySummaries(prisma, { orgId: event.orgId, eventId: event.id });
   const registrations = await prisma.registration.findMany({
     where: {
       eventId: event.id,

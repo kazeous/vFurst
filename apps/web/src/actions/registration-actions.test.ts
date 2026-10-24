@@ -66,6 +66,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 
 import { createRegistration } from "./registration-actions";
+import { registrationFormFingerprint } from "@/lib/public-registration";
+import { getRegistrationForm } from "@/lib/registration-form";
 
 const org = { id: "org-one", status: "ACTIVE" };
 const account = { id: "portal-account-one", orgId: org.id, name: "Attendee", email: "attendee@example.com" };
@@ -314,6 +316,22 @@ describe("registration.created webhook contract", () => {
     });
     expect(mocks.queueWebhookEvent).toHaveBeenCalledOnce();
     expect(mocks.prisma.order.create).toHaveBeenCalledOnce();
+  });
+
+  it("returns policiesChanged when the registration form changed after it was shown", async () => {
+    const form = registrationForm();
+    form.set("registrationFormVersion", "stale-version");
+    await expect(createRegistration({}, form)).resolves.toEqual({
+      error: "The registration form was updated; please review it again.", policiesChanged: true
+    });
+    expect(mocks.tx.registration.create).not.toHaveBeenCalled();
+    expect(mocks.prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts the fingerprint of the form that is still current", async () => {
+    const form = registrationForm();
+    form.set("registrationFormVersion", registrationFormFingerprint(getRegistrationForm({})));
+    await expect(createRegistration({}, form)).resolves.toEqual({ redirectTo: "/register?success=registration-one" });
   });
 
   it("an unconfigured event without policies behaves as before", async () => {

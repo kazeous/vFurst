@@ -2,7 +2,7 @@ import { createWalkInRegistration } from "@/actions/phase5-actions";
 import { BadgePrintControls } from "@/components/badges/badge-print-controls";
 import { ActionStateForm } from "@/components/action-state-form";
 import { StaffPolicyAttestation } from "@/components/policies/staff-policy-attestation";
-import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
 import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
   if (!event) {
     notFound();
   }
-  const policies = await getCurrentPolicyVersions(prisma, { orgId: event.orgId, eventId: event.id });
+  const policies = await getCurrentPolicySummaries(prisma, { orgId: event.orgId, eventId: event.id });
 
   return (
     <div className="vf-page vf-focus-page">

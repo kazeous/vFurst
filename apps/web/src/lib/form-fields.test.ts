@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  formFieldSchema, parseStoredFormResponses, readFormResponses,
+  formFieldSchema, isValidStoredAnswer, parseStoredFormResponses, readFormResponses,
   REGISTRATION_FORM_LIMITS, type FormField
 } from "./form-fields";
 
@@ -72,5 +72,18 @@ describe("form fields", () => {
     for (const value of [null, undefined, [], "{broken", '{"size":"XL"}', { size: 1 }, { size: ["XL"] }, { size: null }]) {
       expect(parseStoredFormResponses(value)).toEqual({});
     }
+  });
+
+  it("isValidStoredAnswer applies the reader's rules to stored values", () => {
+    const size: FormField = { id: "size", type: "select", label: "T-shirt size", required: true, options: ["Extra large"] };
+    const accessible: FormField = { id: "access", type: "checkbox", label: "Wheelchair access", required: false };
+    expect(isValidStoredAnswer(size, "Extra large")).toBe(true);
+    expect(isValidStoredAnswer(size, "XL")).toBe(false);
+    expect(isValidStoredAnswer(size, "")).toBe(false);
+    expect(isValidStoredAnswer(size, true)).toBe(false);
+    expect(isValidStoredAnswer(accessible, false)).toBe(true);
+    expect(isValidStoredAnswer(accessible, "true")).toBe(false);
+    expect(isValidStoredAnswer(question, "x".repeat(REGISTRATION_FORM_LIMITS.text + 1))).toBe(false);
+    expect(isValidStoredAnswer(question, undefined)).toBe(false);
   });
 });

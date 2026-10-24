@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
     orgMember: { findUnique: vi.fn() },
     $transaction: vi.fn(), $queryRaw: vi.fn()
   },
-  requireEventAccess: vi.fn(), requirePolicyDocumentAccess: vi.fn(), revalidatePath: vi.fn(),
+  requireEventAccess: vi.fn(), requirePolicyDocumentAccess: vi.fn(), revalidatePath: vi.fn(), revalidatePublicRegistration: vi.fn(),
   auth: vi.fn(), requireStaffAssurance: vi.fn(), redirect: vi.fn()
 }));
 
@@ -22,6 +22,7 @@ vi.mock("@/lib/rate-limit", () => ({ RateLimitExceededError: class extends Error
 vi.mock("@/lib/organization-lifecycle", () => ({ OrganizationLifecycleError: class extends Error {} }));
 vi.mock("@vfurst/auth/invitations", () => ({ OrganizationInvitationError: class extends Error {} }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock("@/lib/public-registration", () => ({ revalidatePublicRegistration: mocks.revalidatePublicRegistration }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, unstable_rethrow: vi.fn(), notFound: vi.fn() }));
 
 import { archivePolicyDocument, createPolicyDocument, movePolicyDocument, publishPolicyVersion, restorePolicyDocument } from "./policy-document-actions";
@@ -171,6 +172,19 @@ describe("policy document actions", () => {
     mocks.prisma.policyDocument.findMany.mockResolvedValue([document]);
     await movePolicyDocument({}, form({ direction }));
     expect(mocks.prisma.policyDocument.update).not.toHaveBeenCalled();
+  });
+
+  it("every published change refreshes the public registration page; a no-op publish does not", async () => {
+    mocks.prisma.policyDocument.findMany.mockResolvedValue([document]);
+    await createPolicyDocument({}, form());
+    await publishPolicyVersion({}, form({ title: "New conduct" }));
+    await archivePolicyDocument({}, form());
+    await restorePolicyDocument({}, form());
+    await movePolicyDocument({}, form({ direction: "up" }));
+    expect(mocks.revalidatePublicRegistration).toHaveBeenCalledTimes(5);
+    mocks.revalidatePublicRegistration.mockClear();
+    await expect(publishPolicyVersion({}, form({ title: latest.title, body: latest.body }))).resolves.toEqual({ error: "Nothing to publish." });
+    expect(mocks.revalidatePublicRegistration).not.toHaveBeenCalled();
   });
 
   it("returns title validation inline before writing", async () => {

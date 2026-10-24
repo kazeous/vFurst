@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   prisma: { event: { update: vi.fn() } },
   requireEventAccess: vi.fn(),
-  revalidatePath: vi.fn()
+  revalidatePath: vi.fn(),
+  revalidatePublicRegistration: vi.fn()
 }));
 
 vi.mock("@vfurst/db", () => ({ prisma: mocks.prisma }));
@@ -18,6 +19,7 @@ vi.mock("@vfurst/auth/invitations", () => ({
   OrganizationInvitationError: class OrganizationInvitationError extends Error {}
 }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock("@/lib/public-registration", () => ({ revalidatePublicRegistration: mocks.revalidatePublicRegistration }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 
 import { saveRegistrationForm } from "./registration-form-actions";
@@ -58,6 +60,7 @@ describe("registration form settings", () => {
       }
     });
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith(`/dashboard/events/${event.id}/settings/registration-form`);
+    expect(mocks.revalidatePublicRegistration).toHaveBeenCalledOnce();
   });
 
   it("returns the first limit message inline", async () => {
@@ -70,6 +73,7 @@ describe("registration form settings", () => {
 
     expect(mocks.prisma.event.update).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    expect(mocks.revalidatePublicRegistration).not.toHaveBeenCalled();
   });
 
   it("an access failure is thrown, not returned", async () => {
@@ -80,5 +84,6 @@ describe("registration form settings", () => {
 
     expect(mocks.prisma.event.update).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    expect(mocks.revalidatePublicRegistration).not.toHaveBeenCalled();
   });
 });

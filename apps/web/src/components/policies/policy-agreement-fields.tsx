@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 
-export type AgreementPolicy = { documentId: string; versionId: string; version: number; title: string; content: ReactNode };
+export type AgreementPolicySummary = { documentId: string; versionId: string; version: number; title: string };
+export type AgreementPolicy = AgreementPolicySummary & { content: ReactNode };
 
 export function PolicyAgreementFields({ policies, agreed, onAgreedChange }: {
   policies: AgreementPolicy[];

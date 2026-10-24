@@ -15,9 +15,10 @@ import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
-import { mergeEmergencyContacts, parseStoredEmergencyContacts } from "@/lib/emergency-contacts";
+import { saveProfileEmergencyContacts } from "@/lib/attendee-profiles";
 import { getRegistrationForm, readRegistrationDetails } from "@/lib/registration-form";
-import { assertAttendeeAgreements, getCurrentPolicyVersions, PolicyChangedError, writeAgreements } from "@/lib/policy-documents";
+import { REGISTRATION_FORM_CHANGED_MESSAGE, registrationFormFingerprint } from "@/lib/public-registration";
+import { assertAttendeeAgreements, getCurrentPolicySummaries, PolicyChangedError, writeAgreements } from "@/lib/policy-documents";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
@@ -155,6 +156,10 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
   await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${account.id}`);
 
   const registrationForm = getRegistrationForm(event.registrationForm);
+  const shownFormVersion = formData.get("registrationFormVersion");
+  if (typeof shownFormVersion === "string" && shownFormVersion !== registrationFormFingerprint(registrationForm)) {
+    return { error: REGISTRATION_FORM_CHANGED_MESSAGE, policiesChanged: true };
+  }
   const detailsResult = readRegistrationDetails(registrationForm, formData);
   if (!detailsResult.ok) return { error: detailsResult.error };
   const { details } = detailsResult;
@@ -203,7 +208,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       typeId: type.id
     });
 
-    const current = await getCurrentPolicyVersions(tx, { orgId: context.org.id, eventId: event.id });
+    const current = await getCurrentPolicySummaries(tx, { orgId: context.org.id, eventId: event.id });
     assertAttendeeAgreements(current, formData);
 
     const created = await tx.registration.create({
@@ -231,19 +236,10 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       actor: { source: "ATTENDEE", portalAccountId: account.id }
     });
     if (details.contacts !== null) {
-      const currentProfile = await tx.attendeeProfile.findUnique({
-        where: { id: profile.id, orgId: context.org.id, portalAccountId: account.id },
-        select: { emergencyContacts: true }
+      await saveProfileEmergencyContacts(tx, {
+        orgId: context.org.id, portalAccountId: account.id, profileId: profile.id,
+        submitted: details.contacts, count: registrationForm.contacts.count
       });
-      if (!currentProfile) throw new PublicActionError("That attendee is not available.");
-      const stored = parseStoredEmergencyContacts(currentProfile.emergencyContacts);
-      const emergencyContacts = mergeEmergencyContacts(stored, details.contacts, registrationForm.contacts.count);
-      if (JSON.stringify(emergencyContacts) !== JSON.stringify(stored)) {
-        await tx.attendeeProfile.updateMany({
-          where: { id: profile.id, orgId: context.org.id, portalAccountId: account.id },
-          data: { emergencyContacts }
-        });
-      }
     }
     return created;
   });

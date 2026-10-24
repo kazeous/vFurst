@@ -6,10 +6,9 @@ import { sendOrgEmail } from "@/lib/email";
 import type { ActionFormState } from "@/lib/action-form-state";
 import { assertPortalResourceOrg, getPortalActionContext, isPortalRedirect } from "@/lib/portal-context";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
-import { assertAttendeeProfileCeiling, parseAttendeeProfileForm } from "@/lib/attendee-profiles";
-import { mergeEmergencyContacts, parseStoredEmergencyContacts } from "@/lib/emergency-contacts";
+import { assertAttendeeProfileCeiling, parseAttendeeProfileForm, saveProfileEmergencyContacts } from "@/lib/attendee-profiles";
 import { getRegistrationForm, readRegistrationDetails } from "@/lib/registration-form";
-import { assertAttendeeAgreements, getCurrentPolicyVersions, writeAgreements } from "@/lib/policy-documents";
+import { assertAttendeeAgreements, getCurrentPolicySummaries, writeAgreements } from "@/lib/policy-documents";
 import {
   assertRegistrationCapacity,
   assertTransfersAllowed,
@@ -231,7 +230,7 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
     const detailsResult = readRegistrationDetails(registrationForm, formData);
     if (!detailsResult.ok) throw new PublicActionError(detailsResult.error);
     const { details } = detailsResult;
-    const current = await getCurrentPolicyVersions(tx, { orgId: context.org.id, eventId: request.eventId });
+    const current = await getCurrentPolicySummaries(tx, { orgId: context.org.id, eventId: request.eventId });
     assertAttendeeAgreements(current, formData);
 
     let attendeeProfileId = selected.data;
@@ -252,19 +251,10 @@ async function acceptRegistrationTransferInner(parsed: { requestId: string; toke
       enforceUserLimit: true
     });
     if (!newProfileData && details.contacts !== null) {
-      const currentProfile = await tx.attendeeProfile.findUnique({
-        where: { id: attendeeProfileId, orgId: context.org.id, portalAccountId: account.id },
-        select: { emergencyContacts: true }
+      await saveProfileEmergencyContacts(tx, {
+        orgId: context.org.id, portalAccountId: account.id, profileId: attendeeProfileId,
+        submitted: details.contacts, count: registrationForm.contacts.count
       });
-      if (!currentProfile) throw new PublicActionError("That attendee is not available.");
-      const stored = parseStoredEmergencyContacts(currentProfile.emergencyContacts);
-      const emergencyContacts = mergeEmergencyContacts(stored, details.contacts, registrationForm.contacts.count);
-      if (JSON.stringify(emergencyContacts) !== JSON.stringify(stored)) {
-        await tx.attendeeProfile.updateMany({
-          where: { id: attendeeProfileId, orgId: context.org.id, portalAccountId: account.id },
-          data: { emergencyContacts }
-        });
-      }
     }
 
     const moved = await tx.registration.updateMany({

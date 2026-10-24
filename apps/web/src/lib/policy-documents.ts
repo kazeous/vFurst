@@ -5,29 +5,41 @@ import { ExpectedActionError, PublicActionError } from "@/lib/public-action-erro
 export const POLICY_TITLE_MAX = 120;
 export const POLICY_BODY_MAX = 100_000;
 
-export type CurrentPolicyVersion = {
+export type CurrentPolicySummary = {
   documentId: string;
   versionId: string;
   version: number;
   title: string;
-  body: string;
 };
+export type CurrentPolicyVersion = CurrentPolicySummary & { body: string };
 
-export async function getCurrentPolicyVersions(
-  client: Pick<Prisma.TransactionClient, "policyDocument">,
-  input: { orgId: string; eventId: string }
-): Promise<CurrentPolicyVersion[]> {
-  const documents = await client.policyDocument.findMany({
+type PolicyClient = Pick<Prisma.TransactionClient, "policyDocument">;
+
+function findCurrentPolicies(client: PolicyClient, input: { orgId: string; eventId: string }, withBody: boolean) {
+  return client.policyDocument.findMany({
     where: { orgId: input.orgId, eventId: input.eventId, archivedAt: null },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       versions: {
         orderBy: { version: "desc" }, take: 1,
-        select: { id: true, version: true, title: true, body: true }
+        select: { id: true, version: true, title: true, body: withBody }
       }
     }
   });
+}
+
+/** Current policies without their text, for agreement checks and listings. */
+export async function getCurrentPolicySummaries(client: PolicyClient, input: { orgId: string; eventId: string }): Promise<CurrentPolicySummary[]> {
+  const documents = await findCurrentPolicies(client, input, false);
+  return documents.flatMap((document) => {
+    const version = document.versions[0];
+    return version ? [{ documentId: document.id, versionId: version.id, version: version.version, title: version.title }] : [];
+  });
+}
+
+export async function getCurrentPolicyVersions(client: PolicyClient, input: { orgId: string; eventId: string }): Promise<CurrentPolicyVersion[]> {
+  const documents = await findCurrentPolicies(client, input, true);
   return documents.flatMap((document) => {
     const version = document.versions[0];
     return version ? [{ documentId: document.id, versionId: version.id, version: version.version, title: version.title, body: version.body }] : [];
@@ -51,14 +63,14 @@ export function readAttendeeAgreements(formData: FormData): { shownVersionIds: s
   return { shownVersionIds: readVersionIds(formData, "shownPolicyVersions"), agreed };
 }
 
-function matchesCurrentVersions(current: CurrentPolicyVersion[], versionIds: string[]): boolean {
+function matchesCurrentVersions(current: CurrentPolicySummary[], versionIds: string[]): boolean {
   const currentIds = new Set(current.map((policy) => policy.versionId));
   const submittedIds = new Set(versionIds);
   return currentIds.size === submittedIds.size && [...currentIds].every((id) => submittedIds.has(id));
 }
 
 export function checkAttendeeAgreements(
-  current: CurrentPolicyVersion[],
+  current: CurrentPolicySummary[],
   submission: ReturnType<typeof readAttendeeAgreements>
 ): AgreementCheck {
   if (!matchesCurrentVersions(current, submission.shownVersionIds)) return "stale";
@@ -74,7 +86,7 @@ export function readStaffAttestation(formData: FormData): { attestedVersionIds: 
 }
 
 export function checkStaffAttestation(
-  current: CurrentPolicyVersion[],
+  current: CurrentPolicySummary[],
   attestation: ReturnType<typeof readStaffAttestation>
 ): AgreementCheck {
   if (current.length === 0) return "ok";
@@ -89,13 +101,13 @@ export class PolicyChangedError extends ExpectedActionError {
   }
 }
 
-export function assertAttendeeAgreements(current: CurrentPolicyVersion[], formData: FormData): void {
+export function assertAttendeeAgreements(current: CurrentPolicySummary[], formData: FormData): void {
   const check = checkAttendeeAgreements(current, readAttendeeAgreements(formData));
   if (check === "stale") throw new PolicyChangedError();
   if (check === "missing") throw new PublicActionError("Agree to every policy to continue.");
 }
 
-export function assertStaffAttestation(current: CurrentPolicyVersion[], formData: FormData): void {
+export function assertStaffAttestation(current: CurrentPolicySummary[], formData: FormData): void {
   const check = checkStaffAttestation(current, readStaffAttestation(formData));
   if (check === "stale") throw new ExpectedActionError("The event policies changed. Review them and confirm again.");
   if (check === "missing") throw new ExpectedActionError("Confirm that the attendee has agreed to the event policies.");
@@ -104,7 +116,7 @@ export function assertStaffAttestation(current: CurrentPolicyVersion[], formData
 export async function writeAgreements(
   tx: Pick<Prisma.TransactionClient, "registrationAgreement">,
   input: {
-    orgId: string; eventId: string; registrationId: string; current: CurrentPolicyVersion[];
+    orgId: string; eventId: string; registrationId: string; current: CurrentPolicySummary[];
     actor: { source: "ATTENDEE"; portalAccountId: string } | { source: "STAFF"; attestedByUserId: string };
   }
 ): Promise<void> {
