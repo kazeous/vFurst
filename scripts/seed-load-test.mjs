@@ -100,6 +100,13 @@ async function main() {
       startDate: new Date("2027-08-01T09:00:00Z"),
       endDate: new Date("2027-08-03T17:00:00Z"),
       status: "PUBLISHED",
+      registrationForm: {
+        emergencyContacts: { mode: "required", count: 2 },
+        questions: [
+          { id: randomUUID(), type: "select", label: "T-shirt size", required: true, options: ["S", "M", "L"] },
+          { id: randomUUID(), type: "text", label: "Dietary needs", required: false }
+        ]
+      },
       settings: {
         requireApproval: false,
         allowTransfers: true,
@@ -107,6 +114,19 @@ async function main() {
       }
     }
   });
+
+  const sections = [];
+  for (let section = 1; sections.join("\n\n").length < 30_000; section++) {
+    sections.push(`## Section ${section}\n\nTreat every attendee with respect, follow staff instructions, and help keep the convention welcoming and safe for everyone.`);
+  }
+  for (const [sortOrder, title, body] of [
+    [0, "Load Code of Conduct", sections.join("\n\n")],
+    [1, "Load Refund Policy", "Contact the organizer before the event to request a refund."]
+  ]) {
+    const document = await prisma.policyDocument.create({ data: { orgId: org.id, eventId: event.id, sortOrder } });
+    await prisma.policyDocumentVersion.create({ data: { orgId: org.id, documentId: document.id, version: 1,
+      title, body, publishedByUserId: admin.id } });
+  }
 
   const registrationType = await prisma.registrationType.create({
     data: {
@@ -147,7 +167,8 @@ async function main() {
     orgId: org.id,
     portalAccountId: account.id,
     accountHolderOf: account.id,
-    fullName: account.name
+    fullName: account.name,
+    emergencyContacts: [{ name: "Load Contact", country: "VN", phone: "+84812205668" }]
   }));
   const registrations = portalAccounts.map((account, index) => ({
     id: randomUUID(),

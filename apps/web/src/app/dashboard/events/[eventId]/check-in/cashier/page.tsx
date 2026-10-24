@@ -1,5 +1,8 @@
 import { createWalkInRegistration } from "@/actions/phase5-actions";
 import { BadgePrintControls } from "@/components/badges/badge-print-controls";
+import { ActionStateForm } from "@/components/action-state-form";
+import { StaffPolicyAttestation } from "@/components/policies/staff-policy-attestation";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
 import { formatCurrency, formatMoneyInput } from "@/lib/registration/pricing";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
   if (!event) {
     notFound();
   }
+  const policies = await getCurrentPolicySummaries(prisma, { orgId: event.orgId, eventId: event.id });
 
   return (
     <div className="vf-page vf-focus-page">
@@ -60,7 +64,7 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
       </header>
 
       <section className="vf-two-column">
-        <form action={createWalkInRegistration} className="vf-section vf-form">
+        <ActionStateForm action={createWalkInRegistration} className="vf-section vf-form" resetOnSuccess>
           <input type="hidden" name="eventId" value={event.id} />
           <h2>Walk-in registration</h2>
           <label>
@@ -101,11 +105,12 @@ export default async function CashierPage({ params }: { params: Promise<{ eventI
               </select>
             </label>
           </div>
+          <StaffPolicyAttestation policies={policies} />
           <Button label="Complete registration" type="submit" variant="primary" />
           <p className="vf-muted">
             The order is recorded as paid only after staff confirms collection. Badge output appears in recent activity when the render worker finishes.
           </p>
-        </form>
+        </ActionStateForm>
 
         <section className="vf-section">
           <h2>Recent desk activity</h2>

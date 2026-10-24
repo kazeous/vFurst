@@ -1,20 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import type { FormField } from "@/lib/form-fields";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useState } from "react";
 
-export type VolunteerFormField = {
-  id: string;
-  type: "text" | "select" | "checkbox" | "textarea";
-  label: string;
-  required: boolean;
-  options?: string[];
-};
-
-function emptyField(type: VolunteerFormField["type"]): VolunteerFormField {
+function emptyField(type: FormField["type"]): FormField {
   return {
     id: crypto.randomUUID(),
     type,
@@ -29,8 +22,8 @@ function SortableField({
   updateField,
   removeField
 }: {
-  field: VolunteerFormField;
-  updateField: (field: VolunteerFormField) => void;
+  field: FormField;
+  updateField: (field: FormField) => void;
   removeField: (fieldId: string) => void;
 }) {
   const sortable = useSortable({ id: field.id });
@@ -55,7 +48,7 @@ function SortableField({
             <select
               value={field.type}
               onChange={(event) => {
-                const nextType = event.target.value as VolunteerFormField["type"];
+                const nextType = event.target.value as FormField["type"];
                 updateField({
                   ...field,
                   type: nextType,
@@ -101,12 +94,12 @@ function SortableField({
   );
 }
 
-export function VolunteerFormBuilder({ initialSchema }: { initialSchema: VolunteerFormField[] }) {
-  const [fields, setFields] = useState<VolunteerFormField[]>(initialSchema);
+export function FormFieldBuilder({ initialFields, name = "formSchema" }: { initialFields: FormField[]; name?: string }) {
+  const [fields, setFields] = useState<FormField[]>(initialFields);
   const [preview, setPreview] = useState(false);
   const schemaValue = useMemo(() => JSON.stringify(fields), [fields]);
 
-  function updateField(nextField: VolunteerFormField) {
+  function updateField(nextField: FormField) {
     setFields((current) => current.map((field) => (field.id === nextField.id ? nextField : field)));
   }
 
@@ -130,7 +123,7 @@ export function VolunteerFormBuilder({ initialSchema }: { initialSchema: Volunte
 
   return (
     <div className="vf-stack">
-      <input type="hidden" name="formSchema" value={schemaValue} />
+      <input type="hidden" name={name} value={schemaValue} />
       <div className="vf-actions">
         <div className="vf-inline-forms">
           <Button label="Text" type="button" size="sm" onClick={() => setFields((current) => [...current, emptyField("text")])} />

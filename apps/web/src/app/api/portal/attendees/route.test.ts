@@ -20,7 +20,8 @@ const eventId = "00000000-0000-4000-8000-000000000001";
 const event = { id: eventId, orgId: org.id, settings: { maxRegistrationsPerUser: 4 } };
 const self = {
   id: "profile-self", orgId: org.id, portalAccountId: account.id, accountHolderOf: account.id,
-  fullName: "Owner", badgeName: null, dateOfBirth: new Date("1990-01-01"), email: "private@example.com", phone: "123456789"
+  fullName: "Owner", badgeName: null, dateOfBirth: new Date("1990-01-01"), email: "private@example.com", phone: "123456789",
+  emergencyContacts: [{ name: "Guardian", country: "VN", phone: "+84912345678" }]
 };
 const child = { ...self, id: "profile-child", accountHolderOf: null, fullName: "Child", badgeName: "Sam" };
 const request = (id = eventId) => new NextRequest(`https://acme.example.com/api/portal/attendees?eventId=${id}`);
@@ -72,8 +73,8 @@ describe("private portal attendees", () => {
     await expectPrivate(await response, 200, {
       account: { email: "owner@example.com", name: "Owner" },
       cap: 4, used: 1, attendees: [
-        { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false },
-        { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true }
+        { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false, emergencyContacts: self.emergencyContacts },
+        { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true, emergencyContacts: child.emergencyContacts }
       ]
     });
   });
@@ -95,8 +96,8 @@ describe("private portal attendees", () => {
     await expectPrivate(await GET(request()), 200, {
       account: { email: "owner@example.com", name: "Owner" },
       cap: 4, used: 1, attendees: [
-        { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false },
-        { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true }
+        { id: self.id, fullName: "Owner", badgeName: null, isAccountHolder: true, registered: false, emergencyContacts: self.emergencyContacts },
+        { id: child.id, fullName: "Child", badgeName: "Sam", isAccountHolder: false, registered: true, emergencyContacts: child.emergencyContacts }
       ]
     });
     expect(mocks.profiles).toHaveBeenCalledWith(expect.objectContaining({ where: { orgId: org.id, portalAccountId: account.id } }));

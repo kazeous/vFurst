@@ -10,6 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ even
 
   const { eventId } = await params;
   const event = await prisma.event.findFirst({
+    omit: { registrationForm: true },
     where: {
       id: eventId,
       orgId: context.apiKey.orgId

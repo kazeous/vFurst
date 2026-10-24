@@ -1,6 +1,10 @@
 import { acceptRegistrationTransfer, declineRegistrationTransfer } from "@/actions/registration-transfer-actions";
 import { Alert } from "@/components/ui/alert";
 import { ActionStateForm } from "@/components/action-state-form";
+import { ConstrainedMarkdown } from "@/components/constrained-markdown";
+import { PolicyAgreementFields } from "@/components/policies/policy-agreement-fields";
+import { getCurrentPolicyVersions } from "@/lib/policy-documents";
+import { getRegistrationForm } from "@/lib/registration-form";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/i18n";
 import { requirePortalPageContext } from "@/lib/portal-context";
@@ -69,6 +73,8 @@ export default async function AccountTransferDecisionPage({
   const status = request.status === "PENDING" && request.expiresAt <= new Date() ? "EXPIRED" : request.status;
   const { attendees } = await listEventAttendees(prisma, { account: context.account, event: request.event });
   const initialAttendee = pickInitialAttendee(attendees, null) ?? "new";
+  const form = getRegistrationForm(request.event.registrationForm);
+  const policies = await getCurrentPolicyVersions(prisma, { orgId: context.org.id, eventId: request.eventId });
 
   return (
     <section className="vf-section vf-stack">
@@ -100,7 +106,10 @@ export default async function AccountTransferDecisionPage({
         <ActionStateForm action={acceptRegistrationTransfer}>
           <input type="hidden" name="requestId" value={request.id} />
           <input type="hidden" name="token" value={token} />
-          <TransferAttendeeSelection attendees={attendees.filter((attendee) => !attendee.registered)} initialId={initialAttendee} />
+          <TransferAttendeeSelection attendees={attendees.filter((attendee) => !attendee.registered)} initialId={initialAttendee} form={form} />
+          <PolicyAgreementFields policies={policies.map(({ body, ...policy }) => ({
+            ...policy, content: <ConstrainedMarkdown source={body} baseLevel={4} />
+          }))} />
           {status === "PENDING" ? <Button label="Accept transfer" type="submit" variant="primary" /> : null}
         </ActionStateForm>
         <ActionStateForm action={declineRegistrationTransfer}>

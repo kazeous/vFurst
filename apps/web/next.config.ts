@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const sentryRelease =
   process.env.SENTRY_RELEASE || process.env.COOLIFY_GIT_COMMIT_SHA || process.env.NIXPACKS_GIT_COMMIT_SHA;

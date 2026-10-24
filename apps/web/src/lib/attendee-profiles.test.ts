@@ -12,7 +12,7 @@ import {
 const account = { id: "a1", orgId: "o1", name: "Mai Le", email: "mai@example.com" };
 const self = {
   id: "p1", orgId: "o1", portalAccountId: "a1", accountHolderOf: "a1", fullName: "Mai Le",
-  badgeName: null, dateOfBirth: null, email: null, phone: null
+  badgeName: null, dateOfBirth: null, email: null, phone: null, emergencyContacts: []
 };
 const event = { id: "e1", orgId: "o1", settings: {} };
 const now = new Date("2026-10-19T23:30:00.000Z");
@@ -120,6 +120,21 @@ describe("assertAttendeeProfileCeiling", () => {
 });
 
 describe("listEventAttendees", () => {
+  it("returns each profile's emergency contacts and still omits phone, email and date of birth", async () => {
+    const tx = client();
+    const contacts = [{ name: "Guardian", country: "VN", phone: "+84912345678" }];
+    tx.attendeeProfile.findMany.mockResolvedValue([
+      { ...self, emergencyContacts: contacts, phone: "private phone", email: "private@example.com", dateOfBirth: new Date("2000-01-01") },
+      { ...self, id: "p2", accountHolderOf: null }
+    ]);
+    const result = await listEventAttendees(transaction(tx), { account, event });
+    expect(result.attendees.map((attendee) => attendee.emergencyContacts)).toEqual([contacts, []]);
+    for (const attendee of result.attendees) {
+      expect(attendee).not.toHaveProperty("phone");
+      expect(attendee).not.toHaveProperty("email");
+      expect(attendee).not.toHaveProperty("dateOfBirth");
+    }
+  });
   it("lists without a separate self-profile read when the account holder is listed", async () => {
     const tx = client();
     const result = await listEventAttendees(transaction(tx), { account, event });
@@ -149,8 +164,8 @@ describe("listEventAttendees", () => {
     tx.registration.findMany.mockResolvedValue([{ attendeeProfileId: "p2" }]);
     const result = await listEventAttendees(transaction(tx), { account, event: { ...event, settings: { maxRegistrationsPerUser: 2 } } });
     expect(result).toEqual({ cap: 2, used: 1, attendees: [
-      { id: "p1", fullName: "Mai Le", badgeName: null, isAccountHolder: true, registered: false },
-      { id: "p2", fullName: "Mai Le", badgeName: null, isAccountHolder: false, registered: true }
+      { id: "p1", fullName: "Mai Le", badgeName: null, isAccountHolder: true, registered: false, emergencyContacts: [] },
+      { id: "p2", fullName: "Mai Le", badgeName: null, isAccountHolder: false, registered: true, emergencyContacts: [] }
     ] });
     expect(tx.registration.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
       orgId: account.orgId, portalAccountId: account.id, eventId: event.id, status: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }

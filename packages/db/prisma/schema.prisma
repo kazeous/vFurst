@@ -222,6 +222,9 @@ model User {
   registrationTransferRequestsCreated RegistrationTransferRequest[] @relation("RegistrationTransferRequester")
   emailDeliveriesReplayed             EmailDelivery[]               @relation("EmailDeliveryReplayedBy")
 
+  publishedPolicyVersions PolicyDocumentVersion[] @relation("PolicyVersionPublisher")
+  attestedAgreements      RegistrationAgreement[] @relation("AgreementAttester")
+
   @@map("users")
 }
 
@@ -250,26 +253,29 @@ model PortalAccount {
   raffleWins               RaffleDrawResult[]
   transferRequestsReceived RegistrationTransferRequest[] @relation("RegistrationTransferRecipient")
 
+  registrationAgreements RegistrationAgreement[]
+
   @@unique([orgId, email])
   @@unique([orgId, id])
   @@map("portal_accounts")
 }
 
 model AttendeeProfile {
-  id              String         @id @default(uuid()) @db.Uuid
-  orgId           String         @db.Uuid
-  portalAccountId String         @db.Uuid
-  accountHolderOf String?        @unique @db.Uuid
-  fullName        String
-  badgeName       String?
-  dateOfBirth     DateTime?      @db.Date
-  email           String?
-  phone           String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  org             Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  portalAccount   PortalAccount  @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
-  registrations   Registration[]
+  id                String         @id @default(uuid()) @db.Uuid
+  orgId             String         @db.Uuid
+  portalAccountId   String         @db.Uuid
+  accountHolderOf   String?        @unique @db.Uuid
+  fullName          String
+  badgeName         String?
+  dateOfBirth       DateTime?      @db.Date
+  email             String?
+  phone             String?
+  emergencyContacts Json           @default("[]")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  org               Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  portalAccount     PortalAccount  @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: Cascade)
+  registrations     Registration[]
 
   @@unique([orgId, id])
   @@unique([orgId, portalAccountId, id])
@@ -352,6 +358,7 @@ model Organization {
   members                      OrgMember[]
   orderItems                   OrderItem[]
   orders                       Order[]
+  policyDocuments              PolicyDocument[]
   portalAccounts               PortalAccount[]
   raffleEntries                RaffleEntry[]
   raffleDrawResults            RaffleDrawResult[]
@@ -595,6 +602,8 @@ model Event {
   venue                        String?
   status                       EventStatus                   @default(DRAFT)
   currency                     CurrencyCode                  @default(USD)
+  registrationForm             Json                          @default("{}")
+  policyDocuments              PolicyDocument[]
   settings                     Json                          @default("{\"requireApproval\":false,\"allowTransfers\":true,\"maxRegistrationsPerUser\":4}")
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
@@ -615,6 +624,7 @@ model Event {
   vouchers                     Voucher[]
   emailDeliveries              EmailDelivery[]
 
+  @@unique([orgId, id])
   @@unique([orgId, slug])
   @@index([orgId])
   @@index([status])
@@ -737,6 +747,8 @@ model Registration {
   typeId            String                        @db.Uuid
   status            RegistrationStatus            @default(PENDING)
   approvalStatus    RegistrationApprovalStatus    @default(APPROVED)
+  formResponses     Json?
+  agreements        RegistrationAgreement[]
   checkedInAt       DateTime?
   badgeNumber       String?
   transferredFromId String?                       @db.Uuid
@@ -755,6 +767,7 @@ model Registration {
   portalAccount     PortalAccount                 @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
   attendeeProfile   AttendeeProfile               @relation(fields: [orgId, portalAccountId, attendeeProfileId], references: [orgId, portalAccountId, id], onDelete: NoAction)
 
+  @@unique([orgId, eventId, id])
   @@unique([eventId, badgeNumber])
   @@index([orgId])
   @@index([eventId])
@@ -767,6 +780,72 @@ model Registration {
   @@index([typeId])
   @@index([typeId, status])
   @@map("registrations")
+}
+
+enum AgreementSource {
+  ATTENDEE
+  STAFF
+}
+
+model PolicyDocument {
+  id         String                  @id @default(uuid()) @db.Uuid
+  orgId      String                  @db.Uuid
+  eventId    String                  @db.Uuid
+  sortOrder  Int                     @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  org        Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  event      Event                   @relation(fields: [orgId, eventId], references: [orgId, id], onDelete: Cascade)
+  versions   PolicyDocumentVersion[]
+  agreements RegistrationAgreement[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, eventId, id])
+  @@index([eventId, archivedAt, sortOrder])
+  @@map("policy_documents")
+}
+
+model PolicyDocumentVersion {
+  id                String                  @id @default(uuid()) @db.Uuid
+  orgId             String                  @db.Uuid
+  documentId        String                  @db.Uuid
+  version           Int // 1, 2, 3… per document
+  title             String // trimmed, 1–120
+  body              String // constrained Markdown, 1–100,000 chars
+  publishedAt       DateTime                @default(now())
+  publishedByUserId String                  @db.Uuid
+  document          PolicyDocument          @relation(fields: [orgId, documentId], references: [orgId, id], onDelete: Cascade)
+  publishedBy       User                    @relation("PolicyVersionPublisher", fields: [publishedByUserId], references: [id])
+  agreements        RegistrationAgreement[]
+
+  @@unique([documentId, version])
+  @@unique([orgId, id])
+  @@unique([orgId, documentId, id])
+  @@map("policy_document_versions")
+}
+
+model RegistrationAgreement {
+  id                String                @id @default(uuid()) @db.Uuid
+  orgId             String                @db.Uuid
+  eventId           String                @db.Uuid
+  registrationId    String                @db.Uuid
+  documentId        String                @db.Uuid
+  documentVersionId String                @db.Uuid
+  source            AgreementSource
+  portalAccountId   String?               @db.Uuid // set when source = ATTENDEE
+  attestedByUserId  String?               @db.Uuid // set when source = STAFF
+  acceptedAt        DateTime              @default(now())
+  registration      Registration          @relation(fields: [orgId, eventId, registrationId], references: [orgId, eventId, id], onDelete: Cascade)
+  document          PolicyDocument        @relation(fields: [orgId, eventId, documentId], references: [orgId, eventId, id], onDelete: Cascade)
+  version           PolicyDocumentVersion @relation(fields: [orgId, documentId, documentVersionId], references: [orgId, documentId, id], onDelete: Cascade)
+  portalAccount     PortalAccount?        @relation(fields: [orgId, portalAccountId], references: [orgId, id], onDelete: NoAction)
+  attestedBy        User?                 @relation("AgreementAttester", fields: [attestedByUserId], references: [id])
+
+  @@unique([registrationId, documentId])
+  @@index([orgId])
+  @@index([documentVersionId])
+  @@map("registration_agreements")
 }
 
 model RegistrationTransferRequest {

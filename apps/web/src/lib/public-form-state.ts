@@ -2,6 +2,7 @@
 // report expected user conditions as structured form state instead of throwing.
 export type PublicFormState = {
   error?: string;
+  policiesChanged?: boolean;
   redirectTo?: string;
 };
 

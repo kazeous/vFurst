@@ -2,6 +2,7 @@ import { normalizeIdentityEmail } from "@vfurst/auth/core";
 import type { prisma, Prisma } from "@vfurst/db";
 import { z } from "zod";
 import { getCoreEventSettings } from "@/lib/event-settings";
+import { mergeEmergencyContacts, parseStoredEmergencyContacts, type EmergencyContact } from "@/lib/emergency-contacts";
 import type { PortalAccountSummary } from "@/lib/portal-session";
 import { PublicActionError } from "@/lib/public-action-error";
 import { registrationReservationStatuses } from "@/lib/registration-policy";
@@ -26,6 +27,7 @@ export type EventAttendee = {
   badgeName: string | null;
   isAccountHolder: boolean;
   registered: boolean;
+  emergencyContacts: EmergencyContact[];
 };
 export type EventAttendeeList = { cap: number; used: number; attendees: EventAttendee[] };
 
@@ -136,6 +138,7 @@ export async function listEventAttendees(
     used: registrations.length,
     attendees: profiles.map((profile) => ({
       id: profile.id, fullName: profile.fullName, badgeName: profile.badgeName,
+      emergencyContacts: parseStoredEmergencyContacts(profile.emergencyContacts),
       isAccountHolder: profile.accountHolderOf === input.account.id, registered: registered.has(profile.id)
     }))
   };
@@ -159,4 +162,19 @@ export async function resolveStaffAttendeeProfile(
     data: { orgId: input.account.orgId, portalAccountId: input.account.id, accountHolderOf: null, fullName }
   });
   return { id: created.id };
+}
+
+/** Saves registration-submitted contacts onto the attendee's own profile, keeping stored contacts beyond `count`. */
+export async function saveProfileEmergencyContacts(
+  tx: Pick<Prisma.TransactionClient, "attendeeProfile">,
+  input: { orgId: string; portalAccountId: string; profileId: string; submitted: EmergencyContact[]; count: 1 | 2 }
+): Promise<void> {
+  const where = { id: input.profileId, orgId: input.orgId, portalAccountId: input.portalAccountId };
+  const profile = await tx.attendeeProfile.findUnique({ where, select: { emergencyContacts: true } });
+  if (!profile) throw new PublicActionError("That attendee is not available.");
+  const stored = parseStoredEmergencyContacts(profile.emergencyContacts);
+  const emergencyContacts = mergeEmergencyContacts(stored, input.submitted, input.count);
+  if (JSON.stringify(emergencyContacts) !== JSON.stringify(stored)) {
+    await tx.attendeeProfile.updateMany({ where, data: { emergencyContacts } });
+  }
 }

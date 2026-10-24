@@ -7,14 +7,19 @@ import { usePortalGateSession } from "@/components/account/portal-account-gate";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useActionRedirect } from "@/components/use-action-redirect";
+import { EmergencyContactRows } from "@/components/forms/emergency-contact-rows";
+import { FormFieldInputs } from "@/components/forms/form-field-inputs";
+import { contactDrafts, type EmergencyContact } from "@/lib/emergency-contacts";
+import type { RegistrationForm } from "@/lib/registration-form";
 import { initialAttendeeProfileFormState } from "@/lib/attendee-profile-form-state";
 import { attendeeRefreshState, pickInitialAttendee, type AttendeeRefreshResult } from "./attendee-selection";
 
-export type AttendeeChoice = { id: string; fullName: string; badgeName: string | null; isAccountHolder: boolean; registered: boolean };
+export type AttendeeChoice = { id: string; fullName: string; badgeName: string | null; isAccountHolder: boolean; registered: boolean; emergencyContacts: EmergencyContact[] };
 type AttendeeList = { cap: number; used: number; attendees: AttendeeChoice[] };
 
-export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
+export function AttendeeStep({ eventId, stepLabel, selectedId, onSelectionChange }: {
   eventId: string;
+  stepLabel: string;
   selectedId: string | null;
   onSelectionChange: (attendee: AttendeeChoice | null, canContinue: boolean) => void;
 }) {
@@ -57,7 +62,7 @@ export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
 
   return (
     <div className="vf-stack">
-      <div><p className="vf-label">Step 2 of 3</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">Choose who is attending, or add another attendee.</p></div>
+      <div><p className="vf-label">{stepLabel}</p><h2 id="registration-flow-title">Attendee details</h2><p className="vf-muted">Choose who is attending, or add another attendee.</p></div>
       {loading ? <p role="status">Loading attendees…</p> : loadFailed || !list ? <Alert variant="error">Attendees could not be loaded. Refresh the page to try again.</Alert> : <>
         <p>{list.used} of {list.cap} attendees registered for this event.</p>
         {list.used >= list.cap ? <Alert>This account has registered the maximum number of attendees for this event.</Alert> : null}
@@ -87,8 +92,9 @@ export function AttendeeStep({ eventId, selectedId, onSelectionChange }: {
   );
 }
 
-export function TransferAttendeeSelection({ attendees, initialId }: { attendees: AttendeeChoice[]; initialId: string }) {
+export function TransferAttendeeSelection({ attendees, initialId, form }: { attendees: AttendeeChoice[]; initialId: string; form: RegistrationForm }) {
   const [selected, setSelected] = useState(initialId);
+  const attendee = attendees.find((choice) => choice.id === selected);
   return (
     <div className="vf-stack">
       <fieldset className="vf-action-state-fields">
@@ -103,6 +109,10 @@ export function TransferAttendeeSelection({ attendees, initialId }: { attendees:
         <p id="new-attendee-note" className="vf-muted">Used only when New attendee is selected.</p>
         <AttendeeProfileFields compact />
       </fieldset>
+      <EmergencyContactRows key={selected} requirement={form.contacts}
+        legend={attendee ? `Emergency contacts for ${attendee.fullName}` : "Emergency contacts for the new attendee"}
+        drafts={contactDrafts(attendee?.emergencyContacts ?? [], form.contacts.count)} />
+      <FormFieldInputs fields={form.questions} />
     </div>
   );
 }

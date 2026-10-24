@@ -38,6 +38,7 @@ export async function GET(request: Request) {
           }
         },
         registration: {
+          omit: { formResponses: true },
           include: {
             event: {
               select: {

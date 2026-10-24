@@ -10,6 +10,7 @@ import {
   requireVolunteerApplicationAccess
 } from "@/lib/dashboard-access";
 import { sendOrgEmail } from "@/lib/email";
+import { formFieldSchema } from "@/lib/form-fields";
 import { PublicActionError, publicActionErrorMessage } from "@/lib/public-action-error";
 import type { PublicFormState } from "@/lib/public-form-state";
 import { prisma, type Prisma } from "@vfurst/db";
@@ -17,14 +18,6 @@ import { assertPortalAccountEmail, syncPortalAccountName } from "@/lib/portal-ac
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
-
-const formFieldSchema = z.object({
-  id: z.string().trim().min(1),
-  type: z.enum(["text", "select", "checkbox", "textarea"]),
-  label: z.string().trim().min(1),
-  required: z.boolean(),
-  options: z.array(z.string().trim().min(1)).optional()
-});
 
 const availabilitySchema = z.object({
   date: z.string().trim().min(1),

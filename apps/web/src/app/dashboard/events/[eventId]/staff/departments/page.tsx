@@ -1,20 +1,21 @@
 import { createDepartment, deleteDepartment, updateDepartmentForm } from "@/actions/staff-actions";
-import { VolunteerFormBuilder, type VolunteerFormField } from "@/components/forms/volunteer-form-builder";
+import { FormFieldBuilder } from "@/components/forms/form-field-builder";
+import type { FormField } from "@/lib/form-fields";
 import { prisma } from "@vfurst/db";
 import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
-function parseSchema(value: unknown): VolunteerFormField[] {
+function parseSchema(value: unknown): FormField[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.filter((field): field is VolunteerFormField => {
+  return value.filter((field): field is FormField => {
     if (!field || typeof field !== "object") {
       return false;
     }
 
-    const candidate = field as Partial<VolunteerFormField>;
+    const candidate = field as Partial<FormField>;
     return (
       typeof candidate.id === "string" &&
       typeof candidate.label === "string" &&
@@ -127,7 +128,7 @@ export default async function StaffDepartmentsPage({ params }: { params: Promise
                   </select>
                 </label>
               </div>
-              <VolunteerFormBuilder initialSchema={parseSchema(department.formSchema)} />
+              <FormFieldBuilder initialFields={parseSchema(department.formSchema)} />
               <Button label="Save department form" type="submit" />
             </form>
           </div>

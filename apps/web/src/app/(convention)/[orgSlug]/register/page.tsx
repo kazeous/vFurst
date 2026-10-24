@@ -1,3 +1,6 @@
+import { getRegistrationForm } from "@/lib/registration-form";
+import { getCurrentPolicySummaries } from "@/lib/policy-documents";
+import { PUBLIC_REGISTRATION_CACHE_TAG, registrationFormFingerprint } from "@/lib/public-registration";
 import { RegistrationFlow } from "@/app/(convention)/[orgSlug]/register/registration-flow";
 import { RegistrationOutcome } from "@/app/(convention)/[orgSlug]/register/registration-outcome";
 import { PortalAccountGate } from "@/components/account/portal-account-gate";
@@ -26,7 +29,7 @@ const getPublicRegistrationData = unstable_cache(
       where: { orgId: org.id, status: "PUBLISHED" },
       orderBy: { startDate: "asc" },
       select: {
-        id: true, description: true, currency: true, name: true,
+        id: true, description: true, currency: true, name: true, registrationForm: true,
         registrationTypes: {
           orderBy: { sortOrder: "asc" },
           select: {
@@ -37,20 +40,25 @@ const getPublicRegistrationData = unstable_cache(
         }
       }
     });
-    return { event, org };
+    const policies = event ? await getCurrentPolicySummaries(prisma, { orgId: org.id, eventId: event.id }) : [];
+    return { event, org, policies };
   },
-  ["public-registration-page-v2"],
-  { revalidate: 15 }
+  ["public-registration-page-v4"],
+  { revalidate: 15, tags: [PUBLIC_REGISTRATION_CACHE_TAG] }
 );
 
 export default async function PublicRegistrationPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
   const data = await getPublicRegistrationData(orgSlug);
   if (!data) notFound();
-  const { event, org } = data;
+  const { event, org, policies } = data;
+  const form = getRegistrationForm(event?.registrationForm ?? {});
   const registration = !event ? <section className="vf-section"><h2>Registration is not open yet</h2><p className="vf-muted">This organizer has not published an event.</p></section> : (
     <PortalAccountGate loginHref={portalLoginPath("/register")} signupHref={portalSignupPath("/register")} sessionUrl={`/api/portal/attendees?eventId=${encodeURIComponent(event.id)}`}>
       <RegistrationFlow
+        form={form}
+        formVersion={registrationFormFingerprint(form)}
+        policies={policies}
         eventId={event.id}
         currency={event.currency}
         tiers={event.registrationTypes.map((type) => ({

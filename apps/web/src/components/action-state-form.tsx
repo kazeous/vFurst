@@ -4,7 +4,7 @@ import type { ActionFormState } from "@/lib/action-form-state";
 import { initialActionFormState } from "@/lib/action-form-state";
 import { useActionRedirect } from "@/components/use-action-redirect";
 import type { FormEvent, ReactNode } from "react";
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 
 type ActionStateFormProps = {
   action: (state: ActionFormState, formData: FormData) => Promise<ActionFormState>;
@@ -12,6 +12,7 @@ type ActionStateFormProps = {
   className?: string;
   errorTestId?: string;
   id?: string;
+  resetOnSuccess?: boolean;
 };
 
 export function ActionStateForm({
@@ -19,9 +20,14 @@ export function ActionStateForm({
   children,
   className,
   errorTestId,
-  id
+  id,
+  resetOnSuccess = false
 }: ActionStateFormProps) {
   const [state, dispatch, pending] = useActionState(action, initialActionFormState);
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (resetOnSuccess && state.success) formRef.current?.reset();
+  }, [resetOnSuccess, state]);
   useActionRedirect(state.redirectTo);
   const busy = pending || Boolean(state.redirectTo);
 
@@ -34,7 +40,7 @@ export function ActionStateForm({
   }
 
   return (
-    <form id={id} action={dispatch} onSubmit={submit} className={className} aria-busy={busy}>
+    <form ref={formRef} id={id} action={dispatch} onSubmit={submit} className={className} aria-busy={busy}>
       {state.error ? (
         <div className="vf-banner vf-banner-error" role="alert" data-testid={errorTestId}>
           {state.error}

@@ -974,6 +974,29 @@ export async function requireHotelBookingAccess(bookingId: string, allowedRoles:
   };
 }
 
+export async function requirePolicyDocumentAccess(documentId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
+  const userId = await requireDashboardUser();
+  const document = await prisma.policyDocument.findUnique({
+    where: { id: documentId },
+    include: { event: { select: { id: true, orgId: true, currency: true } } }
+  });
+
+  if (!document || document.orgId !== document.event.orgId || document.eventId !== document.event.id) {
+    throw new Error("Policy document not found.");
+  }
+
+  const event = document.event;
+  const membership = await getOrgMembership(userId, event.orgId);
+
+  if (!hasAllowedOrgRole(membership, allowedRoles)) {
+    throw new Error("You do not have permission to manage this policy.");
+  }
+
+  await requireMutationAssurance(allowedRoles);
+
+  return { userId, membership, document, event };
+}
+
 export async function requireDepartmentAccess(departmentId: string, allowedRoles: OrgRole[] = ["OWNER", "ADMIN"]) {
   const userId = await requireDashboardUser();
   const department = await getDepartmentTenant(departmentId);

@@ -15,6 +15,10 @@ import { prepareOrderCheckout } from "@/lib/payments/checkout";
 import { assertPaidCheckoutAvailable, getSePaySettings } from "@/lib/payments/platform";
 import { REGISTRATION_PLATFORM_FEE_CENTS, getStripe } from "@/lib/payments/stripe";
 import { assertActionRateLimit } from "@/lib/rate-limit";
+import { saveProfileEmergencyContacts } from "@/lib/attendee-profiles";
+import { getRegistrationForm, readRegistrationDetails } from "@/lib/registration-form";
+import { REGISTRATION_FORM_CHANGED_MESSAGE, registrationFormFingerprint } from "@/lib/public-registration";
+import { assertAttendeeAgreements, getCurrentPolicySummaries, PolicyChangedError, writeAgreements } from "@/lib/policy-documents";
 import { applyVoucherDiscount, getScheduledPrice } from "@/lib/registration/pricing";
 import { queueWebhookEvent } from "@/lib/webhooks";
 import { assertOrganizationActive } from "@/lib/organization-lifecycle";
@@ -84,6 +88,9 @@ export async function createRegistration(_previousState: PublicFormState, formDa
     return await createRegistrationInner(formData);
   } catch (error) {
     unstable_rethrow(error);
+    if (error instanceof PolicyChangedError) {
+      return { error: error.message, policiesChanged: true };
+    }
     const message = publicActionErrorMessage(error);
 
     if (message) {
@@ -148,6 +155,15 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
 
   await assertActionRateLimit("payment:registration", `${parsed.data.eventId}:${account.id}`);
 
+  const registrationForm = getRegistrationForm(event.registrationForm);
+  const shownFormVersion = formData.get("registrationFormVersion");
+  if (typeof shownFormVersion === "string" && shownFormVersion !== registrationFormFingerprint(registrationForm)) {
+    return { error: REGISTRATION_FORM_CHANGED_MESSAGE, policiesChanged: true };
+  }
+  const detailsResult = readRegistrationDetails(registrationForm, formData);
+  if (!detailsResult.ok) return { error: detailsResult.error };
+  const { details } = detailsResult;
+
   const type = event.registrationTypes.find((registrationType) => registrationType.id === parsed.data.typeId);
 
   if (!type) {
@@ -192,7 +208,10 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
       typeId: type.id
     });
 
-    return tx.registration.create({
+    const current = await getCurrentPolicySummaries(tx, { orgId: context.org.id, eventId: event.id });
+    assertAttendeeAgreements(current, formData);
+
+    const created = await tx.registration.create({
       data: {
         orgId: event.orgId,
         eventId: event.id,
@@ -201,6 +220,7 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
         typeId: type.id,
         status: "PENDING",
         approvalStatus: getRegistrationApprovalStatus(event.settings),
+        ...(details.responses === null ? {} : { formResponses: details.responses }),
         addOns: {
           create: selectedAddOns.map((addOn) => ({
             orgId: event.orgId,
@@ -211,6 +231,17 @@ async function createRegistrationInner(formData: FormData): Promise<PublicFormSt
         }
       }
     });
+    await writeAgreements(tx, {
+      orgId: context.org.id, eventId: event.id, registrationId: created.id, current,
+      actor: { source: "ATTENDEE", portalAccountId: account.id }
+    });
+    if (details.contacts !== null) {
+      await saveProfileEmergencyContacts(tx, {
+        orgId: context.org.id, portalAccountId: account.id, profileId: profile.id,
+        submitted: details.contacts, count: registrationForm.contacts.count
+      });
+    }
+    return created;
   });
 
   await queueWebhookEvent({

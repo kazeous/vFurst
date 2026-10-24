@@ -153,7 +153,7 @@ export function RegistrationsTable({ rows, eventId }: { rows: RegistrationRow[];
           <input type="hidden" name="action" value="CANCELLED" />
           <Button label="Cancel selected" type="submit" size="sm" variant="destructive" />
         </form>
-        <Button label="Export CSV" href={`/dashboard/events/${eventId}/registrations/export`} size="sm" />
+        <Button label="Export CSV" href={`/dashboard/events/${eventId}/registrations/export`} linkProps={{ download: true, prefetch: false }} size="sm" />
       </div>
       <Table data={filtered} columns={columns} idKey="id" density="compact" dividers="grid" hasHover textOverflow="truncate" />
     </div>
